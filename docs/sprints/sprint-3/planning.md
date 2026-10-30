@@ -15,13 +15,13 @@ A user can explore alternative outfits, understand why items were combined, save
 
 ## Committed Issues
 
-| Issue | User Story | Estimate (pts) |
+| Issue | Task / User Story | Estimate (pts) |
 |-------|------------|----------------|
-| #8 | User Story 8 - Alternative Outfit Suggestions | 3 |
-| #9 | User Story 9 - Saved Outfits | 3 |
-| #10 | User Story 10 - Outfit History | 3 |
-| #13 | User Story 13 - Recommendation Explanation | 3 |
-| #14 | User Story 14 - Recommendation Feedback | 2 |
+| #13 | User Story 8 - Alternative Outfit Suggestions | 3 |
+| #14 | User Story 9 - Saved Outfits | 3 |
+| #15 | User Story 10 - Outfit History | 3 |
+| #18 | User Story 13 - Recommendation Explanation | 3 |
+| #19 | User Story 14 - Recommendation Feedback | 2 |
 | | **Total** | **14** |
 
 Acceptance criteria for each story are in the linked issue and in [docs/PRD.md](../../../run-b-with-rules/docs/PRD.md) §9.

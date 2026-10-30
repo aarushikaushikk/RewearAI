@@ -15,13 +15,13 @@ A user can manage their wardrobe (edit, remove, search, filter, availability) an
 
 ## Committed Issues
 
-| Issue | User Story | Estimate (pts) |
+| Issue | Task / User Story | Estimate (pts) |
 |-------|------------|----------------|
-| #4 | User Story 4 - Edit and Remove Clothing | 3 |
-| #5 | User Story 5 - Search and Filter | 3 |
-| #6 | User Story 6 - Availability | 2 |
-| #7 | User Story 7 - Occasion-Based Outfit Generation | 8 |
-| #12 | User Story 12 - Insufficient Wardrobe Items | 3 |
+| #9 | User Story 4 - Edit and Remove Clothing | 3 |
+| #10 | User Story 5 - Search and Filter | 3 |
+| #11 | User Story 6 - Availability | 2 |
+| #12 | User Story 7 - Occasion-Based Outfit Generation | 8 |
+| #17 | User Story 12 - Insufficient Wardrobe Items | 3 |
 | | **Total** | **19** |
 
 Acceptance criteria for each story are in the linked issue and in [docs/PRD.md](../../../run-b-with-rules/docs/PRD.md) §9.
