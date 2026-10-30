@@ -1,6 +1,6 @@
 # Sprint 3 Planning
 
-**Dates:** Nov 27 – Dec 10, 2026
+**Dates:** Nov 14 – Nov 27, 2026
 **Milestone:** [Sprint 3](https://github.com/aarushikaushikk/RewearAI/milestone/3)
 **Board:** [Sprint 3 view](https://github.com/users/aarushikaushikk/projects/4/views/4)
 
@@ -11,17 +11,18 @@
 
 ## Sprint Goal
 
-A user can explore alternative outfits, understand why items were combined, save outfits, record outfit history, and give feedback on recommendations.
+A user can manage their wardrobe (edit, remove, search, filter, availability) and generate an occasion-based outfit from available items, with a clear message when there aren't enough suitable items. Sprint ends with testing and a production deploy.
 
 ## Committed Issues
 
 | Issue | Task / User Story | Estimate (pts) |
-|-------|------------|----------------|
-| #13 | User Story 8 - Alternative Outfit Suggestions | 3 |
-| #14 | User Story 9 - Saved Outfits | 3 |
-| #15 | User Story 10 - Outfit History | 3 |
-| #18 | User Story 13 - Recommendation Explanation | 3 |
-| #19 | User Story 14 - Recommendation Feedback | 2 |
-| | **Total** | **14** |
+|-------|-------------------|----------------|
+| #9 | User Story 4 - Edit and Remove Clothing | 3 |
+| #10 | User Story 5 - Search and Filter | 3 |
+| #11 | User Story 6 - Update Availability | 2 |
+| #12 | User Story 7 - Occasion-Based Outfit Generation | 8 |
+| #17 | User Story 12 - Insufficient Wardrobe Items | 3 |
+| #24 | Test and deploy Sprint 3 | 3 |
+| | **Total** | **22** |
 
-Acceptance criteria for each story are in the linked issue and in [docs/PRD.md](../../../run-b-with-rules/docs/PRD.md) §9.
+Acceptance criteria for each item are in the linked issue; user story criteria come from [docs/PRD.md](../../PRD.md) §9.
