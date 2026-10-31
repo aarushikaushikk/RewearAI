@@ -9,7 +9,6 @@ Do not add a separate chatbot or unrelated AI feature just because the product n
 
 Read these references before implementing a feature:
 - `docs/PRD.md`: problem, users, 15 user stories, acceptance criteria, data needs, and scope.
-- `docs/DESIGN.md`: approved mockups, colors, typography, spacing, components, and flows (when created).
 - The assigned GitHub Issue: specific task, owner, sprint, and acceptance checklist.
 If the documents disagree, identify the conflict and ask the team before implementing.
 Do not edit product requirements or design decisions just to make generated code fit.
@@ -24,6 +23,20 @@ Do not edit product requirements or design decisions just to make generated code
 - Tests: Vitest (unit/integration) and Playwright (end-to-end).
 - Quality: ESLint, Prettier, and TypeScript type checking.
 - Hosting: Vercel for the app, MongoDB Atlas for data, Cloudinary for images.
+
+### Versions
+
+Baseline versions, taken from the HW-3 prototype `package.json`:
+
+| Package | Version |
+|---------|---------|
+| Next.js / `eslint-config-next` | 16.4.3 |
+| React / React DOM | 19.3.0 |
+| TypeScript | 5.x |
+| Tailwind CSS | 4.x |
+| ESLint | 9.x |
+| Node.js | 20.9 or later (minimum for Next.js 16) |
+
 Use stable, mutually compatible versions verified during repository initialization.
 Follow versions recorded in the lockfile; do not automatically upgrade packages mid-task.
 Ask both partners before adding a major dependency or changing an approved service.
