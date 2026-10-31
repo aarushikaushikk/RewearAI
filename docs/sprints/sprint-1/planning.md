@@ -6,8 +6,7 @@
 
 ## Roles
 
-- **Product Owner (PO):** aarushikaushikk
-- **Scrum Master (SM):** aarushikaushikk
+- **Product Owner (PO):** Aarushi and Pranav
 
 ## Sprint Goal
 
