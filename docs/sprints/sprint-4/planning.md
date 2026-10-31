@@ -1,6 +1,6 @@
 # Sprint 4 Planning
 
-**Dates:** Nov 28 – Dec 11, 2026
+**Dates:** Sun Nov 8 – Wed Nov 11, 2026 (due Wednesday end of day)
 **Milestone:** [Sprint 4](https://github.com/aarushikaushikk/RewearAI/milestone/4)
 **Board:** [Sprint 4 view](https://github.com/users/aarushikaushikk/projects/4/views/5)
 
@@ -11,17 +11,17 @@
 
 ## Sprint Goal
 
-A user can explore alternative outfits, understand why items were combined, save outfits, record outfit history, and give feedback on recommendations. Sprint ends with testing and the final production deploy.
+Uncertain classifications are flagged, insufficient wardrobes are explained, recommendations include explanations and accept feedback, and failed uploads or analysis have a clear recovery path (User Stories 11–15). Sprint ends with testing and the final production deploy.
 
 ## Committed Issues
 
 | Issue | Task / User Story | Estimate (pts) |
 |-------|-------------------|----------------|
-| #13 | User Story 8 - Alternative Outfit Suggestions | 3 |
-| #14 | User Story 9 - Saved Outfits | 3 |
-| #15 | User Story 10 - Outfit History | 3 |
+| #16 | User Story 11 - Classification Uncertainty | 3 |
+| #17 | User Story 12 - Insufficient Wardrobe Items | 3 |
 | #18 | User Story 13 - Recommendation Explanation | 3 |
 | #19 | User Story 14 - Recommendation Feedback | 2 |
+| #20 | User Story 15 - Failure Recovery | 3 |
 | #25 | Test and deploy Sprint 4 | 3 |
 | | **Total** | **17** |
 

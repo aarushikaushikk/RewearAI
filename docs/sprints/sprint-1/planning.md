@@ -1,6 +1,6 @@
 # Sprint 1 Planning
 
-**Dates:** Oct 30, 2026
+**Dates:** Fri Oct 30, 2026
 **Milestone:** [Sprint 1](https://github.com/aarushikaushikk/RewearAI/milestone/1)
 **Board:** [Sprint 1 view](https://github.com/users/aarushikaushikk/projects/4/views/2)
 
