@@ -11,18 +11,19 @@
 
 ## Sprint Goal
 
-Uncertain classifications are flagged, insufficient wardrobes are explained, recommendations include explanations and accept feedback, and failed uploads or analysis have a clear recovery path (User Stories 11–15). Sprint ends with testing and the final production deploy.
+Outfit history is recorded, uncertain classifications are flagged, insufficient wardrobes are explained, recommendations include explanations and accept feedback, and failed uploads or analysis have a clear recovery path (User Stories 10–15). Sprint ends with testing and the final production deploy.
 
 ## Committed Issues
 
 | Issue | Task / User Story | Estimate (pts) |
 |-------|-------------------|----------------|
+| #15 | User Story 10 - Outfit History | 3 |
 | #16 | User Story 11 - Classification Uncertainty | 3 |
 | #17 | User Story 12 - Insufficient Wardrobe Items | 3 |
 | #18 | User Story 13 - Recommendation Explanation | 3 |
 | #19 | User Story 14 - Recommendation Feedback | 2 |
 | #20 | User Story 15 - Failure Recovery | 3 |
 | #25 | Test and deploy Sprint 4 | 3 |
-| | **Total** | **17** |
+| | **Total** | **20** |
 
 Acceptance criteria for each item are in the linked issue; user story criteria come from [docs/PRD.md](../../PRD.md) §9.

@@ -11,7 +11,7 @@
 
 ## Sprint Goal
 
-A user can mark items available or unavailable, generate an occasion-based outfit, request alternatives, save outfits, and record outfit history (User Stories 6–10). Sprint ends with testing and a production deploy.
+A user can mark items available or unavailable, generate an occasion-based outfit, request alternatives, and save outfits (User Stories 6–9). Sprint ends with testing and a production deploy.
 
 ## Committed Issues
 
@@ -21,8 +21,7 @@ A user can mark items available or unavailable, generate an occasion-based outfi
 | #12 | User Story 7 - Occasion-Based Outfit Generation | 8 |
 | #13 | User Story 8 - Alternative Outfit Suggestions | 3 |
 | #14 | User Story 9 - Saved Outfits | 3 |
-| #15 | User Story 10 - Outfit History | 3 |
 | #24 | Test and deploy Sprint 3 | 3 |
-| | **Total** | **22** |
+| | **Total** | **19** |
 
 Acceptance criteria for each item are in the linked issue; user story criteria come from [docs/PRD.md](../../PRD.md) §9.
