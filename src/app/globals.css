@@ -1,43 +1,38 @@
 @import "tailwindcss";
 
 /* ─────────────────────────────────────────────
-   ReWear AI Design Tokens (docs/DESIGN.md)
+   ReWear AI design tokens (docs/DESIGN.md §2)
+   Exposed as utilities such as bg-primary and text-text-muted.
    ───────────────────────────────────────────── */
-:root {
-  /* Surfaces */
+@theme {
   --color-background: #F8F7F3;
-  --color-surface:    #FFFFFF;
+  --color-surface: #FFFFFF;
 
-  /* Text */
-  --color-text:       #202A25;
+  --color-text: #202A25;
   --color-text-muted: #58655E;
 
-  /* Brand */
-  --color-primary:       #245B45;
+  --color-primary: #245B45;
   --color-primary-hover: #194733;
-  --color-primary-soft:  #E8F1EB;
+  --color-primary-soft: #E8F1EB;
 
-  /* Borders */
   --color-border: #D7DED8;
 
-  /* Semantic */
-  --color-danger:       #A12828;
-  --color-danger-soft:  #FFF0EF;
-  --color-warning:      #865A13;
+  --color-danger: #A12828;
+  --color-danger-soft: #FFF0EF;
+  --color-warning: #865A13;
   --color-warning-soft: #FFF5DE;
-  --color-success:      #245B45;
-  --color-success-soft: #E8F1EB;
-}
 
-@theme inline {
-  --color-background: var(--color-background);
-  --color-foreground: var(--color-text);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-inter), system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 
 body {
   background: var(--color-background);
   color: var(--color-text);
-  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-family: var(--font-sans);
+}
+
+/* Keyboard focus is always visible, including on elements with no focus styles of their own. */
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }

@@ -10,6 +10,29 @@ describe('FormField', () => {
     expect(screen.getByText('Email')).toBeInTheDocument();
   });
 
+  it('associates help text with the input', () => {
+    render(
+      <FormField id="pw" label="Password" type="password" value="" onChange={() => {}} hint="8 or more" />,
+    );
+    expect(screen.getByLabelText('Password')).toHaveAccessibleDescription('8 or more');
+  });
+
+  it('replaces help text with the error, which then describes the input', () => {
+    render(
+      <FormField
+        id="pw"
+        label="Password"
+        type="password"
+        value=""
+        onChange={() => {}}
+        hint="8 or more"
+        error="Too short"
+      />,
+    );
+    expect(screen.queryByText('8 or more')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Password')).toHaveAccessibleDescription('Too short');
+  });
+
   it('shows (Required) indicator when required prop is true', () => {
     render(
       <FormField id="email" label="Email" type="email" value="" onChange={() => {}} required />,

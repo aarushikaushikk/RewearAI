@@ -11,7 +11,7 @@ export interface PrimaryButtonProps {
 
 /**
  * Primary action button following the ReWear AI green brand.
- * Min-height 44 px for touch accessibility.
+ * Min-height 44 px for touch accessibility. Use type="button" outside forms.
  */
 export function PrimaryButton({
   children,
@@ -26,13 +26,14 @@ export function PrimaryButton({
       type={type}
       onClick={onClick}
       disabled={disabled || isLoading}
+      aria-busy={isLoading || undefined}
       className={[
         'flex items-center justify-center gap-2',
-        'w-full min-h-[44px] rounded-lg px-4 py-2',
-        'bg-[#245B45] hover:bg-[#194733] active:bg-[#194733]',
-        'text-white text-sm font-semibold',
+        'w-full min-h-11 rounded-xl px-4 py-2',
+        'bg-primary hover:bg-primary-hover active:bg-primary-hover',
+        'text-white text-base font-semibold',
         'transition-colors duration-150',
-        'focus:outline-none focus:ring-2 focus:ring-[#245B45] focus:ring-offset-2',
+        'focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2',
         'disabled:opacity-60 disabled:cursor-not-allowed',
         className,
       ].join(' ')}
@@ -60,7 +61,7 @@ export function PrimaryButton({
               d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
             />
           </svg>
-          <span>Loading…</span>
+          <span role="status">Loading…</span>
         </>
       ) : (
         children

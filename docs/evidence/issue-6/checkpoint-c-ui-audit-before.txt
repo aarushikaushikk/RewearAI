@@ -1,0 +1,107 @@
+
+## sign-in small
+ axe: landmark-one-main(moderate,1) <html lang="en" class="h-full">
+      region(moderate,5) <div class="mb-8 text-center"><h1 class="text-2xl font-bold text-[#245B45] tracking-tight">ReWear AI
+ overflowX=false font=Inter, system-ui, -apple-syste h1=24px
+ <44px: Create an account 130x39
+
+## sign-up small
+ axe: landmark-one-main(moderate,1) <html lang="en" class="h-full">
+      region(moderate,6) <div class="mb-8 text-center"><h1 class="text-2xl font-bold text-[#245B45] tracking-tight">ReWear AI
+ overflowX=false font=Inter, system-ui, -apple-syste h1=24px
+ <44px: Sign in 44x19
+
+## sign-in mobile
+ axe: landmark-one-main(moderate,1) <html lang="en" class="h-full">
+      region(moderate,5) <div class="mb-8 text-center"><h1 class="text-2xl font-bold text-[#245B45] tracking-tight">ReWear AI
+ overflowX=false font=Inter, system-ui, -apple-syste h1=24px
+ <44px: Create an account 114x19
+
+## sign-up mobile
+ axe: landmark-one-main(moderate,1) <html lang="en" class="h-full">
+      region(moderate,6) <div class="mb-8 text-center"><h1 class="text-2xl font-bold text-[#245B45] tracking-tight">ReWear AI
+ overflowX=false font=Inter, system-ui, -apple-syste h1=24px
+ <44px: Sign in 44x19
+
+## sign-in tablet
+ axe: landmark-one-main(moderate,1) <html lang="en" class="h-full">
+      region(moderate,5) <div class="mb-8 text-center"><h1 class="text-2xl font-bold text-[#245B45] tracking-tight">ReWear AI
+ overflowX=false font=Inter, system-ui, -apple-syste h1=24px
+ <44px: Create an account 114x19
+
+## sign-up tablet
+ axe: landmark-one-main(moderate,1) <html lang="en" class="h-full">
+      region(moderate,6) <div class="mb-8 text-center"><h1 class="text-2xl font-bold text-[#245B45] tracking-tight">ReWear AI
+ overflowX=false font=Inter, system-ui, -apple-syste h1=24px
+ <44px: Sign in 44x19
+
+## sign-in desktop
+ axe: landmark-one-main(moderate,1) <html lang="en" class="h-full">
+      region(moderate,5) <div class="mb-8 text-center"><h1 class="text-2xl font-bold text-[#245B45] tracking-tight">ReWear AI
+ overflowX=false font=Inter, system-ui, -apple-syste h1=24px
+ <44px: Create an account 114x19
+
+## sign-up desktop
+ axe: landmark-one-main(moderate,1) <html lang="en" class="h-full">
+      region(moderate,6) <div class="mb-8 text-center"><h1 class="text-2xl font-bold text-[#245B45] tracking-tight">ReWear AI
+ overflowX=false font=Inter, system-ui, -apple-syste h1=24px
+ <44px: Sign in 44x19
+
+sign-in tab order: email > password > Sign In > Create an account
+sign-up tab order: name > email > password > Create Account > Sign in
+
+## sign-up validation state mobile
+ axe: landmark-one-main(moderate,1) <html lang="en" class="h-full">
+      region(moderate,8) <div class="mb-8 text-center"><h1 class="text-2xl font-bold text-[#245B45] tracking-tight">ReWear AI
+ overflowX=false font=Inter, system-ui, -apple-syste h1=24px
+ <44px: Sign in 44x19
+ focus after failed validation: BODY
+ focus after server failure: BODY role=null
+
+## sign-in server failure mobile
+ axe: landmark-one-main(moderate,1) <html lang="en" class="h-full">
+      region(moderate,5) <div class="mb-8 text-center"><h1 class="text-2xl font-bold text-[#245B45] tracking-tight">ReWear AI
+ overflowX=false font=Inter, system-ui, -apple-syste h1=24px
+ <44px: Dismiss 40x16 | Create an account 114x19
+
+after signup url: /
+
+## home small
+ axe: button-name(critical,1) <button type="button" aria-haspopup="true" aria-expanded="false" class="flex items-center gap-2 text
+ overflowX=false font=Inter, system-ui, -apple-syste h1=24px
+ <44px: ReWear AI 94x28 | Open navigation menu 36x36 | My Wardrobe → 103x20 | Saved Outfits → 101x20 | Outfit History → 103x20
+
+## home mobile
+ axe: button-name(critical,1) <button type="button" aria-haspopup="true" aria-expanded="false" class="flex items-center gap-2 text
+ overflowX=false font=Inter, system-ui, -apple-syste h1=24px
+ <44px: ReWear AI 94x28 | Open navigation menu 36x36 | My Wardrobe → 103x20 | Saved Outfits → 101x20 | Outfit History → 103x20
+
+## home tablet
+ axe: none
+ overflowX=false font=Inter, system-ui, -apple-syste h1=24px
+ <44px: ReWear AI 94x28 | Home 38x20 | My Wardrobe 81x40 | Create Outfit 77x40 | Saved Outfits 79x40 | Outfit History 80x40 | My Wardrobe → 103x20 | Saved Outfits → 101x20 | Outfit History → 103x20
+
+## home desktop
+ axe: none
+ overflowX=false font=Inter, system-ui, -apple-syste h1=24px
+ <44px: ReWear AI 94x28 | Home 38x20 | My Wardrobe 85x20 | Create Outfit 80x20 | Saved Outfits 82x20 | Outfit History 83x20 | My Wardrobe → 103x20 | Saved Outfits → 101x20 | Outfit History → 103x20
+
+home tab order: ReWear AI [NO FOCUS STYLE] > ReWear AI [NO FOCUS STYLE] > ReWear AI [NO FOCUS STYLE] > ReWear AI [NO FOCUS STYLE] > ReWear AI [NO FOCUS STYLE] > ReWear AI [NO FOCUS STYLE] > ReWear AI [NO FOCUS STYLE] > ReWear AI [NO FOCUS STYLE] > ReWear AI [NO FOCUS STYLE] > ReWear AI [NO FOCUS STYLE] > ReWear AI [NO FOCUS STYLE]
+aria-current count: 0
+
+## account menu open desktop
+ axe: none
+ overflowX=false font=Inter, system-ui, -apple-syste h1=24px
+ <44px: ReWear AI 94x28 | Home 38x20 | My Wardrobe 85x20 | Create Outfit 80x20 | Saved Outfits 82x20 | Outfit History 83x20 | My Wardrobe → 103x20 | Saved Outfits → 101x20 | Outfit History → 103x20
+menu closed by Escape: false
+focus after Escape: ReWear AI
+
+mobile menu button found: true visible sign-out buttons: 2
+
+## mobile nav open
+ axe: button-name(critical,1) <button type="button" aria-haspopup="true" aria-expanded="true" class="flex items-center gap-2 text-
+      target-size(serious,2) <a class="text-sm text-[#202A25] hover:text-[#245B45] py-2 focus:outline-none focus:ring-2 focus:rin
+ overflowX=false font=Inter, system-ui, -apple-syste h1=24px
+ <44px: ReWear AI 94x28 | Open navigation menu 36x36 | Home 343x36 | My Wardrobe 343x36 | Create Outfit 343x36 | Saved Outfits 343x36 | Outfit History 343x36 | Sign Out 54x20 | My Wardrobe → 103x20 | Saved Outfits → 101x20 | Outfit History → 103x20
+script exit=0
+server log: new Date errors=0
