@@ -1,26 +1,43 @@
 @import "tailwindcss";
 
+/* ─────────────────────────────────────────────
+   ReWear AI Design Tokens (docs/DESIGN.md)
+   ───────────────────────────────────────────── */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Surfaces */
+  --color-background: #F8F7F3;
+  --color-surface:    #FFFFFF;
+
+  /* Text */
+  --color-text:       #202A25;
+  --color-text-muted: #58655E;
+
+  /* Brand */
+  --color-primary:       #245B45;
+  --color-primary-hover: #194733;
+  --color-primary-soft:  #E8F1EB;
+
+  /* Borders */
+  --color-border: #D7DED8;
+
+  /* Semantic */
+  --color-danger:       #A12828;
+  --color-danger-soft:  #FFF0EF;
+  --color-warning:      #865A13;
+  --color-warning-soft: #FFF5DE;
+  --color-success:      #245B45;
+  --color-success-soft: #E8F1EB;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-background: var(--color-background);
+  --color-foreground: var(--color-text);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-background);
+  color: var(--color-text);
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
 }

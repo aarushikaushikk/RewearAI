@@ -24,6 +24,11 @@ export function createAuthService(dependencies: {
  * Returns the production AuthService instance.
  * Fails closed securely if production database adapters have not been configured.
  * Does not expose internal architecture or implementation details.
+ *
+ * Next.js bundles pages and route handlers separately, so each has its own copy
+ * of AuthError. Cache database connections on globalThis if needed, but not the
+ * AuthService instance: its errors would fail `instanceof AuthError` in another
+ * bundle and turn expected 4xx responses into 500s.
  */
 export function getProductionAuthService(): AuthService {
   // When teammate's MongoDB connection helper and Mongoose models are connected,

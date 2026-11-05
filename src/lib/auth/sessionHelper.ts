@@ -4,6 +4,7 @@ import { SessionRecord } from '@/types/session';
 import { SESSION_COOKIE_NAME } from '@/lib/auth/cookieConfig';
 import { getProductionAuthService } from '@/lib/auth/getAuthService';
 import { cookies } from 'next/headers';
+import { connection } from 'next/server';
 
 export interface AuthenticatedSession {
   user: SafeUser;
@@ -29,44 +30,45 @@ export function extractTokenFromCookieHeader(cookieHeader: string | null): strin
 
 /**
  * Validates session explicitly from an incoming HTTP Request.
- * Use this in Next.js Route Handlers or middleware where `Request` is directly available.
+ * Use this in Next.js Route Handlers where `Request` is directly available.
+ * Without a token there is nothing to validate, so the service is not resolved.
  */
 export async function getSessionFromRequest(
   request: Request,
   authService?: AuthService
 ): Promise<AuthenticatedSession | null> {
-  const service = authService || getProductionAuthService();
   const token = extractTokenFromCookieHeader(request.headers.get('cookie'));
 
   if (!token) {
     return null;
   }
 
+  const service = authService || getProductionAuthService();
   return service.validateSession(token);
 }
 
 /**
  * Validates session using Next.js 16 supported server-side cookies API (next/headers).
  * Use this in React Server Components, layouts, and Server Actions.
+ * Without a token there is nothing to validate, so the service is not resolved.
+ * Errors propagate: an outage must not look like a signed-out user, and Next.js
+ * relies on seeing errors thrown by cookies() during prerendering.
  */
 export async function getServerSession(
   authService?: AuthService
 ): Promise<AuthenticatedSession | null> {
-  const service = authService || getProductionAuthService();
+  const cookieStore = await cookies();
+  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
 
-  try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-
-    if (!token) {
-      return null;
-    }
-
-    return service.validateSession(token);
-  } catch {
-    // If called outside of a Next.js server context, fail safely
+  if (!token) {
     return null;
   }
+
+  // validateSession reads the clock, which Cache Components only allows at request time.
+  await connection();
+
+  const service = authService || getProductionAuthService();
+  return service.validateSession(token);
 }
 
 /**

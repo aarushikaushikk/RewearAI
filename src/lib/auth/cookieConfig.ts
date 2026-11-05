@@ -1,4 +1,4 @@
-import { SESSION_DURATION_MS } from '@/services/authService';
+import { SESSION_DURATION_MS } from '@/lib/auth/sessionConfig';
 
 export const SESSION_COOKIE_NAME = 'rewear_session';
 

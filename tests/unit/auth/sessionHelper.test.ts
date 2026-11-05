@@ -9,10 +9,17 @@ import {
   requireAuth,
 } from '@/lib/auth/sessionHelper';
 import { SESSION_COOKIE_NAME } from '@/lib/auth/cookieConfig';
+import { ConfigurationError } from '@/lib/auth/getAuthService';
 import * as nextHeaders from 'next/headers';
+import { connection } from 'next/server';
 
 vi.mock('next/headers', () => ({
   cookies: vi.fn(),
+}));
+
+vi.mock('next/server', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('next/server')>()),
+  connection: vi.fn().mockResolvedValue(undefined),
 }));
 
 describe('Server-Side Session Helpers (sessionHelper)', () => {
@@ -96,6 +103,82 @@ describe('Server-Side Session Helpers (sessionHelper)', () => {
 
       const sessionInfo = await getServerSession(authService);
       expect(sessionInfo).toBeNull();
+    });
+  });
+
+  describe('resolution order and fail-closed behavior', () => {
+    function mockCookieStore(token?: string) {
+      const store = {
+        get: vi.fn().mockReturnValue(
+          token ? { name: SESSION_COOKIE_NAME, value: token } : undefined
+        ),
+      };
+      vi.mocked(nextHeaders.cookies).mockResolvedValue(store as never);
+    }
+
+    it('getServerSession returns null without resolving the service when no cookie exists', async () => {
+      mockCookieStore();
+      await expect(getServerSession()).resolves.toBeNull();
+    });
+
+    it('getServerSession defers to request time before validating a token', async () => {
+      // validateSession reads the clock, which Cache Components rejects while prerendering.
+      mockCookieStore('some-token');
+      const order: string[] = [];
+      vi.mocked(connection).mockImplementationOnce(async () => {
+        order.push('connection');
+      });
+      const service = {
+        validateSession: vi.fn().mockImplementation(async () => {
+          order.push('validateSession');
+          return null;
+        }),
+      } as unknown as AuthService;
+
+      await getServerSession(service);
+
+      expect(order).toEqual(['connection', 'validateSession']);
+    });
+
+    it('getServerSession fails closed when a cookie exists but the service is unconfigured', async () => {
+      mockCookieStore('some-token');
+      await expect(getServerSession()).rejects.toBeInstanceOf(ConfigurationError);
+    });
+
+    it('getServerSession does not report a validation failure as signed out', async () => {
+      mockCookieStore('some-token');
+      const failingService = {
+        validateSession: vi.fn().mockRejectedValue(new Error('database unavailable')),
+      } as unknown as AuthService;
+
+      await expect(getServerSession(failingService)).rejects.toThrow('database unavailable');
+    });
+
+    it('getServerSession propagates errors thrown by cookies()', async () => {
+      const prerenderSignal = new Error('Dynamic server usage');
+      vi.mocked(nextHeaders.cookies).mockRejectedValue(prerenderSignal);
+
+      await expect(getServerSession(authService)).rejects.toBe(prerenderSignal);
+    });
+
+    it('getSessionFromRequest returns null without resolving the service when no cookie exists', async () => {
+      const req = new Request('http://localhost:3000/api/wardrobe');
+      await expect(getSessionFromRequest(req)).resolves.toBeNull();
+    });
+
+    it('getSessionFromRequest fails closed when a cookie exists but the service is unconfigured', async () => {
+      const req = new Request('http://localhost:3000/api/wardrobe', {
+        headers: { cookie: `${SESSION_COOKIE_NAME}=some-token` },
+      });
+      await expect(getSessionFromRequest(req)).rejects.toBeInstanceOf(ConfigurationError);
+    });
+
+    it('requireAuth reports 401 rather than a configuration error when no cookie exists', async () => {
+      const req = new Request('http://localhost:3000/api/wardrobe');
+      await expect(requireAuth(req)).rejects.toMatchObject({
+        code: 'UNAUTHORIZED',
+        statusCode: 401,
+      });
     });
   });
 
