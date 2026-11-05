@@ -47,6 +47,14 @@ export class MemorySessionRepository implements ISessionRepository {
     return count;
   }
 
+  // Helper for test simulation of expiration
+  expireSessionForTest(tokenHash: string): void {
+    const session = this.sessions.find((s) => s.tokenHash === tokenHash);
+    if (session) {
+      session.expiresAt = new Date(Date.now() - 10000);
+    }
+  }
+
   // Helper for test cleanup
   clear(): void {
     this.sessions = [];

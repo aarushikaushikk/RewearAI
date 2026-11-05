@@ -54,6 +54,19 @@ describe('Repository Contracts (In-Memory Reference Implementation)', () => {
         })
       ).rejects.toThrow('User with this email already exists');
     });
+
+    it('deletes user by id and returns true when found, false when not found', async () => {
+      const user = await userRepo.create({
+        email: 'delete-me@example.com',
+        passwordHash: 'hash',
+      });
+
+      const deleted = await userRepo.deleteById(user.id);
+      expect(deleted).toBe(true);
+
+      expect(await userRepo.findById(user.id)).toBeNull();
+      expect(await userRepo.deleteById('non-existent-id')).toBe(false);
+    });
   });
 
   describe('ISessionRepository Contract', () => {

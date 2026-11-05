@@ -37,6 +37,15 @@ export class MemoryUserRepository implements IUserRepository {
     return { ...newUser };
   }
 
+  async deleteById(id: string): Promise<boolean> {
+    const index = this.users.findIndex((u) => u.id === id);
+    if (index !== -1) {
+      this.users.splice(index, 1);
+      return true;
+    }
+    return false;
+  }
+
   // Helper for test cleanup
   clear(): void {
     this.users = [];
