@@ -38,6 +38,16 @@ describe('Alert', () => {
     expect(screen.queryByRole('button', { name: /dismiss/i })).not.toBeInTheDocument();
   });
 
+  it('does not take focus by default', () => {
+    render(<Alert variant="error" message="Error!" />);
+    expect(screen.getByRole('alert')).not.toHaveFocus();
+  });
+
+  it('takes focus when asked, for messages that follow a user action', () => {
+    render(<Alert variant="error" message="Error!" focusOnMount />);
+    expect(screen.getByRole('alert')).toHaveFocus();
+  });
+
   it('applies danger background class for error variant', () => {
     render(<Alert variant="error" message="Error!" />);
     const alertEl = screen.getByRole('alert');

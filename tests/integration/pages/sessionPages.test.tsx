@@ -26,6 +26,7 @@ vi.mock('next/server', async (importOriginal) => ({
 vi.mock('next/navigation', async (importOriginal) => ({
   ...(await importOriginal<typeof import('next/navigation')>()),
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }),
+  usePathname: () => '/',
 }));
 
 vi.mock('@/lib/auth/getAuthService', async (importOriginal) => ({

@@ -20,39 +20,39 @@ export default async function HomePage() {
     <>
       <AppHeader user={auth.user} />
 
-      <main className="flex-1 max-w-6xl w-full mx-auto px-4 py-10">
+      <main id="main-content" tabIndex={-1} className="flex-1 max-w-6xl w-full mx-auto px-4 py-10">
         {/* Greeting */}
         <section className="mb-10">
-          <h1 className="text-2xl font-bold text-[#202A25]">
+          <h1 className="text-[1.75rem] md:text-3xl font-bold text-text break-words">
             Welcome back, {displayName}!
           </h1>
-          <p className="mt-1 text-[#58655E]">What would you like to do today?</p>
+          <p className="mt-1 text-text-muted">What would you like to do today?</p>
         </section>
 
         {/* Primary action cards */}
         <section className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-10">
           <Link
-            href="/wardrobe/add"
-            className="flex flex-col gap-2 rounded-2xl border border-[#D7DED8] bg-white p-6 hover:border-[#245B45] hover:shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-[#245B45]"
+            href="/wardrobe/new"
+            className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-6 hover:border-primary hover:shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary"
           >
             <span className="text-3xl" aria-hidden="true">👕</span>
-            <h2 className="text-base font-semibold text-[#202A25]">Add Clothing</h2>
-            <p className="text-sm text-[#58655E]">Upload a new item to your wardrobe.</p>
+            <h2 className="text-base font-semibold text-text">Add Clothing</h2>
+            <p className="text-sm text-text-muted">Upload a new item to your wardrobe.</p>
           </Link>
 
           <Link
             href="/outfits/create"
-            className="flex flex-col gap-2 rounded-2xl border border-[#D7DED8] bg-white p-6 hover:border-[#245B45] hover:shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-[#245B45]"
+            className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-6 hover:border-primary hover:shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary"
           >
             <span className="text-3xl" aria-hidden="true">✨</span>
-            <h2 className="text-base font-semibold text-[#202A25]">Create Outfit</h2>
-            <p className="text-sm text-[#58655E]">Get outfit suggestions for an occasion.</p>
+            <h2 className="text-base font-semibold text-text">Create Outfit</h2>
+            <p className="text-sm text-text-muted">Get outfit suggestions for an occasion.</p>
           </Link>
         </section>
 
         {/* Quick links */}
         <section>
-          <h2 className="text-sm font-semibold text-[#58655E] uppercase tracking-wider mb-3">
+          <h2 className="text-xl font-bold text-text mb-3">
             Quick Links
           </h2>
           <ul className="flex flex-col sm:flex-row gap-3">
@@ -64,7 +64,7 @@ export default async function HomePage() {
               <li key={href}>
                 <Link
                   href={href}
-                  className="inline-flex items-center gap-1.5 text-sm text-[#245B45] font-medium hover:underline focus:outline-none focus:ring-2 focus:ring-[#245B45] rounded"
+                  className="inline-flex min-h-11 items-center gap-1.5 text-sm text-primary font-medium hover:underline focus:outline-none focus:ring-2 focus:ring-primary rounded"
                 >
                   {label} →
                 </Link>

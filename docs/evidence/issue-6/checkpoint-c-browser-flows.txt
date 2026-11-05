@@ -1,0 +1,40 @@
+PASS  forged cookie on / lands on sign-in  [/sign-in?reason=session-ended]
+PASS  no redirect loop (page settled, few document requests)  [1 document requests: /]
+PASS  session-ended notice shown with the form
+PASS  forged cookie exposes no private content
+   net 201 /api/auth/register
+PASS  sign-up form reaches Home  [/]
+PASS  session cookie set and HttpOnly hidden from JS
+PASS  still signed in after refresh
+PASS  valid session is redirected from /sign-in to Home  [/]
+   net 500 /api/auth/logout
+PASS  failed revocation shows an error
+PASS  failed revocation stays on Home  [/]
+PASS  failed revocation keeps the session cookie
+PASS  session is genuinely still valid after failed logout
+   net 200 /api/auth/logout
+PASS  successful logout goes to sign-in  [/sign-in]
+PASS  logout removes the cookie
+PASS  Back after logout shows no private content  [/sign-in?_rsc=72BAJJ2RGbqycj5I]
+PASS  replaying the revoked token is rejected  [/sign-in?reason=session-ended]
+   net 401 /api/auth/login
+   text: "ReWear AI\n\nYour intelligent digital wardrobe\n\nSign in to your account\n⚠\n\nYour session has ended. Please sign in again.\n\n✕\n\nSign-in failed. Check your details and try again.\n\nDismiss\nEmail\n(Required)\nPassword\n(Required)\nSign In\n\nDon't have an account? Create an account" url /sign-in?reason=session-ended
+PASS  wrong password shows the generic failure
+PASS  entered email preserved after failure
+   net 200 /api/auth/login
+PASS  sign-in over a stale cookie reaches Home  [/]
+PASS  sign-in replaced the stale token
+PASS  outage on a private page shows the error boundary  [/]
+PASS  outage does not redirect to sign-in  [/]
+PASS  outage exposes no private content or internals
+PASS  boundary offers retry and sign-in
+PASS  retry while still down stays on the boundary
+PASS  retry after recovery restores Home
+PASS  outage: sign-in form still reachable with notice  [/sign-in]
+   net 500 /api/auth/register
+   text: "ReWear AI\n\nYour intelligent digital wardrobe\n\nCreate your account\n⚠\n\nYour account was created, but we couldn't sign you in automatically. Please sign in.\n\nDismiss\nName\n(Optional)\nEmail\n(Required)\nPassword\n(Required)\n\nUse at least 8 characters.\n\nCreate Account\n\nAlready have an a url /sign-up
+PASS  auto sign-in failure tells the user to sign in
+
+All browser checks passed
+script exit=0
+server log: new Date errors=0

@@ -32,6 +32,16 @@ const SIGN_UP_STATUS_MESSAGES: Record<number, string> = {
   409: 'An account with this email already exists.',
 };
 
+/** Field ids match the error keys, in the order the fields appear on screen. */
+const FIELD_ORDER = ['name', 'email', 'password'];
+
+export function focusFirstInvalidField(errors: Record<string, string>): void {
+  const firstInvalid = FIELD_ORDER.find((field) => errors[field]);
+  if (firstInvalid) {
+    document.getElementById(firstInvalid)?.focus();
+  }
+}
+
 export function getSignInErrorMessage(status: number): string {
   return SIGN_IN_STATUS_MESSAGES[status] ?? UNEXPECTED_ERROR_MESSAGE;
 }

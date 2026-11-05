@@ -17,14 +17,11 @@ interface ErrorBoundaryProps {
  */
 export default function ErrorBoundary({ retry }: ErrorBoundaryProps) {
   return (
-    <main className="min-h-screen flex items-center justify-center bg-[#F8F7F3] px-4 py-12">
-      <div
-        role="alert"
-        className="w-full max-w-sm bg-white rounded-2xl shadow-sm border border-[#D7DED8] px-8 py-10 flex flex-col gap-5"
-      >
-        <div>
-          <h1 className="text-lg font-semibold text-[#202A25]">We couldn&apos;t load this page</h1>
-          <p className="mt-2 text-sm text-[#58655E]">
+    <main className="min-h-screen flex items-center justify-center bg-background px-4 py-12">
+      <div className="w-full max-w-md bg-surface rounded-xl shadow-sm border border-border px-6 sm:px-8 py-8 sm:py-10 flex flex-col gap-5">
+        <div role="alert">
+          <h1 className="text-[1.625rem] md:text-3xl font-bold text-text">We couldn&apos;t load this page</h1>
+          <p className="mt-2 text-base text-text-muted">
             This is usually temporary. Please try again in a moment.
           </p>
         </div>
@@ -35,7 +32,7 @@ export default function ErrorBoundary({ retry }: ErrorBoundaryProps) {
 
         <Link
           href="/sign-in"
-          className="text-center text-sm text-[#245B45] font-medium hover:underline focus:outline-none focus:ring-2 focus:ring-[#245B45] rounded"
+          className="flex min-h-11 items-center justify-center text-sm text-primary font-medium hover:underline focus:outline-none focus:ring-2 focus:ring-primary rounded"
         >
           Go to sign in
         </Link>

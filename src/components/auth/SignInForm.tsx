@@ -7,7 +7,11 @@ import { FormField } from '@/components/ui/FormField';
 import { PrimaryButton } from '@/components/ui/PrimaryButton';
 import { Alert } from '@/components/ui/Alert';
 import { validateLoginInput } from '@/lib/validation/authValidation';
-import { getSignInErrorMessage, NETWORK_ERROR_MESSAGE } from '@/components/auth/authFormErrors';
+import {
+  focusFirstInvalidField,
+  getSignInErrorMessage,
+  NETWORK_ERROR_MESSAGE,
+} from '@/components/auth/authFormErrors';
 
 interface FieldErrors {
   email?: string;
@@ -35,6 +39,7 @@ export function SignInForm() {
     const validation = validateLoginInput({ email, password });
     if (!validation.isValid) {
       setFieldErrors(validation.errors as FieldErrors);
+      focusFirstInvalidField(validation.errors);
       return;
     }
     setFieldErrors({});
@@ -51,6 +56,7 @@ export function SignInForm() {
       });
 
       if (response.ok) {
+        // Stays busy until the page changes, so the form cannot be sent twice.
         router.push('/');
         return;
       }
@@ -58,15 +64,22 @@ export function SignInForm() {
       setFormError(getSignInErrorMessage(response.status));
     } catch {
       setFormError(NETWORK_ERROR_MESSAGE);
-    } finally {
-      setIsLoading(false);
     }
+    setIsLoading(false);
   }
 
   return (
     <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5">
       {formError && (
-        <Alert variant="error" message={formError} onDismiss={() => setFormError(null)} />
+        <Alert
+          variant="error"
+          message={formError}
+          onDismiss={() => {
+            setFormError(null);
+            document.getElementById('email')?.focus();
+          }}
+          focusOnMount
+        />
       )}
 
       <FormField
@@ -79,6 +92,7 @@ export function SignInForm() {
         autoComplete="email"
         error={fieldErrors.email}
         disabled={isLoading}
+        placeholder="name@example.com"
       />
 
       <FormField
@@ -95,9 +109,9 @@ export function SignInForm() {
 
       <PrimaryButton isLoading={isLoading}>Sign In</PrimaryButton>
 
-      <p className="text-center text-sm text-[#58655E]">
+      <p className="text-center text-sm text-text-muted">
         Don&apos;t have an account?{' '}
-        <Link href="/sign-up" className="text-[#245B45] font-medium hover:underline">
+        <Link href="/sign-up" className="inline-flex min-h-11 items-center text-primary font-medium hover:underline">
           Create an account
         </Link>
       </p>

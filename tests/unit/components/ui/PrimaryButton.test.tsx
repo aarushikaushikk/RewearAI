@@ -11,6 +11,18 @@ describe('PrimaryButton', () => {
     expect(screen.getByRole('button', { name: 'Sign In' })).toBeInTheDocument();
   });
 
+  it('announces loading to assistive technology', () => {
+    render(<PrimaryButton isLoading>Sign In</PrimaryButton>);
+    expect(screen.getByRole('button')).toHaveAttribute('aria-busy', 'true');
+    expect(screen.getByRole('status')).toHaveTextContent(/loading/i);
+  });
+
+  it('is not busy when idle', () => {
+    render(<PrimaryButton>Sign In</PrimaryButton>);
+    expect(screen.getByRole('button')).not.toHaveAttribute('aria-busy', 'true');
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
   it('calls onClick when clicked', async () => {
     const user = userEvent.setup();
     const onClick = vi.fn();

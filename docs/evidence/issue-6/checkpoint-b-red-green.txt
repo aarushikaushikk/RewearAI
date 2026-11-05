@@ -1,0 +1,371 @@
+
+================================================================
+FIX 1 (redirect loop + default-deny proxy) - RED
+$ npx vitest run tests/unit/proxy/proxy.test.ts
+================================================================
+ × tests/unit/proxy/proxy.test.ts > proxy > default-deny for private pages without a session cookie > redirects /settings to /sign-in, including routes nobody has listed 3ms
+   → expected 200 to be 307 // Object.is equality
+ × tests/unit/proxy/proxy.test.ts > proxy > default-deny for private pages without a session cookie > redirects /not-yet-built to /sign-in, including routes nobody has listed 0ms
+ × tests/unit/proxy/proxy.test.ts > proxy > default-deny for private pages without a session cookie > does not treat /sign-in-extra as a public authentication page 0ms
+ × tests/unit/proxy/proxy.test.ts > proxy > default-deny for private pages without a session cookie > does not treat /sign-up/nested as a public authentication page 0ms
+ × tests/unit/proxy/proxy.test.ts > proxy > public authentication pages > does not treat cookie presence as authentication on /sign-in 0ms
+   → expected null to be '1' // Object.is equality
+ × tests/unit/proxy/proxy.test.ts > proxy > public authentication pages > does not treat cookie presence as authentication on /sign-up 0ms
+ × tests/unit/proxy/proxy.test.ts > proxy > public authentication pages > keeps the session-ended notice query reachable with a stale cookie 0ms
+ × tests/unit/proxy/proxy.test.ts > proxy > matcher > runs on page route / 0ms
+   → (0 , unstable_doesProxyMatch) is not a function
+ × tests/unit/proxy/proxy.test.ts > proxy > matcher > runs on page route /sign-in 0ms
+ × tests/unit/proxy/proxy.test.ts > proxy > matcher > runs on page route /sign-up 0ms
+ × tests/unit/proxy/proxy.test.ts > proxy > matcher > runs on page route /wardrobe 0ms
+ × tests/unit/proxy/proxy.test.ts > proxy > matcher > runs on page route /outfits/saved 0ms
+ × tests/unit/proxy/proxy.test.ts > proxy > matcher > runs on page route /settings/profile 0ms
+ × tests/unit/proxy/proxy.test.ts > proxy > matcher > skips API route /api/auth/login so it can answer 401 JSON instead of a redirect 0ms
+ × tests/unit/proxy/proxy.test.ts > proxy > matcher > skips API route /api/wardrobe so it can answer 401 JSON instead of a redirect 0ms
+ × tests/unit/proxy/proxy.test.ts > proxy > matcher > skips API route /api so it can answer 401 JSON instead of a redirect 0ms
+ × tests/unit/proxy/proxy.test.ts > proxy > matcher > skips static asset /_next/static/chunks/app.js 0ms
+ × tests/unit/proxy/proxy.test.ts > proxy > matcher > skips static asset /_next/image 0ms
+ × tests/unit/proxy/proxy.test.ts > proxy > matcher > skips static asset /favicon.ico 0ms
+ × tests/unit/proxy/proxy.test.ts > proxy > matcher > skips static asset /next.svg 0ms
+ × tests/unit/proxy/proxy.test.ts > proxy > matcher > still runs on private-looking route /apifoo 0ms
+ × tests/unit/proxy/proxy.test.ts > proxy > matcher > still runs on private-looking route /wardrobe/shirt.v2 0ms
+ × tests/unit/proxy/proxy.test.ts > proxy > matcher > still runs on private-looking route /wardrobe/report.json 0ms
+ FAIL  tests/unit/proxy/proxy.test.ts > proxy > default-deny for private pages without a session cookie > redirects /settings to /sign-in, including routes nobody has listed
+ FAIL  tests/unit/proxy/proxy.test.ts > proxy > default-deny for private pages without a session cookie > redirects /not-yet-built to /sign-in, including routes nobody has listed
+AssertionError: expected 200 to be 307 // Object.is equality
+ FAIL  tests/unit/proxy/proxy.test.ts > proxy > default-deny for private pages without a session cookie > does not treat /sign-in-extra as a public authentication page
+ FAIL  tests/unit/proxy/proxy.test.ts > proxy > default-deny for private pages without a session cookie > does not treat /sign-up/nested as a public authentication page
+ FAIL  tests/unit/proxy/proxy.test.ts > proxy > public authentication pages > does not treat cookie presence as authentication on /sign-in
+ FAIL  tests/unit/proxy/proxy.test.ts > proxy > public authentication pages > does not treat cookie presence as authentication on /sign-up
+AssertionError: expected null to be '1' // Object.is equality
+ FAIL  tests/unit/proxy/proxy.test.ts > proxy > public authentication pages > keeps the session-ended notice query reachable with a stale cookie
+ FAIL  tests/unit/proxy/proxy.test.ts > proxy > matcher > runs on page route /
+ FAIL  tests/unit/proxy/proxy.test.ts > proxy > matcher > runs on page route /sign-in
+ FAIL  tests/unit/proxy/proxy.test.ts > proxy > matcher > runs on page route /sign-up
+ FAIL  tests/unit/proxy/proxy.test.ts > proxy > matcher > runs on page route /wardrobe
+ FAIL  tests/unit/proxy/proxy.test.ts > proxy > matcher > runs on page route /outfits/saved
+ FAIL  tests/unit/proxy/proxy.test.ts > proxy > matcher > runs on page route /settings/profile
+ FAIL  tests/unit/proxy/proxy.test.ts > proxy > matcher > skips API route /api/auth/login so it can answer 401 JSON instead of a redirect
+ FAIL  tests/unit/proxy/proxy.test.ts > proxy > matcher > skips API route /api/wardrobe so it can answer 401 JSON instead of a redirect
+ FAIL  tests/unit/proxy/proxy.test.ts > proxy > matcher > skips API route /api so it can answer 401 JSON instead of a redirect
+ FAIL  tests/unit/proxy/proxy.test.ts > proxy > matcher > skips static asset /_next/static/chunks/app.js
+ FAIL  tests/unit/proxy/proxy.test.ts > proxy > matcher > skips static asset /_next/image
+ FAIL  tests/unit/proxy/proxy.test.ts > proxy > matcher > skips static asset /favicon.ico
+ FAIL  tests/unit/proxy/proxy.test.ts > proxy > matcher > skips static asset /next.svg
+ FAIL  tests/unit/proxy/proxy.test.ts > proxy > matcher > still runs on private-looking route /apifoo
+ FAIL  tests/unit/proxy/proxy.test.ts > proxy > matcher > still runs on private-looking route /wardrobe/shirt.v2
+ FAIL  tests/unit/proxy/proxy.test.ts > proxy > matcher > still runs on private-looking route /wardrobe/report.json
+ Test Files  1 failed (1)
+      Tests  23 failed | 11 passed (34)
+
+================================================================
+FIX 1 - RED (corrected: matcher helper is unstable_doesMiddlewareMatch in Next 16.4.5; earlier matcher failures were a test import mistake)
+$ npx vitest run tests/unit/proxy/proxy.test.ts
+================================================================
+ × tests/unit/proxy/proxy.test.ts > proxy > default-deny for private pages without a session cookie > redirects /settings to /sign-in, including routes nobody has listed 5ms
+   → expected 200 to be 307 // Object.is equality
+ × tests/unit/proxy/proxy.test.ts > proxy > default-deny for private pages without a session cookie > redirects /not-yet-built to /sign-in, including routes nobody has listed 1ms
+ × tests/unit/proxy/proxy.test.ts > proxy > default-deny for private pages without a session cookie > does not treat /sign-in-extra as a public authentication page 1ms
+ × tests/unit/proxy/proxy.test.ts > proxy > default-deny for private pages without a session cookie > does not treat /sign-up/nested as a public authentication page 0ms
+ × tests/unit/proxy/proxy.test.ts > proxy > public authentication pages > does not treat cookie presence as authentication on /sign-in 1ms
+   → expected null to be '1' // Object.is equality
+ × tests/unit/proxy/proxy.test.ts > proxy > public authentication pages > does not treat cookie presence as authentication on /sign-up 0ms
+ × tests/unit/proxy/proxy.test.ts > proxy > public authentication pages > keeps the session-ended notice query reachable with a stale cookie 0ms
+ × tests/unit/proxy/proxy.test.ts > proxy > matcher > skips API route /api/auth/login so it can answer 401 JSON instead of a redirect 0ms
+   → expected true to be false // Object.is equality
+ × tests/unit/proxy/proxy.test.ts > proxy > matcher > skips API route /api/wardrobe so it can answer 401 JSON instead of a redirect 1ms
+ × tests/unit/proxy/proxy.test.ts > proxy > matcher > skips API route /api so it can answer 401 JSON instead of a redirect 0ms
+ × tests/unit/proxy/proxy.test.ts > proxy > matcher > skips static asset /next.svg 1ms
+ FAIL  tests/unit/proxy/proxy.test.ts > proxy > default-deny for private pages without a session cookie > redirects /settings to /sign-in, including routes nobody has listed
+ FAIL  tests/unit/proxy/proxy.test.ts > proxy > default-deny for private pages without a session cookie > redirects /not-yet-built to /sign-in, including routes nobody has listed
+AssertionError: expected 200 to be 307 // Object.is equality
+ FAIL  tests/unit/proxy/proxy.test.ts > proxy > default-deny for private pages without a session cookie > does not treat /sign-in-extra as a public authentication page
+ FAIL  tests/unit/proxy/proxy.test.ts > proxy > default-deny for private pages without a session cookie > does not treat /sign-up/nested as a public authentication page
+ FAIL  tests/unit/proxy/proxy.test.ts > proxy > public authentication pages > does not treat cookie presence as authentication on /sign-in
+ FAIL  tests/unit/proxy/proxy.test.ts > proxy > public authentication pages > does not treat cookie presence as authentication on /sign-up
+AssertionError: expected null to be '1' // Object.is equality
+ FAIL  tests/unit/proxy/proxy.test.ts > proxy > public authentication pages > keeps the session-ended notice query reachable with a stale cookie
+ FAIL  tests/unit/proxy/proxy.test.ts > proxy > matcher > skips API route /api/auth/login so it can answer 401 JSON instead of a redirect
+ FAIL  tests/unit/proxy/proxy.test.ts > proxy > matcher > skips API route /api/wardrobe so it can answer 401 JSON instead of a redirect
+ FAIL  tests/unit/proxy/proxy.test.ts > proxy > matcher > skips API route /api so it can answer 401 JSON instead of a redirect
+AssertionError: expected true to be false // Object.is equality
+ FAIL  tests/unit/proxy/proxy.test.ts > proxy > matcher > skips static asset /next.svg
+ Test Files  1 failed (1)
+      Tests  11 failed | 23 passed (34)
+
+================================================================
+FIX 1 - GREEN
+$ npx vitest run tests/unit/proxy
+================================================================
+ Test Files  2 passed (2)
+      Tests  36 passed (36)
+
+================================================================
+FIX 2 (server-side page guard, outage separation) - RED
+$ npx vitest run tests/unit/auth/pageSession.test.ts tests/integration/pages/sessionPages.test.tsx
+================================================================
+ × tests/integration/pages/sessionPages.test.tsx > session-aware pages > Home (private page) > rejects a forged cookie 8ms
+   → expected '/sign-in' to be '/sign-in?reason=session-ended' // Object.is equality
+ × tests/integration/pages/sessionPages.test.tsx > session-aware pages > Home (private page) > rejects an expired session 112ms
+ × tests/integration/pages/sessionPages.test.tsx > session-aware pages > Home (private page) > rejects a revoked session 121ms
+ × tests/integration/pages/sessionPages.test.tsx > session-aware pages > Home (private page) > rejects a session whose user no longer exists 145ms
+ × tests/integration/pages/sessionPages.test.tsx > session-aware pages > Sign In (public page) > explains that the session ended when sent back from a private page 43ms
+   → Unable to find an accessible element with the role "alert"
+ × tests/integration/pages/sessionPages.test.tsx > session-aware pages > Sign In (public page) > keeps the form reachable and reports an outage when a cookie cannot be checked 1ms
+   → Authentication service is temporarily unavailable
+ × tests/integration/pages/sessionPages.test.tsx > session-aware pages > Sign In (public page) > reports the outage rather than an ended session when both apply 0ms
+ × tests/integration/pages/sessionPages.test.tsx > session-aware pages > Sign Up (public page) > keeps the form reachable and reports an outage when a cookie cannot be checked 0ms
+ × tests/integration/pages/sessionPages.test.tsx > session-aware pages > redirect loop regression > ends at the sign-in form when following redirects with a stale cookie 5ms
+ FAIL  tests/unit/auth/pageSession.test.ts [ tests/unit/auth/pageSession.test.ts ]
+Error: Cannot find module '@/lib/auth/pageSession' imported from 'tests/unit/auth/pageSession.test.ts'.
+ FAIL  tests/integration/pages/sessionPages.test.tsx > session-aware pages > Home (private page) > rejects a forged cookie
+AssertionError: expected '/sign-in' to be '/sign-in?reason=session-ended' // Object.is equality
+ FAIL  tests/integration/pages/sessionPages.test.tsx > session-aware pages > Home (private page) > rejects an expired session
+ FAIL  tests/integration/pages/sessionPages.test.tsx > session-aware pages > Home (private page) > rejects a revoked session
+ FAIL  tests/integration/pages/sessionPages.test.tsx > session-aware pages > Home (private page) > rejects a session whose user no longer exists
+ FAIL  tests/integration/pages/sessionPages.test.tsx > session-aware pages > Sign In (public page) > explains that the session ended when sent back from a private page
+ FAIL  tests/integration/pages/sessionPages.test.tsx > session-aware pages > Sign In (public page) > keeps the form reachable and reports an outage when a cookie cannot be checked
+ FAIL  tests/integration/pages/sessionPages.test.tsx > session-aware pages > Sign In (public page) > reports the outage rather than an ended session when both apply
+ FAIL  tests/integration/pages/sessionPages.test.tsx > session-aware pages > Sign Up (public page) > keeps the form reachable and reports an outage when a cookie cannot be checked
+ FAIL  tests/integration/pages/sessionPages.test.tsx > session-aware pages > redirect loop regression > ends at the sign-in form when following redirects with a stale cookie
+ Test Files  2 failed (2)
+      Tests  9 failed | 12 passed (21)
+
+================================================================
+FIX 2 - GREEN
+$ npx vitest run tests/unit/auth/pageSession.test.ts tests/integration/pages/sessionPages.test.tsx
+================================================================
+ Test Files  2 passed (2)
+      Tests  30 passed (30)
+
+================================================================
+FIX 3 (AppHeader logout failure handling) - RED
+$ npx vitest run tests/unit/components/layout/AppHeader.test.tsx
+================================================================
+ × tests/unit/components/layout/AppHeader.test.tsx > AppHeader sign out > leaves for sign-in and clears cached private pages after a successful logout 1110ms
+   → expected "spy" to be called with arguments: [ '/sign-in' ]
+ × tests/unit/components/layout/AppHeader.test.tsx > AppHeader sign out > stays on the page and reports a 403 logout failure 1113ms
+   → Unable to find role="alert"
+ × tests/unit/components/layout/AppHeader.test.tsx > AppHeader sign out > stays on the page and reports a 500 logout failure 1108ms
+ × tests/unit/components/layout/AppHeader.test.tsx > AppHeader sign out > stays on the page and reports a 503 logout failure 1093ms
+ × tests/unit/components/layout/AppHeader.test.tsx > AppHeader sign out > stays on the page and reports a network failure 1090ms
+ × tests/unit/components/layout/AppHeader.test.tsx > AppHeader sign out > does not show raw error details 1097ms
+ × tests/unit/components/layout/AppHeader.test.tsx > AppHeader sign out > lets the user retry after a failure 1120ms
+ FAIL  tests/unit/components/layout/AppHeader.test.tsx > AppHeader sign out > leaves for sign-in and clears cached private pages after a successful logout
+AssertionError: expected "spy" to be called with arguments: [ '/sign-in' ]
+ FAIL  tests/unit/components/layout/AppHeader.test.tsx > AppHeader sign out > stays on the page and reports a 403 logout failure
+ FAIL  tests/unit/components/layout/AppHeader.test.tsx > AppHeader sign out > stays on the page and reports a 500 logout failure
+ FAIL  tests/unit/components/layout/AppHeader.test.tsx > AppHeader sign out > stays on the page and reports a 503 logout failure
+ FAIL  tests/unit/components/layout/AppHeader.test.tsx > AppHeader sign out > stays on the page and reports a network failure
+ FAIL  tests/unit/components/layout/AppHeader.test.tsx > AppHeader sign out > does not show raw error details
+ FAIL  tests/unit/components/layout/AppHeader.test.tsx > AppHeader sign out > lets the user retry after a failure
+ Test Files  1 failed (1)
+      Tests  7 failed | 2 passed (9)
+
+================================================================
+FIX 3 - GREEN
+$ npx vitest run tests/unit/components/layout/AppHeader.test.tsx
+================================================================
+ Test Files  1 passed (1)
+      Tests  9 passed (9)
+
+================================================================
+FIX 4 (malformed payloads -> 400, error codes, no-cookie outage responses) - RED
+$ npx vitest run tests/unit/auth/authValidation.test.ts tests/integration/api/authRoutes.test.ts
+================================================================
+ × tests/unit/auth/authValidation.test.ts > auth payload parsing > parseLoginPayload rejects non-object body null 4ms
+   → (0 , parseLoginPayload) is not a function
+ × tests/unit/auth/authValidation.test.ts > auth payload parsing > parseLoginPayload rejects non-object body 123 0ms
+ × tests/unit/auth/authValidation.test.ts > auth payload parsing > parseLoginPayload rejects non-object body "text" 0ms
+ × tests/unit/auth/authValidation.test.ts > auth payload parsing > parseLoginPayload rejects non-object body true 0ms
+ × tests/unit/auth/authValidation.test.ts > auth payload parsing > parseLoginPayload rejects non-object body %j 0ms
+ × tests/unit/auth/authValidation.test.ts > auth payload parsing > parseLoginPayload rejects non-object body {"email":"a@example.com"} 0ms
+ × tests/unit/auth/authValidation.test.ts > auth payload parsing > parseLoginPayload rejects wrongly typed fields {"email":123,"password":"Password123!"} 0ms
+ × tests/unit/auth/authValidation.test.ts > auth payload parsing > parseLoginPayload rejects wrongly typed fields {"email":null,"password":"Password123!"} 0ms
+ × tests/unit/auth/authValidation.test.ts > auth payload parsing > parseLoginPayload rejects wrongly typed fields {"email":{"undefined":""},"password":"Password123!"} 0ms
+ × tests/unit/auth/authValidation.test.ts > auth payload parsing > parseLoginPayload rejects wrongly typed fields {"email":["a@example.com"],"password":"Password123!"} 0ms
+ × tests/unit/auth/authValidation.test.ts > auth payload parsing > parseLoginPayload rejects wrongly typed fields {"email":"a@example.com","password":12345678} 0ms
+ × tests/unit/auth/authValidation.test.ts > auth payload parsing > parseLoginPayload rejects wrongly typed fields {"email":"a@example.com","password":{"undefined":""}} 0ms
+ × tests/unit/auth/authValidation.test.ts > auth payload parsing > parseLoginPayload rejects wrongly typed fields {"email":"a@example.com","password":null} 0ms
+ × tests/unit/auth/authValidation.test.ts > auth payload parsing > parseLoginPayload keeps only known string fields 0ms
+ × tests/unit/auth/authValidation.test.ts > auth payload parsing > parseLoginPayload leaves missing fields to field-level validation 0ms
+ × tests/unit/auth/authValidation.test.ts > auth payload parsing > parseRegisterPayload rejects non-object body null 0ms
+   → (0 , parseRegisterPayload) is not a function
+ × tests/unit/auth/authValidation.test.ts > auth payload parsing > parseRegisterPayload rejects non-object body 123 0ms
+ × tests/unit/auth/authValidation.test.ts > auth payload parsing > parseRegisterPayload rejects non-object body "text" 0ms
+ × tests/unit/auth/authValidation.test.ts > auth payload parsing > parseRegisterPayload rejects non-object body true 0ms
+ × tests/unit/auth/authValidation.test.ts > auth payload parsing > parseRegisterPayload rejects non-object body %j 0ms
+ × tests/unit/auth/authValidation.test.ts > auth payload parsing > parseRegisterPayload rejects non-object body {"email":"a@example.com"} 0ms
+ × tests/unit/auth/authValidation.test.ts > auth payload parsing > parseRegisterPayload rejects wrongly typed fields {"email":123,"password":"Password123!"} 0ms
+ × tests/unit/auth/authValidation.test.ts > auth payload parsing > parseRegisterPayload rejects wrongly typed fields {"email":null,"password":"Password123!"} 0ms
+ × tests/unit/auth/authValidation.test.ts > auth payload parsing > parseRegisterPayload rejects wrongly typed fields {"email":{"undefined":""},"password":"Password123!"} 0ms
+ × tests/unit/auth/authValidation.test.ts > auth payload parsing > parseRegisterPayload rejects wrongly typed fields {"email":["a@example.com"],"password":"Password123!"} 0ms
+ × tests/unit/auth/authValidation.test.ts > auth payload parsing > parseRegisterPayload rejects wrongly typed fields {"email":"a@example.com","password":12345678} 0ms
+ × tests/unit/auth/authValidation.test.ts > auth payload parsing > parseRegisterPayload rejects wrongly typed fields {"email":"a@example.com","password":{"undefined":""}} 0ms
+ × tests/unit/auth/authValidation.test.ts > auth payload parsing > parseRegisterPayload rejects wrongly typed fields {"email":"a@example.com","password":null} 0ms
+ × tests/unit/auth/authValidation.test.ts > auth payload parsing > parseRegisterPayload rejects wrongly typed fields {"email":"a@example.com","password":"Password123!","name":123} 0ms
+ × tests/unit/auth/authValidation.test.ts > auth payload parsing > parseRegisterPayload keeps only known fields 0ms
+ × tests/unit/auth/authValidation.test.ts > auth payload parsing > parseRegisterPayload accepts an absent name (null) 1ms
+ × tests/unit/auth/authValidation.test.ts > auth payload parsing > parseRegisterPayload accepts an absent name (undefined) 0ms
+ × tests/integration/api/authRoutes.test.ts > Auth API Routes Integration Tests > Malformed payloads > login answers 400 for null 15ms
+   → Cannot read properties of null (reading 'email')
+ × tests/integration/api/authRoutes.test.ts > Auth API Routes Integration Tests > Malformed payloads > login answers 400 for {"email":123,"password":"Password123!"} 0ms
+   → email.trim is not a function
+ × tests/integration/api/authRoutes.test.ts > Auth API Routes Integration Tests > Malformed payloads > login answers 400 for {"email":{"$ne":""},"password":"Password123!"} 0ms
+ × tests/integration/api/authRoutes.test.ts > Auth API Routes Integration Tests > Malformed payloads > login answers 400 for {"email":"a@example.com","password":12345678} 6ms
+   → expected 500 to be 400 // Object.is equality
+ × tests/integration/api/authRoutes.test.ts > Auth API Routes Integration Tests > Malformed payloads > login answers 400 for {"email":"a@example.com","password":{"$ne":""}} 1ms
+ × tests/integration/api/authRoutes.test.ts > Auth API Routes Integration Tests > Malformed payloads > register answers 400 for null 0ms
+ × tests/integration/api/authRoutes.test.ts > Auth API Routes Integration Tests > Malformed payloads > register answers 400 for {"email":123,"password":"Password123!"} 0ms
+ × tests/integration/api/authRoutes.test.ts > Auth API Routes Integration Tests > Malformed payloads > register answers 400 for {"email":{"$ne":""},"password":"Password123!"} 0ms
+ × tests/integration/api/authRoutes.test.ts > Auth API Routes Integration Tests > Malformed payloads > register answers 400 for {"email":"a@example.com","password":12345678} 1ms
+ × tests/integration/api/authRoutes.test.ts > Auth API Routes Integration Tests > Malformed payloads > register answers 400 for {"email":"a@example.com","password":{"$ne":""}} 1ms
+ × tests/integration/api/authRoutes.test.ts > Auth API Routes Integration Tests > Malformed payloads > register answers 400 for {"email":"a@example.com","password":"Password123!","name":123} 82ms
+ × tests/integration/api/authRoutes.test.ts > Auth API Routes Integration Tests > Malformed payloads > answers 400 for a malformed payload even while the service is unavailable 1ms
+   → expected 503 to be 400 // Object.is equality
+ × tests/integration/api/authRoutes.test.ts > Auth API Routes Integration Tests > Machine-readable error codes > identifies an account created without a session 75ms
+   → expected undefined to be 'ACCOUNT_CREATED_SESSION_FAILED' // Object.is equality
+ × tests/integration/api/authRoutes.test.ts > Auth API Routes Integration Tests > Machine-readable error codes > identifies a registration that was rolled back 75ms
+   → expected undefined to be 'REGISTRATION_SESSION_FAILED' // Object.is equality
+ × tests/integration/api/authRoutes.test.ts > Auth API Routes Integration Tests > Machine-readable error codes > identifies invalid credentials on login 70ms
+   → expected undefined to be 'INVALID_CREDENTIALS' // Object.is equality
+ × tests/integration/api/authRoutes.test.ts > Auth API Routes Integration Tests > Requests with no session cookie during an outage > session endpoint answers 401, because there is nothing to validate
+   → expected 503 to be 401 // Object.is equality
+ × tests/integration/api/authRoutes.test.ts > Auth API Routes Integration Tests > Requests with no session cookie during an outage > logout succeeds and clears the cookie, because there is nothing to
+   → expected 503 to be 200 // Object.is equality
+ FAIL  tests/integration/api/authRoutes.test.ts > Auth API Routes Integration Tests > Malformed payloads > login answers 400 for null
+ FAIL  tests/integration/api/authRoutes.test.ts > Auth API Routes Integration Tests > Malformed payloads > login answers 400 for {"email":123,"password":"Password123!"}
+ FAIL  tests/integration/api/authRoutes.test.ts > Auth API Routes Integration Tests > Malformed payloads > login answers 400 for {"email":{"$ne":""},"password":"Password123!"}
+ FAIL  tests/integration/api/authRoutes.test.ts > Auth API Routes Integration Tests > Malformed payloads > login answers 400 for {"email":"a@example.com","password":12345678}
+ FAIL  tests/integration/api/authRoutes.test.ts > Auth API Routes Integration Tests > Malformed payloads > login answers 400 for {"email":"a@example.com","password":{"$ne":""}}
+AssertionError: expected 500 to be 400 // Object.is equality
+ FAIL  tests/integration/api/authRoutes.test.ts > Auth API Routes Integration Tests > Malformed payloads > register answers 400 for null
+ FAIL  tests/integration/api/authRoutes.test.ts > Auth API Routes Integration Tests > Malformed payloads > register answers 400 for {"email":123,"password":"Password123!"}
+ FAIL  tests/integration/api/authRoutes.test.ts > Auth API Routes Integration Tests > Malformed payloads > register answers 400 for {"email":{"$ne":""},"password":"Password123!"}
+ FAIL  tests/integration/api/authRoutes.test.ts > Auth API Routes Integration Tests > Malformed payloads > register answers 400 for {"email":"a@example.com","password":12345678}
+ FAIL  tests/integration/api/authRoutes.test.ts > Auth API Routes Integration Tests > Malformed payloads > register answers 400 for {"email":"a@example.com","password":{"$ne":""}}
+ FAIL  tests/integration/api/authRoutes.test.ts > Auth API Routes Integration Tests > Malformed payloads > register answers 400 for {"email":"a@example.com","password":"Password123!","name":123}
+ FAIL  tests/integration/api/authRoutes.test.ts > Auth API Routes Integration Tests > Malformed payloads > answers 400 for a malformed payload even while the service is unavailable
+AssertionError: expected 503 to be 400 // Object.is equality
+ FAIL  tests/integration/api/authRoutes.test.ts > Auth API Routes Integration Tests > Machine-readable error codes > identifies an account created without a session
+AssertionError: expected undefined to be 'ACCOUNT_CREATED_SESSION_FAILED' // Object.is equality
+ FAIL  tests/integration/api/authRoutes.test.ts > Auth API Routes Integration Tests > Machine-readable error codes > identifies a registration that was rolled back
+AssertionError: expected undefined to be 'REGISTRATION_SESSION_FAILED' // Object.is equality
+ FAIL  tests/integration/api/authRoutes.test.ts > Auth API Routes Integration Tests > Machine-readable error codes > identifies invalid credentials on login
+AssertionError: expected undefined to be 'INVALID_CREDENTIALS' // Object.is equality
+ FAIL  tests/integration/api/authRoutes.test.ts > Auth API Routes Integration Tests > Requests with no session cookie during an outage > session endpoint answers 401, because there is nothing to valid
+AssertionError: expected 503 to be 401 // Object.is equality
+ FAIL  tests/integration/api/authRoutes.test.ts > Auth API Routes Integration Tests > Requests with no session cookie during an outage > logout succeeds and clears the cookie, because there is nothing
+AssertionError: expected 503 to be 200 // Object.is equality
+ FAIL  tests/unit/auth/authValidation.test.ts > auth payload parsing > parseLoginPayload rejects non-object body null
+ FAIL  tests/unit/auth/authValidation.test.ts > auth payload parsing > parseLoginPayload rejects non-object body 123
+ FAIL  tests/unit/auth/authValidation.test.ts > auth payload parsing > parseLoginPayload rejects non-object body "text"
+ FAIL  tests/unit/auth/authValidation.test.ts > auth payload parsing > parseLoginPayload rejects non-object body true
+ FAIL  tests/unit/auth/authValidation.test.ts > auth payload parsing > parseLoginPayload rejects non-object body %j
+ FAIL  tests/unit/auth/authValidation.test.ts > auth payload parsing > parseLoginPayload rejects non-object body {"email":"a@example.com"}
+ FAIL  tests/unit/auth/authValidation.test.ts > auth payload parsing > parseLoginPayload rejects wrongly typed fields {"email":123,"password":"Password123!"}
+ FAIL  tests/unit/auth/authValidation.test.ts > auth payload parsing > parseLoginPayload rejects wrongly typed fields {"email":null,"password":"Password123!"}
+ FAIL  tests/unit/auth/authValidation.test.ts > auth payload parsing > parseLoginPayload rejects wrongly typed fields {"email":{"undefined":""},"password":"Password123!"}
+ FAIL  tests/unit/auth/authValidation.test.ts > auth payload parsing > parseLoginPayload rejects wrongly typed fields {"email":["a@example.com"],"password":"Password123!"}
+ FAIL  tests/unit/auth/authValidation.test.ts > auth payload parsing > parseLoginPayload rejects wrongly typed fields {"email":"a@example.com","password":12345678}
+ FAIL  tests/unit/auth/authValidation.test.ts > auth payload parsing > parseLoginPayload rejects wrongly typed fields {"email":"a@example.com","password":{"undefined":""}}
+ FAIL  tests/unit/auth/authValidation.test.ts > auth payload parsing > parseLoginPayload rejects wrongly typed fields {"email":"a@example.com","password":null}
+ FAIL  tests/unit/auth/authValidation.test.ts > auth payload parsing > parseLoginPayload keeps only known string fields
+ FAIL  tests/unit/auth/authValidation.test.ts > auth payload parsing > parseLoginPayload leaves missing fields to field-level validation
+ FAIL  tests/unit/auth/authValidation.test.ts > auth payload parsing > parseRegisterPayload rejects non-object body null
+ FAIL  tests/unit/auth/authValidation.test.ts > auth payload parsing > parseRegisterPayload rejects non-object body 123
+ FAIL  tests/unit/auth/authValidation.test.ts > auth payload parsing > parseRegisterPayload rejects non-object body "text"
+ FAIL  tests/unit/auth/authValidation.test.ts > auth payload parsing > parseRegisterPayload rejects non-object body true
+ FAIL  tests/unit/auth/authValidation.test.ts > auth payload parsing > parseRegisterPayload rejects non-object body %j
+ FAIL  tests/unit/auth/authValidation.test.ts > auth payload parsing > parseRegisterPayload rejects non-object body {"email":"a@example.com"}
+ FAIL  tests/unit/auth/authValidation.test.ts > auth payload parsing > parseRegisterPayload rejects wrongly typed fields {"email":123,"password":"Password123!"}
+ FAIL  tests/unit/auth/authValidation.test.ts > auth payload parsing > parseRegisterPayload rejects wrongly typed fields {"email":null,"password":"Password123!"}
+ FAIL  tests/unit/auth/authValidation.test.ts > auth payload parsing > parseRegisterPayload rejects wrongly typed fields {"email":{"undefined":""},"password":"Password123!"}
+ FAIL  tests/unit/auth/authValidation.test.ts > auth payload parsing > parseRegisterPayload rejects wrongly typed fields {"email":["a@example.com"],"password":"Password123!"}
+ FAIL  tests/unit/auth/authValidation.test.ts > auth payload parsing > parseRegisterPayload rejects wrongly typed fields {"email":"a@example.com","password":12345678}
+ FAIL  tests/unit/auth/authValidation.test.ts > auth payload parsing > parseRegisterPayload rejects wrongly typed fields {"email":"a@example.com","password":{"undefined":""}}
+ FAIL  tests/unit/auth/authValidation.test.ts > auth payload parsing > parseRegisterPayload rejects wrongly typed fields {"email":"a@example.com","password":null}
+ FAIL  tests/unit/auth/authValidation.test.ts > auth payload parsing > parseRegisterPayload rejects wrongly typed fields {"email":"a@example.com","password":"Password123!","name":123}
+ FAIL  tests/unit/auth/authValidation.test.ts > auth payload parsing > parseRegisterPayload keeps only known fields
+ FAIL  tests/unit/auth/authValidation.test.ts > auth payload parsing > parseRegisterPayload accepts an absent name (null)
+ FAIL  tests/unit/auth/authValidation.test.ts > auth payload parsing > parseRegisterPayload accepts an absent name (undefined)
+ Test Files  2 failed (2)
+      Tests  49 failed | 40 passed (89)
+
+================================================================
+FIX 4 - GREEN
+$ npx vitest run tests/unit/auth/authValidation.test.ts tests/integration/api/authRoutes.test.ts
+================================================================
+ Test Files  2 passed (2)
+      Tests  89 passed (89)
+
+================================================================
+FIX 5 (form error mapping) - RED
+$ npx vitest run tests/unit/components/auth
+================================================================
+ × tests/unit/components/auth/SignInForm.test.tsx > SignInForm > error mapping > asks the user to check their details on 400 600ms
+   → expect(element).toHaveTextContent()
+ × tests/unit/components/auth/SignUpForm.test.tsx > SignUpForm > error mapping > asks the user to check their details on 400 626ms
+ × tests/unit/components/auth/SignInForm.test.tsx > SignInForm > error mapping > does not blame the credentials on a 403 security rejection 710ms
+ × tests/unit/components/auth/SignUpForm.test.tsx > SignUpForm > error mapping > asks for a refresh on a 403 security rejection 690ms
+ × tests/unit/components/auth/SignInForm.test.tsx > SignInForm > error mapping > distinguishes a 500 server error from an outage 577ms
+ × tests/unit/components/auth/SignInForm.test.tsx > SignInForm > error mapping > reports a network failure separately from a server response 560ms
+ × tests/unit/components/auth/SignUpForm.test.tsx > SignUpForm > error mapping > distinguishes a 500 server error from an outage 570ms
+ × tests/unit/components/auth/SignUpForm.test.tsx > SignUpForm > error mapping > tells the user to sign in when the account exists but auto sign-in failed 517ms
+ × tests/unit/components/auth/SignUpForm.test.tsx > SignUpForm > error mapping > invites a retry when registration was rolled back 714ms
+ × tests/unit/components/auth/SignUpForm.test.tsx > SignUpForm > error mapping > falls back to the status message when the error body cannot be parsed 542ms
+ × tests/unit/components/auth/SignUpForm.test.tsx > SignUpForm > error mapping > reports a network failure separately from a server response 608ms
+ FAIL  tests/unit/components/auth/SignInForm.test.tsx > SignInForm > error mapping > asks the user to check their details on 400
+Error: expect(element).toHaveTextContent()
+ FAIL  tests/unit/components/auth/SignInForm.test.tsx > SignInForm > error mapping > does not blame the credentials on a 403 security rejection
+ FAIL  tests/unit/components/auth/SignInForm.test.tsx > SignInForm > error mapping > distinguishes a 500 server error from an outage
+ FAIL  tests/unit/components/auth/SignInForm.test.tsx > SignInForm > error mapping > reports a network failure separately from a server response
+ FAIL  tests/unit/components/auth/SignUpForm.test.tsx > SignUpForm > error mapping > asks the user to check their details on 400
+ FAIL  tests/unit/components/auth/SignUpForm.test.tsx > SignUpForm > error mapping > asks for a refresh on a 403 security rejection
+ FAIL  tests/unit/components/auth/SignUpForm.test.tsx > SignUpForm > error mapping > distinguishes a 500 server error from an outage
+ FAIL  tests/unit/components/auth/SignUpForm.test.tsx > SignUpForm > error mapping > tells the user to sign in when the account exists but auto sign-in failed
+ FAIL  tests/unit/components/auth/SignUpForm.test.tsx > SignUpForm > error mapping > invites a retry when registration was rolled back
+ FAIL  tests/unit/components/auth/SignUpForm.test.tsx > SignUpForm > error mapping > falls back to the status message when the error body cannot be parsed
+ FAIL  tests/unit/components/auth/SignUpForm.test.tsx > SignUpForm > error mapping > reports a network failure separately from a server response
+ Test Files  2 failed (2)
+      Tests  11 failed | 21 passed (32)
+
+================================================================
+FIX 6 (root error boundary) - RED
+$ npx vitest run tests/unit/app/errorBoundary.test.tsx
+================================================================
+ FAIL  tests/unit/app/errorBoundary.test.tsx [ tests/unit/app/errorBoundary.test.tsx ]
+Error: Failed to resolve import "@/app/error" from "tests/unit/app/errorBoundary.test.tsx". Does the file exist?
+ Test Files  1 failed (1)
+      Tests  no tests
+
+================================================================
+FIX 5 - GREEN
+$ npx vitest run tests/unit/components/auth
+================================================================
+ Test Files  2 passed (2)
+      Tests  32 passed (32)
+
+================================================================
+FIX 6 - GREEN
+$ npx vitest run tests/unit/app/errorBoundary.test.tsx
+================================================================
+ Test Files  1 passed (1)
+      Tests  5 passed (5)
+
+================================================================
+FIX 7 (validate at request time; found by browser check: new Date() errors under Cache Components) - RED
+$ npx vitest run tests/unit/auth/sessionHelper.test.ts
+================================================================
+ × tests/unit/auth/sessionHelper.test.ts > Server-Side Session Helpers (sessionHelper) > resolution order and fail-closed behavior > getServerSession defers to request time before validating a token
+   → expected [ 'validateSession' ] to deeply equal [ 'connection', 'validateSession' ]
+ FAIL  tests/unit/auth/sessionHelper.test.ts > Server-Side Session Helpers (sessionHelper) > resolution order and fail-closed behavior > getServerSession defers to request time before validating a tok
+AssertionError: expected [ 'validateSession' ] to deeply equal [ 'connection', 'validateSession' ]
+ Test Files  1 failed (1)
+      Tests  1 failed | 16 passed (17)
+
+================================================================
+FIX 7 - GREEN
+$ npx vitest run tests/unit/auth/sessionHelper.test.ts tests/unit/auth/pageSession.test.ts tests/integration/pages/sessionPages.test.tsx
+================================================================
+ Test Files  3 passed (3)
+      Tests  47 passed (47)
