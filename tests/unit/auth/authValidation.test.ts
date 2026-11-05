@@ -144,6 +144,33 @@ describe('Auth Validation Utilities', () => {
     });
   });
 
+  describe('name length', () => {
+    const base = { email: 'person@example.com', password: 'ValidPassword123' };
+
+    it('rejects a name over 100 characters', () => {
+      const result = validateRegisterInput({ ...base, name: 'x'.repeat(101) });
+      expect(result.isValid).toBe(false);
+      expect(result.errors.name).toBe('Name must be 100 characters or fewer');
+    });
+
+    it('accepts a name of exactly 100 characters', () => {
+      expect(validateRegisterInput({ ...base, name: 'x'.repeat(100) }).isValid).toBe(true);
+    });
+
+    it('ignores surrounding spaces when measuring', () => {
+      expect(validateRegisterInput({ ...base, name: `  ${'x'.repeat(100)}  ` }).isValid).toBe(true);
+    });
+
+    it.each([null, undefined, ''])('accepts an absent name (%j)', (name) => {
+      expect(validateRegisterInput({ ...base, name }).isValid).toBe(true);
+    });
+
+    it('reports email problems first, so the existing API message stays the same', () => {
+      const result = validateRegisterInput({ ...base, email: 'bad', name: 'x'.repeat(101) });
+      expect(Object.values(result.errors)[0]).toBe('Please enter a valid email address');
+    });
+  });
+
   describe('validateLoginInput', () => {
     it('validates correct login credentials format', () => {
       const result = validateLoginInput({

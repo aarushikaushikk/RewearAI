@@ -1,4 +1,5 @@
 import { IUserRepository } from '@/lib/repositories/userRepository';
+import { DuplicateEmailError } from '@/lib/repositories/repositoryErrors';
 import { UserRecord, CreateUserDTO } from '@/types/user';
 
 export class MemoryUserRepository implements IUserRepository {
@@ -18,9 +19,10 @@ export class MemoryUserRepository implements IUserRepository {
 
   async create(data: CreateUserDTO): Promise<UserRecord> {
     const normalized = data.email.trim().toLowerCase();
-    const existing = await this.findByEmail(normalized);
-    if (existing) {
-      throw new Error('User with this email already exists');
+    // Checked and inserted with no await in between, like a database unique index,
+    // so concurrent registrations can't both succeed.
+    if (this.users.some((u) => u.email === normalized)) {
+      throw new DuplicateEmailError();
     }
 
     const now = new Date();
@@ -44,6 +46,21 @@ export class MemoryUserRepository implements IUserRepository {
       return true;
     }
     return false;
+  }
+
+  // Helper for tests: registration can't create an account with no password
+  addPasswordlessUserForTest(email: string): UserRecord {
+    const now = new Date();
+    const user: UserRecord = {
+      id: `user_${this.nextId++}`,
+      email: email.trim().toLowerCase(),
+      passwordHash: null,
+      name: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.users.push(user);
+    return { ...user };
   }
 
   // Helper for test cleanup

@@ -49,6 +49,22 @@ describe('SignUpForm', () => {
     expect(await screen.findByText(/at least 8 characters/i)).toBeInTheDocument();
   });
 
+  it('shows a field error for a name over 100 characters, without calling the API', async () => {
+    const fetchSpy = vi.fn();
+    global.fetch = fetchSpy;
+    const user = userEvent.setup();
+    render(<SignUpForm />);
+    await user.click(screen.getByLabelText(/name/i));
+    await user.paste('x'.repeat(101));
+    await user.type(screen.getByLabelText(/email/i), 'user@example.com');
+    await user.type(screen.getByLabelText(/password/i), 'password123');
+    await user.click(screen.getByRole('button', { name: /create account|sign up/i }));
+
+    expect(await screen.findByText('Name must be 100 characters or fewer')).toBeInTheDocument();
+    expect(screen.getByLabelText(/name/i)).toHaveFocus();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   it('shows conflict message on 409 response', async () => {
     const user = userEvent.setup();
     mockFetch(409, { error: 'Email already exists' });

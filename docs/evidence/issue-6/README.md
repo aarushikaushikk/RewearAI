@@ -1,12 +1,12 @@
 # Issue #6 (Account and Sign-In): test evidence
 
-Evidence for Phase 3 Checkpoints B and C of User Story 1. **No check in this folder ran against a real database.** MongoDB integration is still pending, and the production service fails closed until it arrives.
+Evidence for Phase 3 Checkpoints B and C and Phase 4 Checkpoint B of User Story 1. **No check in this folder ran against a real database.** MongoDB integration is still pending, and the production service fails closed until it arrives.
 
 ## What was tested, and how
 
 | Evidence | Files | Auth backend | Runs in CI-style `npm test`? |
 |---|---|---|---|
-| Unit and integration tests (Vitest) | `checkpoint-b-red-green.txt`, `checkpoint-c-red-green.txt` | In-memory repositories from `tests/mocks/`, or mocked `fetch` and router for components | Yes |
+| Unit and integration tests (Vitest) | `checkpoint-b-red-green.txt`, `checkpoint-c-red-green.txt`, `phase-4-checkpoint-b-red-green.txt` | In-memory repositories from `tests/mocks/`, or mocked `fetch` and router for components | Yes |
 | Real build smoke test (curl against `next start`) | Reported in the checkpoint summaries | None: the real fail-closed factory, so login returns 503 | No, run by hand |
 | Browser flows (headless Chrome) | `checkpoint-b-browser-flows.txt`, `checkpoint-c-browser-flows.txt` | **In-memory stub** | No, one-off script |
 | Keyboard checks (headless Chrome) | `checkpoint-c-keyboard.txt` | **In-memory stub** | No, one-off script |
@@ -23,8 +23,9 @@ The browser checks needed a working sign-in, which production code can't provide
 
 | Check | Result |
 |---|---|
-| Final `npm test` | 340 tests in 23 files pass |
-| Browser flows | 28 of 28 pass |
+| `npm test`, end of Phase 3 | 340 tests in 23 files pass |
+| `npm test`, end of Phase 4 Checkpoint B | 431 tests in 29 files pass |
+| Browser flows, Phase 3 (not rerun in Phase 4) | 28 of 28 pass |
 | Keyboard checks | 17 of 17 pass |
 | axe-core, before Checkpoint C | Violations in 13 of 16 states, including one critical (`button-name`) |
 | axe-core, after Checkpoint C | No violations in 19 of 19 states, none with horizontal overflow |
@@ -38,6 +39,10 @@ Each log has labelled sections, such as `FIX 2 - RED` followed by `FIX 2 - GREEN
 - `FIX 1` has two red runs. In the first, the matcher tests failed because of a wrong helper name in the test: Next 16.4.5 exports `unstable_doesMiddlewareMatch`, while its docs say `unstable_doesProxyMatch`. The second run shows the real failures.
 - `FIX 7` was found by the browser check, not planned in advance.
 - The Checkpoint C audit's "before" file records `home tab order` as stuck on `BODY`. That came from the audit's unfocused headless window, not the app; `checkpoint-c-keyboard.txt` is the valid keyboard result.
+- In `phase-4-checkpoint-b-red-green.txt`, the labels are `TASK 1` to `TASK 5`.
+  - The `TASK 2 - GREEN (types)` run shows 2 errors. Both came from Task 3 test files importing a module that didn't exist yet, and a later run labelled as the correction shows 0.
+  - `TASK 3a` has two green runs. The first still failed, because the first draft of `RepositoryError` accepted a message that could have carried driver text.
+  - The page outage tests passed on their first run, so they have no red run. They record behaviour that already worked.
 
 ## What only real database integration can verify
 

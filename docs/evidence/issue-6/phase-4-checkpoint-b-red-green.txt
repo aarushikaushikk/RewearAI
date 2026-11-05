@@ -1,0 +1,176 @@
+Phase 4 Checkpoint B: red-green evidence. Auth backend: in-memory repositories and mocks only, no real database.
+Filtered to failures and totals. Lines are cut at 170 characters.
+
+==================================================
+TASK 1 - RED: type check including tests/**/*.ts, as PR #32's tsconfig will
+==================================================
+tests/unit/auth/authService.test.ts(30,15): error TS2352: Conversion of type 'SafeUser' to type 'Record<string, unknown>' may be a mistake because neither type sufficient
+tests/unit/auth/authService.test.ts(134,15): error TS2352: Conversion of type 'SafeUser' to type 'Record<string, unknown>' may be a mistake because neither type sufficien
+tests/unit/auth/csrf.test.ts(19,19): error TS2540: Cannot assign to 'NODE_ENV' because it is a read-only property.
+tsc exit 2; errors: 3
+
+==================================================
+TASK 1 - GREEN
+==================================================
+tsc exit 0; errors: 0
+
+==================================================
+TASK 2 - RED (types): passwordHash is now nullable, and login has not handled it
+==================================================
+src/services/authService.ts(153,66): error TS2345: Argument of type 'string | null' is not assignable to parameter of type 'string'.
+tsc exit 2; errors: 1
+
+==================================================
+TASK 2 - RED (behaviour)
+==================================================
+      Tests  3 failed | 3 passed (6)
+   × Password sign-in for an account with no password > creates no session 1ms
+   × Password sign-in for an account with no password > refuses sign-in even if the comparison against the placeholder hash succeeds 3ms
+   × Password sign-in for an account with no password > still runs a real hash comparison, so timing does not reveal the account type 6ms
+ FAIL  tests/unit/auth/passwordlessLogin.test.ts > Password sign-in for an account with no password > creates no session
+ FAIL  tests/unit/auth/passwordlessLogin.test.ts > Password sign-in for an account with no password > refuses sign-in even if the comparison against the placeholder hash
+ FAIL  tests/unit/auth/passwordlessLogin.test.ts > Password sign-in for an account with no password > still runs a real hash comparison, so timing does not reveal the acc
+ Test Files  1 failed (1)
+AssertionError: expected { user: { id: 'user_1', …(3) }, …(2) } to be an instance of AuthError
+TypeError: .toMatch() expects to receive a string, but got object
+
+==================================================
+TASK 2 - GREEN (types)
+==================================================
+tests/integration/api/authOutages.test.ts(6,61): error TS2307: Cannot find module '@/lib/repositories/repositoryErrors' or its corresponding type declarations.
+tests/unit/repositories/repositoryErrors.test.ts(6,8): error TS2307: Cannot find module '@/lib/repositories/repositoryErrors' or its corresponding type declarations.
+tsc exit 2; errors: 2
+
+==================================================
+TASK 2 - GREEN (behaviour)
+==================================================
+      Tests  20 passed (20)
+ Test Files  2 passed (2)
+
+==================================================
+TASK 3a - RED: the error types do not exist yet
+==================================================
+      Tests  no tests
+ FAIL  tests/unit/repositories/repositoryErrors.test.ts [ tests/unit/repositories/repositoryErrors.test.ts ]
+ Test Files  1 failed (1)
+Error: Cannot find module '@/lib/repositories/repositoryErrors' imported from 'tests/unit/repositories/repositoryErrors.test.ts'.
+
+==================================================
+TASK 3a - GREEN
+==================================================
+      Tests  1 failed | 4 passed (5)
+   × repository errors > accepts no driver text, so messages stay fixed and safe 5ms
+ FAIL  tests/unit/repositories/repositoryErrors.test.ts > repository errors > accepts no driver text, so messages stay fixed and safe
+ Test Files  1 failed (1)
+AssertionError: expected 'mongodb://user:secret@host' not to match /secret|mongodb|person@example/
+
+==================================================
+TASK 3b - RED: handlers treat outages as 500s and count them as failed attempts
+==================================================
+      Tests  9 failed | 6 passed (15)
+   × Auth routes during a database outage > rate limiting > does not count an unexpected server error against the user 64ms
+   × Auth routes during a database outage > rate limiting > does not lock a user out of login because of an outage 66ms
+   × Auth routes during a database outage > rate limiting > does not lock a user out of registration because of an outage 70ms
+   × Auth routes during a database outage > responses > login answers a safe 503 12ms
+   × Auth routes during a database outage > responses > login answers a safe 503 when only session creation is down 142ms
+   × Auth routes during a database outage > responses > logout answers 503 and keeps the cookie, so the user knows it did not complete 1ms
+   × Auth routes during a database outage > responses > register answers a safe 503 1ms
+   × Auth routes during a database outage > responses > register answers a safe 503 when the account cannot be written 66ms
+   × Auth routes during a database outage > responses > session answers 503 rather than treating the user as signed out 1ms
+ FAIL  tests/integration/api/authOutages.test.ts > Auth routes during a database outage > rate limiting > does not count an unexpected server error against the user
+ FAIL  tests/integration/api/authOutages.test.ts > Auth routes during a database outage > rate limiting > does not lock a user out of login because of an outage
+ FAIL  tests/integration/api/authOutages.test.ts > Auth routes during a database outage > rate limiting > does not lock a user out of registration because of an outage
+ FAIL  tests/integration/api/authOutages.test.ts > Auth routes during a database outage > responses > login answers a safe 503
+ FAIL  tests/integration/api/authOutages.test.ts > Auth routes during a database outage > responses > login answers a safe 503 when only session creation is down
+ FAIL  tests/integration/api/authOutages.test.ts > Auth routes during a database outage > responses > logout answers 503 and keeps the cookie, so the user knows it did no
+ FAIL  tests/integration/api/authOutages.test.ts > Auth routes during a database outage > responses > register answers a safe 503
+ FAIL  tests/integration/api/authOutages.test.ts > Auth routes during a database outage > responses > register answers a safe 503 when the account cannot be written
+ FAIL  tests/integration/api/authOutages.test.ts > Auth routes during a database outage > responses > session answers 503 rather than treating the user as signed out
+ Test Files  1 failed (1)
+AssertionError: expected 429 to be 200 // Object.is equality
+AssertionError: expected 500 to be 503 // Object.is equality
+
+==================================================
+TASK 3a - GREEN (after removing the constructor message argument the first draft allowed)
+==================================================
+      Tests  5 passed (5)
+ Test Files  1 passed (1)
+
+==================================================
+TASK 3b - GREEN
+==================================================
+      Tests  60 passed (60)
+ Test Files  2 passed (2)
+
+==================================================
+TASK 4 - RED
+==================================================
+      Tests  9 failed | 77 passed (86)
+   × Auth Validation Utilities > name length > rejects a name over 100 characters 6ms
+   × Registration failures > duplicate detection > does not mistake another error mentioning "duplicate" for a taken email 64ms
+   × Registration failures > names > rejects a name over 100 characters and creates nothing 58ms
+   × Registration failures > names > stores a blank name as no name 69ms
+   × Registration failures > when the session cannot be created > tells the user to sign in when neither the rollback nor the check can run 64ms
+   × Registration failures > when the session cannot be created > trusts a successful rollback without another database read 79ms
+   × Registration failures > when the session store has an outage > answers 503 and keeps the sign-in code when the account remains 76ms
+   × Registration failures > when the session store has an outage > answers 503 for a rolled-back registration 62ms
+   × SignUpForm > shows a field error for a name over 100 characters, without calling the API 1717ms
+ FAIL  tests/unit/auth/authValidation.test.ts > Auth Validation Utilities > name length > rejects a name over 100 characters
+ FAIL  tests/unit/auth/registrationRollback.test.ts > Registration failures > duplicate detection > does not mistake another error mentioning "duplicate" for a taken emai
+ FAIL  tests/unit/auth/registrationRollback.test.ts > Registration failures > names > rejects a name over 100 characters and creates nothing
+ FAIL  tests/unit/auth/registrationRollback.test.ts > Registration failures > names > stores a blank name as no name
+ FAIL  tests/unit/auth/registrationRollback.test.ts > Registration failures > when the session cannot be created > tells the user to sign in when neither the rollback nor
+ FAIL  tests/unit/auth/registrationRollback.test.ts > Registration failures > when the session cannot be created > trusts a successful rollback without another database r
+ FAIL  tests/unit/auth/registrationRollback.test.ts > Registration failures > when the session store has an outage > answers 503 and keeps the sign-in code when the accou
+ FAIL  tests/unit/auth/registrationRollback.test.ts > Registration failures > when the session store has an outage > answers 503 for a rolled-back registration
+ FAIL  tests/unit/components/auth/SignUpForm.test.tsx > SignUpForm > shows a field error for a name over 100 characters, without calling the API
+ Test Files  3 failed (3)
+AssertionError: expected '' to be null
+AssertionError: expected 500 to be 503 // Object.is equality
+AssertionError: expected AuthError: An account with this email alr… { …(2) } to be Error: E11000 duplicate key on accounts.p… // Object.is equality
+AssertionError: expected RepositoryUnavailableError: The data stor… to be an instance of AuthError
+AssertionError: expected true to be false // Object.is equality
+AssertionError: expected undefined to be 'ACCOUNT_CREATED_SESSION_FAILED' // Object.is equality
+AssertionError: expected { user: { id: 'user_1', …(3) }, …(2) } to be an instance of AuthError
+
+==================================================
+TASK 2 - type check note: this run is the correction for the 'errors: 2' above, which were only Task 3 tests importing the module not yet created
+==================================================
+tsc exit 0; errors: 0
+
+==================================================
+TASK 4 - GREEN
+==================================================
+      Tests  100 passed (100)
+ Test Files  4 passed (4)
+
+==================================================
+TASK 5 - RED: contract suites against the existing memory repositories
+==================================================
+      Tests  3 failed | 36 passed (39)
+   × IUserRepository contract: in-memory > create > lets exactly one of several concurrent registrations succeed 2ms
+   × IUserRepository contract: in-memory > create > rejects a repeated email (A@EXAMPLE.COM) with DuplicateEmailError 0ms
+   × IUserRepository contract: in-memory > create > rejects a repeated email (a@example.com) with DuplicateEmailError 7ms
+ FAIL  tests/unit/repositories/repositoryContracts.test.ts > IUserRepository contract: in-memory > create > lets exactly one of several concurrent registrations succeed
+ FAIL  tests/unit/repositories/repositoryContracts.test.ts > IUserRepository contract: in-memory > create > rejects a repeated email (A@EXAMPLE.COM) with DuplicateEmailEr
+ FAIL  tests/unit/repositories/repositoryContracts.test.ts > IUserRepository contract: in-memory > create > rejects a repeated email (a@example.com) with DuplicateEmailEr
+ Test Files  1 failed (1)
+AssertionError: expected Error: User with this email already exists to be an instance of DuplicateEmailError
+AssertionError: expected [ { status: 'fulfilled', …(1) }, …(9) ] to have a length of 1 but got 10
+
+==================================================
+TASK 5 - GREEN
+==================================================
+      Tests  49 passed (49)
+ Test Files  2 passed (2)
+
+==================================================
+PAGE OUTAGE TESTS: characterization, passing on first run because page guards already propagate errors
+==================================================
+      Tests  2 passed (2)
+ Test Files  1 passed (1)
+
+==================================================
+FINAL type check including tests/**/*.ts
+==================================================
+tsc exit 0; errors: 0

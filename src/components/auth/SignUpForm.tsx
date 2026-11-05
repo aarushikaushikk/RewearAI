@@ -39,7 +39,7 @@ export function SignUpForm() {
     setFormError(null);
 
     // Client-side validation (name is optional)
-    const validation = validateRegisterInput({ email, password });
+    const validation = validateRegisterInput({ email, password, name });
     if (!validation.isValid) {
       setFieldErrors(validation.errors as FieldErrors);
       focusFirstInvalidField(validation.errors);

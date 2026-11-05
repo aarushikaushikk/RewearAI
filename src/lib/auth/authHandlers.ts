@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { AuthService, AuthError } from '@/services/authService';
 import { getProductionAuthService, ConfigurationError } from '@/lib/auth/getAuthService';
+import { RepositoryUnavailableError } from '@/lib/repositories/repositoryErrors';
 import { validateCsrfOrigin } from '@/lib/auth/csrf';
 import { IRateLimiter } from '@/lib/auth/rateLimiter';
 import { defaultRateLimiter, serializeCookie, getClientKey } from '@/lib/auth/routeUtils';
@@ -24,6 +25,18 @@ async function readJsonBody(req: Request): Promise<unknown> {
   } catch {
     return undefined;
   }
+}
+
+function serviceUnavailableResponse(): Response {
+  return NextResponse.json({ success: false, error: GENERIC_503_ERROR }, { status: 503 });
+}
+
+/**
+ * Only failures the client caused count toward rate limits. A server fault says
+ * nothing about the request, and counting it would lock users out after an outage.
+ */
+function isClientFailure(err: unknown): boolean {
+  return err instanceof AuthError && err.statusCode < 500;
 }
 
 export async function handleRegister(
@@ -122,9 +135,15 @@ export async function handleRegister(
       }
     );
   } catch (err) {
-    await rateLimiter.recordAttempt(ipKey);
-    if (emailKey) {
-      await rateLimiter.recordAttempt(emailKey);
+    if (isClientFailure(err)) {
+      await rateLimiter.recordAttempt(ipKey);
+      if (emailKey) {
+        await rateLimiter.recordAttempt(emailKey);
+      }
+    }
+
+    if (err instanceof RepositoryUnavailableError) {
+      return serviceUnavailableResponse();
     }
 
     if (err instanceof AuthError) {
@@ -243,9 +262,15 @@ export async function handleLogin(
       }
     );
   } catch (err) {
-    await rateLimiter.recordAttempt(ipKey);
-    if (emailKey) {
-      await rateLimiter.recordAttempt(emailKey);
+    if (isClientFailure(err)) {
+      await rateLimiter.recordAttempt(ipKey);
+      if (emailKey) {
+        await rateLimiter.recordAttempt(emailKey);
+      }
+    }
+
+    if (err instanceof RepositoryUnavailableError) {
+      return serviceUnavailableResponse();
     }
 
     if (err instanceof AuthError) {
@@ -296,7 +321,10 @@ export async function handleLogout(
 
     try {
       await authService.logout(token);
-    } catch {
+    } catch (err) {
+      if (err instanceof RepositoryUnavailableError) {
+        return serviceUnavailableResponse();
+      }
       // Do not silently swallow database or revocation failures and report successful logout!
       return NextResponse.json(
         { success: false, error: 'Failed to complete logout due to a server error. Please try again.' },
@@ -359,7 +387,10 @@ export async function handleGetSession(
   let auth;
   try {
     auth = await authService.validateSession(token);
-  } catch {
+  } catch (err) {
+    if (err instanceof RepositoryUnavailableError) {
+      return serviceUnavailableResponse();
+    }
     return NextResponse.json(
       { success: false, error: 'Internal server error during session validation' },
       { status: 500 }
