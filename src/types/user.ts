@@ -12,3 +12,10 @@ export interface CreateUserDTO {
   passwordHash: string;
   name?: string | null;
 }
+
+export interface SafeUser {
+  id: string;
+  email: string;
+  name?: string | null;
+  createdAt: Date;
+}
