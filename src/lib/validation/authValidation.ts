@@ -44,6 +44,51 @@ export function validatePassword(password: string): { isValid: boolean; error?: 
   return { isValid: true };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isOptionalString(value: unknown): value is string | undefined {
+  return value === undefined || typeof value === 'string';
+}
+
+/**
+ * Narrows an untrusted login body to known string fields.
+ * Returns null when its shape is wrong. Missing fields become empty strings so
+ * that validateLoginInput can report them as field-level errors.
+ */
+export function parseLoginPayload(body: unknown): LoginInput | null {
+  if (!isRecord(body)) {
+    return null;
+  }
+
+  const { email, password } = body;
+  if (!isOptionalString(email) || !isOptionalString(password)) {
+    return null;
+  }
+
+  return { email: email ?? '', password: password ?? '' };
+}
+
+/**
+ * Narrows an untrusted registration body to known fields.
+ * Returns null when its shape is wrong. Missing email or password become empty
+ * strings so that validateRegisterInput can report them as field-level errors.
+ */
+export function parseRegisterPayload(body: unknown): RegisterInput | null {
+  const credentials = parseLoginPayload(body);
+  if (!credentials) {
+    return null;
+  }
+
+  const { name } = body as Record<string, unknown>;
+  if (name !== null && !isOptionalString(name)) {
+    return null;
+  }
+
+  return { ...credentials, name: name ?? null };
+}
+
 /**
  * Validates registration input payload.
  */

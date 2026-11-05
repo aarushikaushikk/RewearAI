@@ -10,8 +10,9 @@ import {
 } from '@/lib/validation/authValidation';
 import { hashPassword, verifyPassword } from '@/lib/auth/password';
 import { generateOpaqueToken, hashToken } from '@/lib/auth/sessionTokens';
+import { SESSION_DURATION_MS } from '@/lib/auth/sessionConfig';
 
-export const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+export { SESSION_DURATION_MS };
 
 // Fixed dummy bcrypt hash (cost 10) to ensure constant-time execution on unknown accounts
 const DUMMY_PASSWORD_HASH = '$2b$10$zO5Yb3iT7EY9Y.smHOvRHeTPSTMqAYEm2nn.8HnOjO1F6LAl3PgZm';

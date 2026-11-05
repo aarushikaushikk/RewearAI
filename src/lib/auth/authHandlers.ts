@@ -6,10 +6,25 @@ import { IRateLimiter } from '@/lib/auth/rateLimiter';
 import { defaultRateLimiter, serializeCookie, getClientKey } from '@/lib/auth/routeUtils';
 import { getSessionCookieOptions, getClearSessionCookieOptions } from '@/lib/auth/cookieConfig';
 import { extractTokenFromCookieHeader } from '@/lib/auth/sessionHelper';
-import { normalizeEmail } from '@/lib/validation/authValidation';
-import { RegisterInput, LoginInput } from '@/types/auth';
+import {
+  normalizeEmail,
+  parseLoginPayload,
+  parseRegisterPayload,
+} from '@/lib/validation/authValidation';
 
 const GENERIC_503_ERROR = 'Authentication service is temporarily unavailable. Please try again later.';
+const INVALID_PAYLOAD_ERROR = 'Invalid request payload';
+
+/**
+ * Reads a JSON body, returning undefined when it cannot be parsed.
+ */
+async function readJsonBody(req: Request): Promise<unknown> {
+  try {
+    return await req.json();
+  } catch {
+    return undefined;
+  }
+}
 
 export async function handleRegister(
   req: Request,
@@ -39,7 +54,16 @@ export async function handleRegister(
     );
   }
 
-  // 3. Resolve Service (fails closed if production DB is unconfigured)
+  // 3. Reject malformed payloads, which need no service to answer
+  const body = parseRegisterPayload(await readJsonBody(req));
+  if (!body) {
+    return NextResponse.json(
+      { success: false, error: INVALID_PAYLOAD_ERROR },
+      { status: 400 }
+    );
+  }
+
+  // 4. Resolve Service (fails closed if production DB is unconfigured)
   let authService: AuthService;
   try {
     authService = deps?.authService || getProductionAuthService();
@@ -53,17 +77,6 @@ export async function handleRegister(
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }
-    );
-  }
-
-  // 4. Parse payload
-  let body: RegisterInput;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json(
-      { success: false, error: 'Invalid JSON request payload' },
-      { status: 400 }
     );
   }
 
@@ -116,7 +129,7 @@ export async function handleRegister(
 
     if (err instanceof AuthError) {
       return NextResponse.json(
-        { success: false, error: err.message },
+        { success: false, error: err.message, code: err.code },
         { status: err.statusCode }
       );
     }
@@ -156,7 +169,16 @@ export async function handleLogin(
     );
   }
 
-  // 3. Resolve Service (fails closed if production DB is unconfigured)
+  // 3. Reject malformed payloads, which need no service to answer
+  const body = parseLoginPayload(await readJsonBody(req));
+  if (!body) {
+    return NextResponse.json(
+      { success: false, error: INVALID_PAYLOAD_ERROR },
+      { status: 400 }
+    );
+  }
+
+  // 4. Resolve Service (fails closed if production DB is unconfigured)
   let authService: AuthService;
   try {
     authService = deps?.authService || getProductionAuthService();
@@ -170,17 +192,6 @@ export async function handleLogin(
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }
-    );
-  }
-
-  // 4. Parse payload
-  let body: LoginInput;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json(
-      { success: false, error: 'Invalid JSON request payload' },
-      { status: 400 }
     );
   }
 
@@ -239,7 +250,7 @@ export async function handleLogin(
 
     if (err instanceof AuthError) {
       return NextResponse.json(
-        { success: false, error: err.message },
+        { success: false, error: err.message, code: err.code },
         { status: err.statusCode }
       );
     }
@@ -263,26 +274,26 @@ export async function handleLogout(
     );
   }
 
-  // 2. Resolve Service
-  let authService: AuthService;
-  try {
-    authService = deps?.authService || getProductionAuthService();
-  } catch (err) {
-    if (err instanceof ConfigurationError) {
-      return NextResponse.json(
-        { success: false, error: GENERIC_503_ERROR },
-        { status: 503 }
-      );
-    }
-    return NextResponse.json(
-      { success: false, error: 'Internal server error' },
-      { status: 500 }
-    );
-  }
-
-  // 3. Extract and revoke token in repository
+  // 2. Extract token; with none there is nothing to revoke, so no service is needed
   const token = extractTokenFromCookieHeader(req.headers.get('cookie'));
   if (token) {
+    // 3. Resolve Service and revoke token in repository
+    let authService: AuthService;
+    try {
+      authService = deps?.authService || getProductionAuthService();
+    } catch (err) {
+      if (err instanceof ConfigurationError) {
+        return NextResponse.json(
+          { success: false, error: GENERIC_503_ERROR },
+          { status: 503 }
+        );
+      }
+      return NextResponse.json(
+        { success: false, error: 'Internal server error' },
+        { status: 500 }
+      );
+    }
+
     try {
       await authService.logout(token);
     } catch {
@@ -318,7 +329,16 @@ export async function handleGetSession(
   req: Request,
   deps?: { authService?: AuthService }
 ): Promise<Response> {
-  // 1. Resolve Service
+  // 1. Extract token from cookie; with none there is nothing to validate
+  const token = extractTokenFromCookieHeader(req.headers.get('cookie'));
+  if (!token) {
+    return NextResponse.json(
+      { success: false, error: 'Unauthorized: no active session' },
+      { status: 401 }
+    );
+  }
+
+  // 2. Resolve Service
   let authService: AuthService;
   try {
     authService = deps?.authService || getProductionAuthService();
@@ -332,15 +352,6 @@ export async function handleGetSession(
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }
-    );
-  }
-
-  // 2. Extract token from cookie
-  const token = extractTokenFromCookieHeader(req.headers.get('cookie'));
-  if (!token) {
-    return NextResponse.json(
-      { success: false, error: 'Unauthorized: no active session' },
-      { status: 401 }
     );
   }
 

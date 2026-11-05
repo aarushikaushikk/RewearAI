@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   handleRegister,
   handleLogin,
@@ -365,6 +365,178 @@ describe('Auth API Routes Integration Tests', () => {
 
       const json = await logoutRes.json();
       expect(json.success).toBe(true);
+    });
+  });
+
+  describe('Malformed payloads', () => {
+    function postJson(path: string, rawBody: string) {
+      return new Request(`http://localhost:3000/api/auth/${path}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          host: 'localhost:3000',
+          origin: 'http://localhost:3000',
+        },
+        body: rawBody,
+      });
+    }
+
+    const MALFORMED = [
+      'not json',
+      '',
+      'null',
+      '123',
+      '"text"',
+      '[]',
+      '{"email":123,"password":"Password123!"}',
+      '{"email":{"$ne":""},"password":"Password123!"}',
+      '{"email":"a@example.com","password":12345678}',
+      '{"email":"a@example.com","password":{"$ne":""}}',
+    ];
+
+    it.each(MALFORMED)('login answers 400 for %s', async (rawBody) => {
+      const res = await handleLogin(postJson('login', rawBody), { authService, rateLimiter });
+      expect(res.status).toBe(400);
+
+      const json = await res.json();
+      expect(json.success).toBe(false);
+      expect(typeof json.error).toBe('string');
+    });
+
+    it.each([...MALFORMED, '{"email":"a@example.com","password":"Password123!","name":123}'])(
+      'register answers 400 for %s',
+      async (rawBody) => {
+        const res = await handleRegister(postJson('register', rawBody), {
+          authService,
+          rateLimiter,
+        });
+        expect(res.status).toBe(400);
+
+        const json = await res.json();
+        expect(json.success).toBe(false);
+        expect(typeof json.error).toBe('string');
+      },
+    );
+
+    it('does not create an account from a malformed payload', async () => {
+      await handleRegister(
+        postJson('register', '{"email":"a@example.com","password":12345678}'),
+        { authService, rateLimiter },
+      );
+      await expect(userRepo.findByEmail('a@example.com')).resolves.toBeNull();
+    });
+
+    it('answers 400 for a malformed payload even while the service is unavailable', async () => {
+      const res = await handleLogin(postJson('login', 'null'));
+      expect(res.status).toBe(400);
+    });
+
+    it('keeps field-level validation for missing fields', async () => {
+      const res = await handleLogin(postJson('login', '{}'), { authService, rateLimiter });
+      expect(res.status).toBe(400);
+
+      const json = await res.json();
+      expect(json.error).toBe('Email is required');
+    });
+  });
+
+  describe('Machine-readable error codes', () => {
+    function registerRequest() {
+      return new Request('http://localhost:3000/api/auth/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          host: 'localhost:3000',
+          origin: 'http://localhost:3000',
+        },
+        body: JSON.stringify({ email: 'partial@example.com', password: 'Password123!' }),
+      });
+    }
+
+    it('identifies an account created without a session', async () => {
+      const noRollbackUserRepo = new MemoryUserRepository();
+      Object.assign(noRollbackUserRepo, { deleteById: undefined });
+      vi.spyOn(sessionRepo, 'createSession').mockRejectedValue(new Error('session store down'));
+      const service = new AuthService(noRollbackUserRepo, sessionRepo);
+
+      const res = await handleRegister(registerRequest(), { authService: service, rateLimiter });
+
+      expect(res.status).toBe(500);
+      const json = await res.json();
+      expect(json.code).toBe('ACCOUNT_CREATED_SESSION_FAILED');
+      expect(JSON.stringify(json)).not.toContain('session store down');
+    });
+
+    it('identifies a registration that was rolled back', async () => {
+      vi.spyOn(sessionRepo, 'createSession').mockRejectedValue(new Error('session store down'));
+
+      const res = await handleRegister(registerRequest(), { authService, rateLimiter });
+
+      expect(res.status).toBe(500);
+      const json = await res.json();
+      expect(json.code).toBe('REGISTRATION_SESSION_FAILED');
+    });
+
+    it('identifies invalid credentials on login', async () => {
+      const req = new Request('http://localhost:3000/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          host: 'localhost:3000',
+          origin: 'http://localhost:3000',
+        },
+        body: JSON.stringify({ email: 'nobody@example.com', password: 'Password123!' }),
+      });
+
+      const res = await handleLogin(req, { authService, rateLimiter });
+
+      expect(res.status).toBe(401);
+      const json = await res.json();
+      expect(json.code).toBe('INVALID_CREDENTIALS');
+    });
+  });
+
+  describe('Requests with no session cookie during an outage', () => {
+    it('session endpoint answers 401, because there is nothing to validate', async () => {
+      const req = new Request('http://localhost:3000/api/auth/session');
+      const res = await handleGetSession(req);
+      expect(res.status).toBe(401);
+    });
+
+    it('logout succeeds and clears the cookie, because there is nothing to revoke', async () => {
+      const req = new Request('http://localhost:3000/api/auth/logout', {
+        method: 'POST',
+        headers: { host: 'localhost:3000', origin: 'http://localhost:3000' },
+      });
+
+      const res = await handleLogout(req);
+
+      expect(res.status).toBe(200);
+      expect(res.headers.get('set-cookie')).toContain('Max-Age=0');
+    });
+
+    it('session endpoint still answers 503 when a cookie cannot be validated', async () => {
+      const req = new Request('http://localhost:3000/api/auth/session', {
+        headers: { cookie: `${SESSION_COOKIE_NAME}=some-token` },
+      });
+      const res = await handleGetSession(req);
+      expect(res.status).toBe(503);
+    });
+
+    it('logout still answers 503 when a session cannot be revoked', async () => {
+      const req = new Request('http://localhost:3000/api/auth/logout', {
+        method: 'POST',
+        headers: {
+          host: 'localhost:3000',
+          origin: 'http://localhost:3000',
+          cookie: `${SESSION_COOKIE_NAME}=some-token`,
+        },
+      });
+
+      const res = await handleLogout(req);
+
+      expect(res.status).toBe(503);
+      expect(res.headers.get('set-cookie')).toBeNull();
     });
   });
 
