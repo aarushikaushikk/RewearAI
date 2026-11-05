@@ -12,7 +12,8 @@ coverage/
 next-env.d.ts
 
 # env and secrets
-.env*
+
+.env.local
 *.pem
 
 # misc
