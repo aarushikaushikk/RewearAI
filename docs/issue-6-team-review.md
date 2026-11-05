@@ -7,12 +7,12 @@ For Aarushi and Pranav. The email/password UI on `feature/6-account-signin` is f
 | | `feature/6-account-signin` | `chore/28-setup-db` |
 |---|---|---|
 | Sign-in method | Email and password | "Accounts come from OAuth sign-in, so no password is stored" (`src/models/User.ts`) |
-| `passwordHash` on User | Required | Not in the schema |
-| `name` | Optional | Required |
+| `passwordHash` on User | Required at registration; `null` means the account has no password and can't use password sign-in | Not in the schema |
+| `name` | Optional, 100 characters at most | Required, 100 characters at most |
 | `image` | Not used | Optional |
 | Session storage | Needs a persisted session record | No session model |
 
-Pranav's direction for now is to keep email/password while Google OAuth is coordinated separately. If both ship, they need to share one account model.
+The team has agreed to support both email/password and Google OAuth, with Google in a later phase, so both share one account model. Aarushi is updating the models to allow for this.
 
 **Needed from the team:**
 - Add an optional `passwordHash` and make `name` optional, or decide how accounts without a name work. Passwords must never be returned by default queries.
@@ -41,8 +41,21 @@ Once item 1 is settled:
 2. Throw `ConfigurationError` if configuration is missing, so pages and APIs keep failing closed.
 3. Cache the database connection on `globalThis` if needed, as `src/lib/db.ts` does, but **not the `AuthService` instance**. Next.js bundles pages and route handlers separately, so a shared instance's errors fail `instanceof AuthError` and expected 401s become 500s. This happened in testing.
 4. Implement `deleteById`. Without it, a failed session can't roll back a new account.
-5. Check duplicate handling against the real driver: `AuthService.register` looks for "duplicate" or "already exists" in the error message.
-6. Decide how database failures should appear. Login and register currently return 500 for them; only missing configuration returns 503. `DatabaseConnectionError` could map to 503.
+5. Throw `DuplicateEmailError` (`src/lib/repositories/repositoryErrors.ts`) for code 11000 on the email index only. `AuthService.register` no longer looks at message text, so this is the only way to get a 409.
+6. Throw `RepositoryUnavailableError` for connection failures, including `DatabaseConnectionError`; the routes turn it into a 503 that doesn't count toward rate limits. Throw `RepositoryError` for other database failures, which become a generic 500. Never forward driver errors: their messages can contain the database host and user emails.
+7. Run the adapters through the shared suites in `tests/contracts/`.
+
+### Accounts that can't be rolled back
+
+MongoDB writes for a new user and its first session aren't one transaction. If the session can't be created, registration deletes the new user. The user can stay signed out with an account in place in these cases:
+
+| What happened | What the user is told | What happens next |
+|---|---|---|
+| The delete fails and the account is confirmed to remain | Account created; please sign in | Sign-in works with the password just chosen. Registering again gets a 409. |
+| The delete and the follow-up check both fail, usually an outage | Account created; please sign in | Same as above, once the database is back. |
+| The delete applied but its reply was lost, and the check also fails | Account created; please sign in, which is wrong in this rare case | Sign-in fails, then registering again succeeds. |
+
+No cleanup job exists, so an account left this way stays until someone signs in to it or removes it by hand. No user data is exposed, because the account is protected by the password its owner chose.
 
 ## 5. Merging the two branches
 
@@ -50,6 +63,8 @@ A trial merge of `feature/6-account-signin` and `chore/28-setup-db` conflicts in
 
 - **`vitest.config.ts`:** keep both sets of changes. The React plugin and `tests/**/*.test.tsx` must stay or component tests stop running, and `src/**/*.test.ts` and the `server-only` alias must stay for the database tests.
 - **`package.json` and `package-lock.json`:** keep both sets of dependencies, then regenerate the lockfile.
+
+The database branch's `tsconfig.json` also adds `tests/**/*.ts` to type checking, and `next build` fails on any error there. This branch has been fixed for that. A trial merge with these resolutions passes tests, type checks, lint, and build.
 
 `.env.example` is untracked on this branch, because `.env*` is ignored here. The database branch fixes that rule, so its version will need these variables added: `APP_ORIGIN` and `TRUST_PROXY`.
 

@@ -1,5 +1,9 @@
 import { IUserRepository } from '@/lib/repositories/userRepository';
 import { ISessionRepository } from '@/lib/repositories/sessionRepository';
+import {
+  DuplicateEmailError,
+  RepositoryUnavailableError,
+} from '@/lib/repositories/repositoryErrors';
 import { RegisterInput, LoginInput } from '@/types/auth';
 import { SafeUser, UserRecord } from '@/types/user';
 import { SessionRecord } from '@/types/session';
@@ -75,11 +79,11 @@ export class AuthService {
       user = await this.userRepo.create({
         email: normalized,
         passwordHash,
-        name: input.name ? input.name.trim() : null,
+        name: input.name?.trim() || null,
       });
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes('already exists') || msg.includes('duplicate')) {
+      // Reached when a concurrent request registers the same email after the check above.
+      if (err instanceof DuplicateEmailError) {
         throw new AuthError('An account with this email already exists', 'DUPLICATE_EMAIL', 409);
       }
       throw err;
@@ -96,33 +100,23 @@ export class AuthService {
         tokenHash,
         expiresAt,
       });
-    } catch {
-      // Compensating recovery: user creation succeeded, but session persistence failed.
-      // 1. Attempt rollback if repository supports deleteById
-      if (typeof this.userRepo.deleteById === 'function') {
-        try {
-          await this.userRepo.deleteById(user.id);
-        } catch {
-          // Rollback failed; fall through to account-created error message
-        }
-      }
+    } catch (sessionError) {
+      const statusCode = sessionError instanceof RepositoryUnavailableError ? 503 : 500;
 
-      // Check whether user still exists after compensation attempt
-      const userStillExists = await this.userRepo.findById(user.id);
-      if (!userStillExists) {
-        // Rollback succeeded: cleanly report failure so user can retry safely without 409 conflict
+      if (await this.rollBackNewUser(user.id)) {
+        // Report failure cleanly so the user can retry without a 409 conflict
         throw new AuthError(
           'Registration failed during session initialization. Please try again.',
           'REGISTRATION_SESSION_FAILED',
-          500
+          statusCode
         );
       }
 
-      // Rollback was unavailable or failed: user exists in DB, so direct them to sign in
+      // The account remains and its password works, so direct the user to sign in
       throw new AuthError(
         'Account registered successfully, but automatic sign-in failed. Please sign in with your credentials.',
         'ACCOUNT_CREATED_SESSION_FAILED',
-        500
+        statusCode
       );
     }
 
@@ -131,6 +125,31 @@ export class AuthService {
       sessionToken,
       expiresAt,
     };
+  }
+
+  /**
+   * Removes an account whose first session could not be created, and reports
+   * whether it is gone. Never throws, because it runs while handling a failure.
+   *
+   * It reports false when the account can't be confirmed gone, including when the
+   * database is down for both the delete and the check. A delete that applied but
+   * whose reply was lost also lands here: the user is told to sign in, that fails,
+   * and registering again then succeeds.
+   */
+  private async rollBackNewUser(userId: string): Promise<boolean> {
+    try {
+      if (await this.userRepo.deleteById?.(userId)) {
+        return true;
+      }
+    } catch {
+      // Fall through and check whether the account remains
+    }
+
+    try {
+      return (await this.userRepo.findById(userId)) === null;
+    } catch {
+      return false;
+    }
   }
 
   /**
@@ -147,12 +166,13 @@ export class AuthService {
     const normalized = normalizeEmail(input.email);
     const user = await this.userRepo.findByEmail(normalized);
 
-    // Timing attack mitigation: always execute bcrypt verification using a precomputed dummy hash
-    // if the user does not exist. This avoids timing discrepancies between existing and non-existing accounts.
-    const hashToVerify = user ? user.passwordHash : DUMMY_PASSWORD_HASH;
-    const isValidPassword = await verifyPassword(input.password, hashToVerify);
+    // Timing attack mitigation: always execute bcrypt verification, using a precomputed dummy hash
+    // if the user does not exist or has no password. This avoids timing discrepancies between accounts.
+    const passwordHash = user?.passwordHash ?? null;
+    const isValidPassword = await verifyPassword(input.password, passwordHash ?? DUMMY_PASSWORD_HASH);
 
-    if (!user || !isValidPassword) {
+    // The dummy hash must never authenticate anyone, so a missing hash fails regardless of the comparison.
+    if (!user || !passwordHash || !isValidPassword) {
       throw new AuthError('Invalid email or password', 'INVALID_CREDENTIALS', 401);
     }
 

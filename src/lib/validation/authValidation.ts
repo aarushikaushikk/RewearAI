@@ -2,6 +2,7 @@ import { RegisterInput, LoginInput, ValidationResult } from '@/types/auth';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD_LENGTH = 8;
+const MAX_NAME_LENGTH = 100;
 
 /**
  * Normalizes email by trimming whitespace and converting to lower case.
@@ -103,6 +104,11 @@ export function validateRegisterInput(input: RegisterInput): ValidationResult {
   const passwordCheck = validatePassword(input.password);
   if (!passwordCheck.isValid && passwordCheck.error) {
     errors.password = passwordCheck.error;
+  }
+
+  // Measured after trimming, because that is what gets stored.
+  if (input.name && input.name.trim().length > MAX_NAME_LENGTH) {
+    errors.name = `Name must be ${MAX_NAME_LENGTH} characters or fewer`;
   }
 
   return {

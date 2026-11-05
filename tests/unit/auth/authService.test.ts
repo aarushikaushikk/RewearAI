@@ -27,7 +27,7 @@ describe('AuthService', () => {
       expect(result.user.email).toBe('newuser@example.com');
       expect(result.user.name).toBe('Alex Smith');
       // Must not leak password hash
-      expect((result.user as Record<string, unknown>).passwordHash).toBeUndefined();
+      expect((result.user as unknown as Record<string, unknown>).passwordHash).toBeUndefined();
 
       // Session token is returned for HTTP-only cookie
       expect(result.sessionToken).toBeDefined();
@@ -131,7 +131,7 @@ describe('AuthService', () => {
       });
 
       expect(result.user.email).toBe('existing@example.com');
-      expect((result.user as Record<string, unknown>).passwordHash).toBeUndefined();
+      expect((result.user as unknown as Record<string, unknown>).passwordHash).toBeUndefined();
       expect(result.sessionToken).toBeDefined();
 
       // Verify that the session token is active
