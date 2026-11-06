@@ -69,8 +69,9 @@ The app stores its data in MongoDB Atlas through Mongoose. The connection helper
 |---|---|---|
 | `npm test` | Unit, component, and integration tests | None; `MONGODB_URI` is blanked |
 | `npm run test:db` | Real-database tests in `tests/db/` | A temporary MongoDB server on `127.0.0.1` |
+| `npm run test:smoke` | Builds the app and tests `next start` with real requests | A temporary MongoDB server on `127.0.0.1` |
 
-`npm run test:db` never uses `MONGODB_URI` from your shell or `.env.local`. [tests/helpers/mongoTestServer.ts](tests/helpers/mongoTestServer.ts) starts a new server for each test file, refuses any other database, and removes the server's files when it stops. If the server can't start, the tests fail rather than falling back to another database.
+`npm run test:db` and `npm run test:smoke` never use `MONGODB_URI` from your shell or `.env.local`. [tests/helpers/mongoTestServer.ts](tests/helpers/mongoTestServer.ts) starts a new server for each test file, refuses any other database, and removes the server's files when it stops. If the server can't start, the tests fail rather than falling back to another database.
 
 `npm install` downloads the `mongod` binary these tests use. Set `MONGOMS_DISABLE_POSTINSTALL=1` to skip that download where the tests don't run; `npm run test:db` will then download it on first use.
 

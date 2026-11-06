@@ -48,7 +48,7 @@ Once item 1 is settled:
 9. Build the unique indexes explicitly before the first write. Without this, 25 of 25 concurrent registrations for one email succeeded on a fresh database, and the index then couldn't be built.
 10. Malformed user IDs in `createSession` and `revokeAllSessionsForUser` are tested in `tests/db/mongoSessionRepository.test.ts`, not the shared contract, because the memory repository accepts any string as a user ID.
 
-**Progress:** `MongoUserRepository` and `MongoSessionRepository` exist and pass their contracts on a temporary MongoDB server, but nothing uses them yet. Item 6 is done in `src/lib/repositories/mongoSupport.ts`, which logs only a fixed operation name and error category. Item 9 is done in `src/lib/repositories/mongoIndexes.ts`. Every repository operation waits for the indexes and fails if they can't be built, so stored duplicate emails block sign-in and sign-up until someone fixes the data.
+**Progress:** `MongoUserRepository` and `MongoSessionRepository` pass their contracts on a temporary MongoDB server, and `getProductionAuthService()` now uses them. Without `MONGODB_URI` it still fails closed. This hasn't run on Atlas yet. Item 6 is done in `src/lib/repositories/mongoSupport.ts`, which logs only a fixed operation name and error category. Item 9 is done in `src/lib/repositories/mongoIndexes.ts`. Every repository operation waits for the indexes and fails if they can't be built, so stored duplicate emails block sign-in and sign-up until someone fixes the data.
 
 ### Accounts that can't be rolled back
 

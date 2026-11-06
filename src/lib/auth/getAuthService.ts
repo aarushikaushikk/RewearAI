@@ -1,6 +1,8 @@
 import { AuthService } from '@/services/authService';
 import { IUserRepository } from '@/lib/repositories/userRepository';
 import { ISessionRepository } from '@/lib/repositories/sessionRepository';
+import { MongoSessionRepository } from '@/lib/repositories/mongoSessionRepository';
+import { MongoUserRepository } from '@/lib/repositories/mongoUserRepository';
 
 export class ConfigurationError extends Error {
   constructor(message: string = 'Authentication service is temporarily unavailable') {
@@ -21,20 +23,19 @@ export function createAuthService(dependencies: {
 }
 
 /**
- * Returns the production AuthService instance.
- * Fails closed securely if production database adapters have not been configured.
- * Does not expose internal architecture or implementation details.
+ * Returns an AuthService backed by MongoDB. Fails closed if MONGODB_URI isn't set:
+ * there is no in-memory fallback. Only builds objects; connecting happens on first use.
  *
  * Next.js bundles pages and route handlers separately, so each has its own copy
- * of AuthError. Cache database connections on globalThis if needed, but not the
- * AuthService instance: its errors would fail `instanceof AuthError` in another
+ * of AuthError. The connection is cached on globalThis, but the AuthService
+ * instance must not be: its errors would fail `instanceof AuthError` in another
  * bundle and turn expected 4xx responses into 500s.
  */
 export function getProductionAuthService(): AuthService {
-  // When teammate's MongoDB connection helper and Mongoose models are connected,
-  // this factory instantiates the production adapters.
-  // In the interim, it fails closed to prevent unpersisted/insecure fallback.
-  throw new ConfigurationError('Authentication service is temporarily unavailable');
+  if (!process.env.MONGODB_URI?.trim()) {
+    throw new ConfigurationError();
+  }
+  return new AuthService(new MongoUserRepository(), new MongoSessionRepository());
 }
 
 /**

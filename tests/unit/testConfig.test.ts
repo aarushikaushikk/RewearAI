@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import standardConfig from '../../vitest.config';
 import databaseConfig from '../../vitest.db.config';
+import smokeConfig from '../../vitest.smoke.config';
 
 const scripts = JSON.parse(readFileSync(path.resolve(__dirname, '../../package.json'), 'utf8'))
   .scripts as Record<string, string>;
@@ -48,5 +49,20 @@ describe('test commands', () => {
   it('runs database tests only through test:db', () => {
     expect(scripts.test).toBe('vitest run');
     expect(scripts['test:db']).toBe('vitest run --config vitest.db.config.ts');
+  });
+});
+
+describe('smoke test configuration', () => {
+  it('blanks MONGODB_URI, so a URI from the shell is never used', () => {
+    expect(smokeConfig.test?.env?.MONGODB_URI).toBe('');
+  });
+
+  it('only runs files that npm test does not pick up', () => {
+    expect(smokeConfig.test?.include).toEqual(['tests/smoke/**/*.smoke.ts']);
+    expect(standardConfig.test?.include).not.toContain('tests/smoke/**/*.smoke.ts');
+  });
+
+  it('builds before running, so it never tests a stale build', () => {
+    expect(scripts['test:smoke']).toBe('next build && vitest run --config vitest.smoke.config.ts');
   });
 });
