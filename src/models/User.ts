@@ -9,11 +9,13 @@ import {
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const HTTPS_URL_PATTERN = /^https:\/\/\S+$/;
+// bcrypt output; guards against ever storing a plain-text password.
+const BCRYPT_HASH_PATTERN = /^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/;
 
-// Accounts come from OAuth sign-in, so no password is stored.
+// One user per email. Users sign in with a password, Google (see Account), or both.
 const userSchema = new Schema(
   {
-    name: { type: String, required: true, trim: true, maxlength: 100 },
+    name: { type: String, trim: true, maxlength: 100 },
     email: {
       type: String,
       required: true,
@@ -26,6 +28,14 @@ const userSchema = new Schema(
       type: String,
       trim: true,
       match: [HTTPS_URL_PATTERN, "Profile image must be an https URL."],
+    },
+    // Null for Google-only accounts. Excluded from queries unless selected
+    // explicitly with `.select("+passwordHash")`.
+    passwordHash: {
+      type: String,
+      default: null,
+      select: false,
+      match: [BCRYPT_HASH_PATTERN, "Password hash must be a bcrypt hash."],
     },
   },
   { timestamps: true },
