@@ -1,72 +1,14 @@
-import { spawn, type ChildProcess } from 'node:child_process';
-import { createServer } from 'node:net';
-import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import mongoose from 'mongoose';
 import { startMongoTestServer, type MongoTestServer } from '../helpers/mongoTestServer';
+import { startApp, type RunningApp } from '../helpers/nextApp';
 
 /**
  * Runs the real `next start` build, whose routes and pages are bundled separately,
  * against a temporary MongoDB server. Run with `npm run test:smoke`.
  */
-const NEXT_BIN = path.resolve(__dirname, '../../node_modules/next/dist/bin/next');
 const COOKIE_NAME = 'rewear_session';
 const ALEX = { email: 'alex@example.com', password: 'CorrectHorse123!', name: 'Alex' };
-
-interface RunningApp {
-  origin: string;
-  output: () => string;
-  stop: () => Promise<void>;
-}
-
-function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const probe = createServer();
-    probe.on('error', reject);
-    probe.listen(0, '127.0.0.1', () => {
-      const { port } = probe.address() as { port: number };
-      probe.close(() => resolve(port));
-    });
-  });
-}
-
-function stopProcess(child: ChildProcess): Promise<void> {
-  return new Promise((resolve) => {
-    if (child.exitCode !== null) {
-      resolve();
-      return;
-    }
-    child.once('exit', () => resolve());
-    child.kill();
-  });
-}
-
-/**
- * MONGODB_URI is always passed, even when empty, because Next.js doesn't load a
- * variable from .env.local once it is already defined. A real URI can't be picked up.
- */
-async function startApp(mongodbUri: string): Promise<RunningApp> {
-  const port = await freePort();
-  const origin = `http://127.0.0.1:${port}`;
-  let output = '';
-  const child = spawn(process.execPath, [NEXT_BIN, 'start', '-H', '127.0.0.1', '-p', String(port)], {
-    cwd: path.resolve(__dirname, '../..'),
-    env: { ...process.env, NODE_ENV: 'production', MONGODB_URI: mongodbUri, APP_ORIGIN: origin },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  child.stdout?.on('data', (chunk) => (output += chunk));
-  child.stderr?.on('data', (chunk) => (output += chunk));
-
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    const ready = await fetch(`${origin}/sign-in`, { redirect: 'manual' }).catch(() => null);
-    if (ready) {
-      return { origin, output: () => output, stop: () => stopProcess(child) };
-    }
-    await new Promise((resolve) => setTimeout(resolve, 200));
-  }
-  await stopProcess(child);
-  throw new Error('next start did not become ready. Run `npm run build` first.');
-}
 
 function client(app: RunningApp) {
   const headers = { 'Content-Type': 'application/json', origin: app.origin };
