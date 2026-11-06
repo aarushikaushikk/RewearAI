@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { removeCrashedServerFiles } from '../helpers/mongoTestServer';
 import { isPortOpen } from '../helpers/ports';
 
 // Made-up value, shaped like a real connection string.
@@ -16,6 +17,7 @@ interface FixtureReport {
 }
 
 const tempDirs: string[] = [];
+const reports: FixtureReport[] = [];
 
 /** Runs a separate Vitest process whose only test fails or crashes while a server is running. */
 function runFixture(mode: 'fail' | 'crash') {
@@ -45,6 +47,7 @@ function runFixture(mode: 'fail' | 'crash') {
   );
 
   const report = JSON.parse(readFileSync(output, 'utf8')) as FixtureReport;
+  reports.push(report);
   return { run, report, printed: `${run.stdout}${run.stderr}` };
 }
 
@@ -58,8 +61,14 @@ async function waitForPortToClose(port: number, timeoutMs: number): Promise<bool
 }
 
 describe('cleaning up after failures', () => {
-  afterEach(() => {
+  // A crashed process can't clean up, so its server's files are removed here.
+  afterEach(async () => {
     for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+    for (const report of reports.splice(0)) {
+      await waitForPortToClose(report.port, 60_000);
+      removeCrashedServerFiles(report.dbPath);
+      expect(existsSync(report.dbPath)).toBe(false);
+    }
   });
 
   it('stops the server when a test fails', async () => {
