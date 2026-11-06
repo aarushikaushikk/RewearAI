@@ -1,23 +1,17 @@
 # Issue #6: decisions for team review before merging
 
-For Aarushi and Pranav. The email/password UI on `feature/6-account-signin` is finished and tested, but it can't sign anyone in until the items below are settled. Item 1 needs a decision first, because it determines most of the integration work.
+For Aarushi and Pranav. Email and password sign-in now works on MongoDB in a production build, checked with a temporary local database and real Chrome. **It hasn't run on Atlas or Vercel.** §8 lists what's left, and §1 and §6 need decisions first.
 
-## 1. Our user model and auth flow don't match yet
+## 1. Google sign-in and the sign-in method
 
-| | `feature/6-account-signin` | `chore/28-setup-db` |
-|---|---|---|
-| Sign-in method | Email and password | "Accounts come from OAuth sign-in, so no password is stored" (`src/models/User.ts`) |
-| `passwordHash` on User | Required at registration; `null` means the account has no password and can't use password sign-in | Not in the schema |
-| `name` | Optional, 100 characters at most | Required, 100 characters at most |
-| `image` | Not used | Optional |
-| Session storage | Needs a persisted session record | No session model |
+The models now support both methods: `User.passwordHash` is optional and hidden by default, and `Account` links a Google identity to a user. No Google sign-in code exists.
 
-The team has agreed to support both email/password and Google OAuth, with Google in a later phase, so both share one account model. Aarushi is updating the models to allow for this.
+The PRD's User Story 1 criteria don't mention Google. It comes from the team's agreement to support both methods, and `docs/DESIGN.md` §12 still lists the method as unconfirmed.
 
 **Needed from the team:**
-- Add an optional `passwordHash` and make `name` optional, or decide how accounts without a name work. Passwords must never be returned by default queries.
-- Add a Session model matching `ISessionRepository`: user ID, hashed token, expiry, and revoked date, with lookups by token hash.
-- Decide what happens when a Google sign-in uses an email that already has a password account. Linking them automatically without checking that the email is verified would let someone take over an account.
+- Confirm Google is part of User Story 1, or move it to its own issue. Email and password meet the sign-in criteria without it.
+- Decide what happens when a Google sign-in uses an email that already has a password account. Linking them automatically without checking that Google has verified the email would let someone take over an account.
+- Update `docs/DESIGN.md` §12 and Wireframe 01 to match.
 
 ## 2. Custom sessions versus Auth.js
 
@@ -33,22 +27,15 @@ Hiding it properly requires email verification, which is outside User Story 1. T
 
 **Needed from the team:** accept this tradeoff, or add it to the backlog.
 
-## 4. Connecting the database
+## 4. How the database is connected
 
-Once item 1 is settled:
+`getProductionAuthService()` builds `AuthService` on `MongoUserRepository` and `MongoSessionRepository`, and throws `ConfigurationError` if `MONGODB_URI` is missing. For anyone changing this code:
 
-1. Implement `IUserRepository` and `ISessionRepository` (`src/lib/repositories/`), and connect them in `getProductionAuthService()` (`src/lib/auth/getAuthService.ts`).
-2. Throw `ConfigurationError` if configuration is missing, so pages and APIs keep failing closed.
-3. Cache the database connection on `globalThis` if needed, as `src/lib/db.ts` does, but **not the `AuthService` instance**. Next.js bundles pages and route handlers separately, so a shared instance's errors fail `instanceof AuthError` and expected 401s become 500s. This happened in testing.
-4. Implement `deleteById`. Without it, a failed session can't roll back a new account.
-5. Throw `DuplicateEmailError` (`src/lib/repositories/repositoryErrors.ts`) for code 11000 on the email index only. `AuthService.register` no longer looks at message text, so this is the only way to get a 409.
-6. Throw `RepositoryUnavailableError` for connection failures, including `DatabaseConnectionError`; the routes turn it into a 503 that doesn't count toward rate limits. Throw `RepositoryError` for other database failures, which become a generic 500. Never forward driver errors: their messages can contain the database host and user emails.
-7. Run the adapters through the shared suites in `tests/contracts/`. Their fixtures now pass the real models, checked by `tests/unit/repositories/contractFixtures.test.ts`.
-8. Keep `null` and `undefined` distinct for `passwordHash`: `null` means the account has no password, and `undefined` means the field wasn't loaded. `findByEmail` loads it with `.select("+passwordHash")` and returns `null` for an account with no password. `findById` must not load it, and its return type (`UserWithoutPassword`) leaves the field out, so an unloaded hash can't be mistaken for `null`. TypeScript doesn't stop an implementation returning extra fields, so map the fields explicitly; the contract suite checks this at runtime.
-9. Build the unique indexes explicitly before the first write. Without this, 25 of 25 concurrent registrations for one email succeeded on a fresh database, and the index then couldn't be built.
-10. Malformed user IDs in `createSession` and `revokeAllSessionsForUser` are tested in `tests/db/mongoSessionRepository.test.ts`, not the shared contract, because the memory repository accepts any string as a user ID.
-
-**Progress:** `MongoUserRepository` and `MongoSessionRepository` pass their contracts on a temporary MongoDB server, and `getProductionAuthService()` now uses them. Without `MONGODB_URI` it still fails closed. This hasn't run on Atlas yet. Item 6 is done in `src/lib/repositories/mongoSupport.ts`, which logs only a fixed operation name and error category. Item 9 is done in `src/lib/repositories/mongoIndexes.ts`. Every repository operation waits for the indexes and fails if they can't be built, so stored duplicate emails block sign-in and sign-up until someone fixes the data.
+- **Don't cache the `AuthService` instance.** Next.js bundles pages and route handlers separately, so a shared instance's errors fail `instanceof AuthError` and expected 401s become 500s. The connection and index state are cached on `globalThis` instead.
+- **Keep `null` and `undefined` distinct for `passwordHash`.** `findByEmail` returns `null` for an account with no password. `findById` never loads the field, and its return type (`UserWithoutPassword`) leaves it out. TypeScript doesn't stop an implementation returning extra fields, so the contract tests check this at runtime.
+- **Errors:** `src/lib/repositories/mongoSupport.ts` turns connection, network, and failover failures into `RepositoryUnavailableError` (503), duplicates on the email index alone into `DuplicateEmailError` (409), and everything else into `RepositoryError` (500). Logs hold only a fixed operation name and category, because driver errors can contain hosts and user emails.
+- **Indexes:** `src/lib/repositories/mongoIndexes.ts` builds them before each process's first operation. Every operation fails if they can't be built, so duplicate emails already in the database block sign-in and sign-up until someone fixes the data. Without this, 25 of 25 concurrent registrations for one email succeeded on a database with no indexes. It covers `User` and `Session` only.
+- **Query input:** session lookups require a 64-character hex hash and user lookups a 24-character hex ID, because Mongoose would otherwise run an object such as `{ $ne: null }` as a query operator.
 
 ### Accounts that can't be rolled back
 
@@ -62,26 +49,50 @@ MongoDB writes for a new user and its first session aren't one transaction. If t
 
 No cleanup job exists, so an account left this way stays until someone signs in to it or removes it by hand. No user data is exposed, because the account is protected by the password its owner chose.
 
-## 5. Merging the two branches
+## 5. Connection timeout
 
-`main`, including PR #32, was merged into this branch in `4b0c9d4`. Three files conflicted:
+`src/lib/db.ts` doesn't set `serverSelectionTimeoutMS`, so requests wait 30 seconds during an outage before answering 503. Vercel may end the request first, and the user would then get its error page instead of ours.
 
-- **`vitest.config.ts`:** kept both sets of changes. The React plugin and `tests/**/*.test.tsx` must stay or component tests stop running, and `src/**/*.test.ts` and the `server-only` alias must stay for the database tests. It also sets `MONGODB_URI` to empty, so `npm test` can't reach a real database.
-- **`package.json` and `package-lock.json`:** kept both sets of dependencies and regenerated the lockfile, with `bson` kept at `main`'s 7.3.3.
+**Needed from Aarushi:** add `serverSelectionTimeoutMS: 5000` to `mongoose.connect`, and update `src/lib/db.test.ts`, which asserts the exact options. Until then, add `serverSelectionTimeoutMS=5000` to the production URI.
 
-**Still outstanding from the merge:**
+## 6. Deployment (#23)
 
-- **`.env.example`** now lists only `MONGODB_URI`. Add `APP_ORIGIN`, `TRUST_PROXY`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET`. `APP_ORIGIN` matters most (see §6).
-- **Connection timeout:** `src/lib/db.ts` doesn't set `serverSelectionTimeoutMS`, so requests wait 30 seconds during an outage. Aarushi owns this file, and `src/lib/db.test.ts` asserts the exact connection options, so both need to change. Until then, `serverSelectionTimeoutMS=5000` can go in the URI.
+### Required before public deployment: a shared rate limiter
 
-## 6. Deployment settings (#23)
+`MemoryRateLimiter` keeps its counts in the memory of one server instance, so it doesn't protect a Vercel deployment:
 
-- Set `MONGOMS_DISABLE_POSTINSTALL=1` on Vercel. `mongodb-memory-server` is a dev dependency, and Vercel installs those to build, so otherwise each install also downloads `mongod`.
-- CI needs to run both `npm test` and `npm run test:db`. No CI workflow exists yet, so `test:db` only runs by hand.
-- `npm audit` reports 11 findings in dev tools, including 2 critical in `vitest` 3 and `tinypool`, and none in production dependencies. They predate `mongodb-memory-server`. The fix is a major `vitest` upgrade, which needs its own task.
-- `APP_ORIGIN` must match the deployed URL, or all sign-in, sign-up, and sign-out requests return 403. Vercel preview URLs won't match, so previews need a plan.
-- `TRUST_PROXY=true` is needed on Vercel. Otherwise all users share one rate-limit bucket.
-- Rate limiting is in memory, so limits are per server instance and reset on restart.
+- **Limits are per instance.** Each instance counts separately, and counts are lost when an instance restarts, so real limits are far higher than the 5 attempts in 15 minutes they appear to be.
+- **A successful sign-in resets the IP's count.** Someone can mix sign-ins to their own account into attempts on other people's emails, and never reach the IP limit. Each email is still limited separately, but that count has the per-instance problem above.
+- **Limits can lock out real users.** Without `TRUST_PROXY=true`, all visitors share one count, so 5 failed sign-ins by anyone block everyone. With it, people on one network, such as a campus, still share one.
+
+**Recommendation:** add an atomic limiter behind the existing `IRateLimiter` interface, using a MongoDB collection with a TTL index. It adds no new service, but it does add a model, so both partners need to agree. Stop resetting the IP count on success at the same time. Redis (Upstash) is the alternative if MongoDB adds too much load. A private class demo can use the current limiter if we accept these limits.
+
+### Vercel settings
+
+| Setting | Value | If it's wrong |
+|---|---|---|
+| `MONGODB_URI` | Atlas URI for a production database, with `serverSelectionTimeoutMS=5000` | Missing: sign-in returns 503 |
+| `APP_ORIGIN` | The exact production origin | All sign-in, sign-up, and sign-out requests return 403 |
+| `TRUST_PROXY` | `true` | All users share one rate limit |
+| `MONGOMS_DISABLE_POSTINSTALL` | `1` | Every install also downloads `mongod` |
+| Node.js version | 20.19 or later, as Mongoose requires | Install or runtime failures. `AGENTS.md` still says 20.9 |
+
+- **Dev dependencies:** the build type-checks `tests/`, so it needs them installed. Don't use `--omit=dev`.
+- **Preview deployments:** their URLs don't match `APP_ORIGIN`, so auth returns 403 on them unless they get their own value, and they must not share the production database.
+- **`TRUST_PROXY`:** the code trusts the first `X-Forwarded-For` entry, so it's only safe behind a proxy that overwrites that header. Vercel's documentation says it does; confirm this on the deployed app.
+- **Cookies:** the session cookie is `Secure` in production, so the site must use HTTPS. It's `HttpOnly` and `SameSite=Lax`, and lasts 7 days.
+
+### MongoDB Atlas
+
+- Use a separate database, and a database user limited to it, for each environment.
+- That user needs `readWrite`, which includes creating indexes. Without it, every auth request fails.
+- `0.0.0.0/0` network access is usually needed from Vercel, so a strong password matters. Vercel's Atlas integration is the alternative.
+- Check that new server instances don't noticeably slow the first request, since each one confirms the indexes once.
+
+### Quality checks
+
+- CI needs to run `npm test`, `npm run test:db`, and `npm run test:smoke`. No workflow exists yet, so the last two only run by hand.
+- `npm audit` reports 11 findings in dev tools, including 2 critical in `vitest` 3 and `tinypool`, and none in production dependencies. The fix is a major `vitest` upgrade, which needs its own task.
 
 ## 7. Design questions
 
@@ -90,3 +101,19 @@ No cleanup job exists, so an account left this way stays until someone signs in 
 - **Home:** Wireframe 02 shows three "Open" cards (My Wardrobe, Create Outfit, Saved Outfits), while §5.2's text describes a primary Add Clothing or Create Outfit action plus links. The current page follows §5.2. Which one should it be?
 - **Input borders:** inputs use the muted text color rather than `--color-border`, which is only about 1.4:1 against white, below the 3:1 that WCAG asks for on control boundaries. Is that acceptable, or should the token change?
 - **Sign-in method:** §12 still lists this as unconfirmed, and Wireframe 01 says not to depict both methods until one is selected. This needs updating once Google OAuth is confirmed.
+
+## 8. What's left for User Story 1
+
+| Item | Who | Blocks |
+|---|---|---|
+| Decide on Google sign-in and account linking (§1) | Both | Closing #6, if Google is in scope |
+| Keep custom sessions or move to Auth.js, and update `AGENTS.md` (§2) | Both | Choosing how to build Google sign-in |
+| Accept the sign-up 409 or add it to the backlog (§3) | Both | Closing #6 |
+| Check on a dedicated Atlas database | Pranav | Merging |
+| Connection timeout (§5) | Aarushi | Reliable outage responses |
+| Shared rate limiter (§6) | Both agree | Public deployment |
+| Vercel settings and a check on the deployed URL (§6) | #23 | Deployment |
+| Turn the browser checks into Playwright tests and add CI (§6) | #23 | Course quality gates |
+| Review and merge PR #33 | Aarushi | Closing #6 |
+
+"A user cannot access another user's private wardrobe or outfit data" is only partly testable today. Tests confirm that each session resolves to its own user, but no wardrobe or outfit routes exist yet, so those stories must test it when they add them.

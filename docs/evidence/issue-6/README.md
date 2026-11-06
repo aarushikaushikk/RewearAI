@@ -1,6 +1,6 @@
 # Issue #6 (Account and Sign-In): test evidence
 
-Evidence for Phase 3 Checkpoints B and C, Phase 4 Checkpoint B, and Phase 4C Steps 2 to 9 of User Story 1. **No check in this folder ran against Atlas.** Step 3 tests the test infrastructure, Steps 5 to 8 test the repositories, and Step 9 tests the connected app, all on a temporary local MongoDB server.
+Evidence for Phase 3 Checkpoints B and C, Phase 4 Checkpoint B, and Phase 4C Steps 2 to 10A of User Story 1. **No check in this folder ran against Atlas.** Step 3 tests the test infrastructure, Steps 5 to 8 test the repositories, and Steps 9 and 10A test the connected app, all on a temporary local MongoDB server. Nothing has run on Vercel.
 
 ## What was tested, and how
 
@@ -15,16 +15,17 @@ Evidence for Phase 3 Checkpoints B and C, Phase 4 Checkpoint B, and Phase 4C Ste
 | Full auth flow (Vitest, `npm run test:db`) | `phase-4c-step-9-red-green.txt` | The real production factory on a temporary `mongod` | No, separate command |
 | Production build smoke test (`npm run test:smoke`) | `phase-4c-step-9-red-green.txt` | `next start` on a temporary `mongod` | No, separate command |
 | Earlier smoke test (curl against `next start`, before Step 9) | Reported in the checkpoint summaries | None: the fail-closed factory, so login returned 503 | No, run by hand |
-| Browser flows (headless Chrome) | `checkpoint-b-browser-flows.txt`, `checkpoint-c-browser-flows.txt` | **In-memory stub** | No, one-off script |
+| Browser flows on real MongoDB (headless Chrome, production build) | `phase-4c-step-10a-browser-flows.txt` | `next start` on a temporary `mongod` | No, one-off script |
+| Earlier browser flows (headless Chrome) | `checkpoint-b-browser-flows.txt`, `checkpoint-c-browser-flows.txt` | **In-memory stub** | No, one-off script |
 | Keyboard checks (headless Chrome) | `checkpoint-c-keyboard.txt` | **In-memory stub** | No, one-off script |
 | Accessibility and layout audit (axe-core 4.10.3, four viewports) | `checkpoint-c-ui-audit-before.txt`, `checkpoint-c-ui-audit-after.txt` | **In-memory stub** | No, one-off script |
 | Screenshots | `screenshots/` | **In-memory stub** | No |
 
 ### The in-memory stub
 
-The browser checks needed a working sign-in, which production code can't provide yet. They ran against a throwaway copy of the app outside the repository. In that copy only, `getProductionAuthService()` was replaced with the real `AuthService` over `tests/mocks/` repositories, plus switches to simulate an outage, a failed session revocation, and a failed session creation.
+The browser and audit checks from Phase 3 needed a working sign-in, which production code couldn't provide then. They ran against a throwaway copy of the app outside the repository. In that copy only, `getProductionAuthService()` was replaced with the real `AuthService` over `tests/mocks/` repositories, plus switches to simulate an outage, a failed session revocation, and a failed session creation.
 
-**None of this is in the repository's `src/`.** The scripts were one-off and aren't kept here. These browser flows haven't been rerun on real MongoDB, and should become Playwright tests.
+**None of this is in the repository's `src/`.** The scripts were one-off and aren't kept here. The keyboard checks and accessibility audit haven't been rerun on real MongoDB. All of these flows should become Playwright tests.
 
 ## Results
 
@@ -56,6 +57,10 @@ The browser checks needed a working sign-in, which production code can't provide
 | `npm run test:db`, end of Phase 4C Step 9 | 230 tests in 9 files pass |
 | `npm run test:smoke`, end of Phase 4C Step 9 | 19 tests in 1 file pass |
 | Factory safeguards removed one at a time, Phase 4C Step 9 | 3 of 3 caught |
+| `npm test`, end of Phase 4C Step 10A | 687 tests in 45 files pass |
+| `npm run test:db`, end of Phase 4C Step 10A | 230 tests in 9 files pass |
+| `npm run test:smoke`, end of Phase 4C Step 10A | 19 tests in 1 file pass |
+| Browser flows on real MongoDB, Phase 4C Step 10A | 29 of 29 pass |
 | Browser flows, Phase 3 (not rerun in Phase 4) | 28 of 28 pass |
 | Keyboard checks | 17 of 17 pass |
 | axe-core, before Checkpoint C | Violations in 13 of 16 states, including one critical (`button-name`) |
@@ -79,8 +84,9 @@ Each log has labelled sections, such as `FIX 2 - RED` followed by `FIX 2 - GREEN
 - `phase-4c-step-5-red-green.txt` has a red section where the repository doesn't exist, so the test file can't load and no individual test ran. The removed-safeguard runs are the evidence that each test can fail. The two connection tests were added after the red commit, when a review found that removing `connectToDatabase()` wouldn't fail anything.
 - `phase-4c-step-6-red-green.txt` has two red sections. The second ran the tests against a deliberately naive adapter, never committed, so individual tests fail for their own reasons.
 
-## What only real database integration can verify
+## What hasn't been verified
 
-- Sign-in on Atlas, and revocation and expiry across real server instances.
-- How database failures on Atlas reach users. Step 7 covers a local server shutting down and simulated driver failures.
-- Isolation of wardrobe and outfit data between users, which also needs those routes to exist.
+- Anything on Atlas or Vercel, including failover and index permissions. Failover errors are only simulated.
+- Rate limits across several server instances. They are known not to work across instances; see §6 of `docs/issue-6-team-review.md`.
+- Isolation of wardrobe and outfit data between users, which needs those routes to exist.
+- Visitors with JavaScript turned off. With a forged cookie, Chrome stayed on the blank `/` shell without redirecting. No private content was sent.
