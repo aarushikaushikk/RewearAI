@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { hashToken } from '@/lib/auth/sessionTokens';
-import { RepositoryUnavailableError } from '@/lib/repositories/repositoryErrors';
+import {
+  DuplicateEmailError,
+  RepositoryUnavailableError,
+} from '@/lib/repositories/repositoryErrors';
 import { AuthService } from '@/services/authService';
 import {
   GoogleSignInService,
@@ -108,6 +111,28 @@ describe('GoogleSignInService', () => {
       expect(second.user.id).toBe(first.user.id);
       expect(second.user.email).toBe(ALEX.email);
       expect(await users.findByEmail('renamed@example.com')).toBeNull();
+    });
+
+    it('finds the link by sub alone, with no write', async () => {
+      await service.signIn(ALEX);
+      const findByProvider = vi.spyOn(accounts, 'findByProvider');
+      const createAccount = vi.spyOn(accounts, 'create');
+
+      await service.signIn({ ...ALEX, email: 'renamed@example.com' });
+
+      expect(findByProvider.mock.calls).toEqual([['google', ALEX.sub]]);
+      expect(createAccount).not.toHaveBeenCalled();
+    });
+
+    it('accepts a race reported as a duplicate email, when its own user won', async () => {
+      const first = signedIn(await service.signIn(ALEX));
+      // This request saw no user yet, and the database then reports the conflict on the email.
+      vi.spyOn(users, 'findById').mockResolvedValueOnce(null);
+      vi.spyOn(users, 'createWithoutPassword').mockRejectedValueOnce(new DuplicateEmailError());
+
+      const second = signedIn(await service.signIn(ALEX));
+
+      expect(second.user.id).toBe(first.user.id);
     });
 
     it('does not sign in as another user who holds the email now reported', async () => {

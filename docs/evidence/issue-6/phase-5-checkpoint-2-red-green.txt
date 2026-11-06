@@ -1,0 +1,49 @@
+Phase 5 Checkpoint 2: GoogleSignInService
+Filtered to totals and failures. Every database run used a temporary mongod on 127.0.0.1. No
+Google request, OAuth library, or token verification is involved: tests supply the claims.
+
+=== RED 1 (commit 11133de): the service doesn't exist yet ===
+ Test Files  1 failed (1)
+      Tests  no tests
+ Test Files  1 failed (1)
+      Tests  no tests
+
+=== RED 2 (never committed): Checkpoint 1's design moved into the service unchanged ===
+That design removed a link on refusal, then checked and restored it. tests/db/googleAccountRecovery.test.ts:
+ FAIL  partial failures > when the User write fails after the Account write > lets someone else register that email meanwhile, and then refuses
+ FAIL  the three-way race > leaves no stranded user when B finishes first
+ FAIL  the three-way race > leaves no stranded user when C finishes first
+ FAIL  the three-way race > lets that person sign in afterwards when B finishes first
+ FAIL  the three-way race > lets that person sign in afterwards when C finishes first
+ FAIL  the three-way race > never removes a link during any of this
+      Tests  6 failed | 19 passed (25)
+
+The race leaves a passwordless user whose next sign-in is refused, which can't be repaired
+without linking by email. The randomized overlap test passed on this design, so only the
+scripted sequence catches it.
+
+=== GREEN ===
+npm test:           771 tests in 46 files pass
+npm run test:db:    317 tests in 11 files pass, leaving no temporary folders or `mongod` processes
+npm run test:smoke: 19 tests in 1 file pass
+npx tsc --noEmit:   exit 0
+tests/db/googleAccountRecovery.test.ts passed 25 of 25 on each of 4 repeated runs before the final gates.
+
+=== RULES REMOVED ONE AT A TIME (throwaway clone; each should be caught) ===
+tests/unit/auth/googleSignInService.test.ts (33) and tests/db/googleAccountRecovery.test.ts (25):
+
+any-truthy-verified-flag               unit: 2 failed | 31 passed (33)    db: 25 passed (25)
+verified-flag-not-checked              unit: 5 failed | 28 passed (33)    db: 25 passed (25)
+refused-email-signs-in-holder          unit: 33 passed (33)               db: 6 failed | 19 passed (25)
+email-check-links-holder               unit: 3 failed | 30 passed (33)    db: 7 failed | 18 passed (25)
+refusal-removes-pending-link           unit: 33 passed (33)               db: 7 failed | 18 passed (25)
+own-identity-refused-at-email-check    unit: 33 passed (33)               db: 2 failed | 23 passed (25)
+no-email-check-before-writing          unit: 2 failed | 31 passed (33)    db: 3 failed | 22 passed (25)
+repeated-id-not-handled                unit: 33 passed (33)               db: 6 failed | 19 passed (25)
+duplicate-email-not-rechecked          unit: 33 passed (33)               db: 25 passed (25)
+stores-raw-token                       unit: 2 failed | 31 passed (33)    db: 1 failed | 24 passed (25)
+looks-up-by-email-not-sub              unit: 33 passed (33)               db: 25 passed (25)
+
+Two weren't caught by those tests, so tests were added for them. Rerun with those tests:
+duplicate-email-not-rechecked          unit: 1 failed | 34 passed (35)
+looks-up-by-email-not-sub              unit: 1 failed | 34 passed (35)

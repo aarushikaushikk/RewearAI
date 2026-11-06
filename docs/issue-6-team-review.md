@@ -19,24 +19,26 @@ A Google sign-in never links to an existing user because the email matches, incl
 
 ### How a new Google user is written
 
-The repositories are ready for this order, tested in `tests/db/googleAccountRecovery.test.ts`. `GoogleSignInService` will implement it in Checkpoint 2.
+`src/services/googleSignInService.ts` takes claims that have already been verified. Checkpoint 3 adds the code that verifies them with Google; no route exposes the service yet. It refuses anything without `email_verified` set to exactly `true`, then:
 
-1. Write the `Account` with a newly generated user ID. A repeated identity is rejected by a unique index, and the request then uses the existing `Account`.
-2. Write the `User` with that ID.
+1. Looks for an `Account` by Google's `sub`. If the email is already taken and there's no `Account`, it refuses without writing anything.
+2. Writes the `Account` with a newly generated user ID. A repeated identity is rejected by a unique index, and the request then uses the existing `Account`.
+3. Writes the `User` with that ID, then creates the session.
 
 | What happened | Result | Recovery |
 |---|---|---|
 | The `Account` write fails | Nothing stored | Sign in again |
 | The `User` write fails | An `Account` pointing at no user. It gives no access and reserves no email | The next sign-in finishes it with the same ID |
-| The email is already taken | Refused, and the `Account` is removed | None needed |
-| The `Account` can't be removed after a refusal | Same leftover `Account`, still pointing at no user | The next attempt refuses and removes it |
+| The email was taken between those writes | Refused. The `Account` stays, pointing at no user | The next sign-in finishes it if the email has become free, and refuses otherwise |
+| The session write fails | The `User` and `Account` are kept | The next sign-in creates a session |
 
 Because the `Account` always gets a new ID, it can't point at an existing user. Writing the `User` first would be worse: a failed `Account` write would leave a passwordless user that blocks its email and can't sign in.
 
+**Links are never removed during sign-in.** A refused request can't know whether another request for the same identity is about to write the `User`, so removing the link could leave that user with no link, and it could then never sign in. Without removal, each identity has one `Account` and one user ID permanently, and the `Account` always exists first, so a user can't be stranded however many requests overlap. `tests/db/googleAccountRecovery.test.ts` scripts the sequence that stranded a user in the earlier design, in both orders, and adds randomized overlap with a registration that rolls back.
+
 **Known limits:**
-- Leftover `Account` records stay until the same person retries. They're harmless, but no cleanup job exists.
+- An `Account` with no `User` stays until the same person retries. It gives no access, reserves no email, holds no email or name, and there's at most one per Google identity. No cleanup job exists. One would need to wait long enough that no request could still be in progress, and the future linking flow must treat such a record as replaceable.
 - A later Google sign-in recreates a deleted `User` with the same ID if its `Account` remains, and any data left under that ID would reattach. A future account deletion feature should delete the user's data, then the `User`, then the `Account`, so an interruption at any point leaves nothing to reattach.
-- A refusal can remove a link just as another request for the same identity writes the `User`. Each side checks after its own write and restores the link, and tests cover both orders. A third request for that identity arriving in the same moment could still leave a passwordless user with no `Account`, which would need fixing by hand.
 
 ## 2. Custom sessions versus Auth.js
 
