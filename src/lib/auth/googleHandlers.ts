@@ -1,12 +1,8 @@
 import 'server-only';
 import { getSessionCookieOptions } from '@/lib/auth/cookieConfig';
 import { getGoogleSignInService } from '@/lib/auth/getGoogleSignInService';
-import {
-  createGoogleAuthorization,
-  getGoogleSettings,
-  verifyGoogleCallback,
-  type GoogleSettings,
-} from '@/lib/auth/googleOidc';
+import { createGoogleAuthorization, verifyGoogleCallback } from '@/lib/auth/googleOidc';
+import { getGoogleSettings, type GoogleSettings } from '@/lib/auth/googleSettings';
 import {
   openTransaction,
   sealTransaction,

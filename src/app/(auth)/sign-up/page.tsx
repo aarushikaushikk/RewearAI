@@ -1,7 +1,9 @@
 import React from 'react';
 import type { Metadata } from 'next';
+import { isGoogleSignInAvailable } from '@/lib/auth/googleSettings';
 import { redirectIfAuthenticated } from '@/lib/auth/pageSession';
 import { Alert } from '@/components/ui/Alert';
+import { GoogleSignInLink } from '@/components/auth/GoogleSignInLink';
 import { SignUpForm } from '@/components/auth/SignUpForm';
 
 export const metadata: Metadata = {
@@ -33,6 +35,7 @@ export default async function SignUpPage() {
           </div>
         )}
         <SignUpForm />
+        {!serviceUnavailable && isGoogleSignInAvailable() && <GoogleSignInLink />}
       </div>
     </div>
   );
