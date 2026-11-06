@@ -1,18 +1,22 @@
+import path from 'node:path';
 import { defineConfig } from 'vitest/config';
-import { fileURLToPath } from 'node:url';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, 'src'),
+      // `server-only` throws outside a React Server Component build; stub it for Node tests.
+      'server-only': path.resolve(__dirname, 'tests/stubs/serverOnly.ts'),
+    },
+  },
   test: {
     environment: 'node',
     globals: true,
-    include: ['tests/**/*.test.ts', 'tests/**/*.test.tsx'],
+    include: ['src/**/*.test.ts', 'tests/**/*.test.ts', 'tests/**/*.test.tsx'],
     environmentOptions: {},
-  },
-  resolve: {
-    alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url)),
-    },
+    // Overrides the shell, so this suite can never connect to a real database.
+    env: { MONGODB_URI: '' },
   },
 });
