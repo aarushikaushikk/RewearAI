@@ -138,14 +138,8 @@ export async function startMongoTestServer(
   };
 }
 
-/**
- * Deletes every record in the temporary database and keeps its indexes. Refuses
- * unless the connection is open to this exact server and database.
- */
-export async function clearTestDatabase(
-  server: MongoTestServer,
-  connection: Connection = mongoose.connection,
-): Promise<void> {
+/** Refuses unless the connection is open to this exact server and database. */
+function requireTemporaryDatabase(server: MongoTestServer, connection: Connection) {
   assertLocalTestUri(server.uri);
 
   const { db } = connection;
@@ -158,8 +152,43 @@ export async function clearTestDatabase(
   ) {
     throw new MongoTestServerError(REFUSED);
   }
+  return db;
+}
+
+/**
+ * Deletes every record in the temporary database and keeps its indexes. Refuses
+ * unless the connection is open to this exact server and database.
+ */
+export async function clearTestDatabase(
+  server: MongoTestServer,
+  connection: Connection = mongoose.connection,
+): Promise<void> {
+  const db = requireTemporaryDatabase(server, connection);
 
   for (const collection of await db.collections()) {
     await collection.deleteMany({});
   }
+}
+
+/**
+ * Removes the temporary database, indexes included, and forgets that its indexes
+ * were built, as if the app had never used it. Refuses like clearTestDatabase.
+ */
+export async function resetTestDatabase(
+  server: MongoTestServer,
+  connection: Connection = mongoose.connection,
+): Promise<void> {
+  const db = requireTemporaryDatabase(server, connection);
+
+  await db.dropDatabase();
+  const { authIndexInitialization } = globalThis as typeof globalThis & {
+    authIndexInitialization?: Map<string, unknown>;
+  };
+  authIndexInitialization?.clear();
+}
+
+/** Closes the client but not the server, so the next operation has to reconnect. */
+export async function disconnectTestClient(): Promise<void> {
+  await mongoose.disconnect();
+  forgetCachedConnection();
 }

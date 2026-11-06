@@ -101,8 +101,6 @@ beforeAll(async () => {
   // so an unreachable database would otherwise take 30 seconds per operation.
   process.env.MONGODB_URI = `${server.uri}?serverSelectionTimeoutMS=500`;
   await connectToDatabase();
-  await User.createIndexes();
-  await Session.createIndexes();
 });
 
 afterAll(async () => {
