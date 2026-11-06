@@ -19,7 +19,7 @@ A Google sign-in never links to an existing user because the email matches, incl
 
 ### How a new Google user is written
 
-`src/services/googleSignInService.ts` takes claims that have already been verified. Checkpoint 3 adds the code that verifies them with Google; no route exposes the service yet. It refuses anything without `email_verified` set to exactly `true`, then:
+`src/services/googleSignInService.ts` takes claims verified by `src/lib/auth/googleOidc.ts`, and must never be given values from a request. It refuses anything without `email_verified` set to exactly `true`, then:
 
 1. Looks for an `Account` by Google's `sub`. If the email is already taken and there's no `Account`, it refuses without writing anything.
 2. Writes the `Account` with a newly generated user ID. A repeated identity is rejected by a unique index, and the request then uses the existing `Account`.
@@ -39,6 +39,28 @@ Because the `Account` always gets a new ID, it can't point at an existing user. 
 **Known limits:**
 - An `Account` with no `User` stays until the same person retries. It gives no access, reserves no email, holds no email or name, and there's at most one per Google identity. No cleanup job exists. One would need to wait long enough that no request could still be in progress, and the future linking flow must treat such a record as replaceable.
 - A later Google sign-in recreates a deleted `User` with the same ID if its `Account` remains, and any data left under that ID would reattach. A future account deletion feature should delete the user's data, then the `User`, then the `Account`, so an interruption at any point leaves nothing to reattach.
+
+### The Google sign-in flow
+
+`GET /api/auth/google` redirects to Google, and `GET /api/auth/google/callback` handles the return. The sign-in page has no Google button yet, so nothing links to them, and the `/sign-in?reason=google-*` messages don't display yet.
+
+- **Library:** `openid-client` 6, which also adds `oauth4webapi` and `jose`. It handles Authorization Code Flow with PKCE S256, and checks the ID token's signature, issuer, audience, expiry, and nonce. Signature checks are optional in the library and turned on here.
+- **Issuer:** fixed to `https://accounts.google.com` in code, with no setting to change it.
+- **Transaction:** the state, nonce, and PKCE verifier sit in a 10-minute `HttpOnly`, `SameSite=Lax` cookie, encrypted with AES-GCM under a key derived from the client secret. It's named `__Host-` and `Secure` in production, so a subdomain or plain HTTP can't plant one.
+- **Redirects:** only to fixed paths. The callback URL comes from `APP_ORIGIN`, never the `Host` header.
+- **Tokens:** Google's access and refresh tokens are discarded. Only `sub`, the email, and the name are used.
+- **Not configured:** both routes redirect to the sign-in page, and password sign-in keeps working.
+
+**Known limits:**
+- **Nothing here has run against real Google.** Everything uses a local fake with Google's hostnames. Google's page on OpenID Connect allows two forms of `iss`, and only describes PKCE through its metadata, so both need checking with real credentials. A mismatch would fail closed.
+- **Replay:** there's no server-side record of used transactions. A replayed callback is refused because the cookie is cleared after use and Google's codes work once. Someone who copied the cookie and callback URL before first use would race the real browser for that single use.
+- **Rate limiting:** the Google routes have none. The start route does no database work, and the callback only contacts Google for a valid transaction. The shared limiter in §6 should cover them.
+- **Google key rotation** isn't tested: the fake uses one key.
+- **Compatibility:** tests ran on Node 24. `openid-client` states Node 20 as its baseline, but Node 20.19 hasn't been run.
+
+### New `GET` routes must call `connection()`
+
+With Cache Components, Next.js prerendered a `GET` route handler at build even though it read `req.url`, freezing one response for every visitor. The Google callback hit this, and the start route would have given every visitor the same state. Both now call `await connection()`. The build output shows it: `/api/...` routes must be listed as `ƒ`, not `○`.
 
 ## 2. Custom sessions versus Auth.js
 
@@ -102,6 +124,7 @@ No cleanup job exists, so an account left this way stays until someone signs in 
 | `APP_ORIGIN` | The exact production origin | All sign-in, sign-up, and sign-out requests return 403 |
 | `TRUST_PROXY` | `true` | All users share one rate limit |
 | `MONGOMS_DISABLE_POSTINSTALL` | `1` | Every install also downloads `mongod` |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | From the Google Cloud Console, with `<APP_ORIGIN>/api/auth/google/callback` as an authorized redirect URI | Missing: Google sign-in is unavailable, and password sign-in keeps working |
 | Node.js version | 20.19 or later, as Mongoose requires | Install or runtime failures. `AGENTS.md` still says 20.9 |
 
 - **Dev dependencies:** the build type-checks `tests/`, so it needs them installed. Don't use `--omit=dev`.
@@ -133,7 +156,10 @@ No cleanup job exists, so an account left this way stays until someone signs in 
 
 | Item | Who | Blocks |
 |---|---|---|
-| Decide on Google sign-in and account linking (§1) | Both | Closing #6, if Google is in scope |
+| Google sign-in and sign-up buttons, and their messages | Next checkpoint | Using Google sign-in |
+| Check with real Google credentials (§1) | Pranav | Merging, if Google is in scope |
+| Confirm Google sign-in and the no-linking rule (§1) | Both | Closing #6, if Google is in scope |
+| Agree to `openid-client` and update `AGENTS.md` (§2) | Both | Merging |
 | Keep custom sessions or move to Auth.js, and update `AGENTS.md` (§2) | Both | Choosing how to build Google sign-in |
 | Accept the sign-up 409 or add it to the backlog (§3) | Both | Closing #6 |
 | Check on a dedicated Atlas database | Pranav | Merging |

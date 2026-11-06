@@ -1,0 +1,56 @@
+Phase 5 Checkpoint 3: Google OIDC integration and routes
+Filtered to totals and failures. No test contacts Google or uses real credentials: a local fake
+serves Google's hostnames with generated keys, and the real openid-client talks to it.
+Database runs used a temporary mongod on 127.0.0.1. Tests ran on Node 24.
+
+=== RED (commit e8fc953): the routes and adapter don't exist yet ===
+tests/unit/auth/googleTransaction.test.ts and tests/unit/envExample.test.ts:
+ Test Files  2 failed (2)
+      Tests  5 failed | 13 passed (18)
+
+tests/db/googleAuthRoutes.test.ts:
+ Test Files  1 failed (1)
+      Tests  no tests
+
+npx tsc --noEmit: exit 2, 3 errors
+
+=== FOUND BY THE PRODUCTION BUILD: ROUTES PRERENDERED ===
+The focused database tests all passed, but they call the handlers directly. On the real build,
+the callback route was prerendered despite reading req.url, freezing one response for everyone:
+  /api/auth/google            dynamic
+  /api/auth/google/callback   static
+
+ FAIL  production build with Google settings and a fake Google > refuses a callback with the wrong state across the bundled route
+ FAIL  production build with Google settings and a fake Google > refuses an invalid signature, using the real library in the real build
+ FAIL  production build with Google settings and a fake Google > signs in, reaches a private page, and signs out
+ FAIL  production build with Google settings and a fake Google > refuses replaying a callback that already succeeded
+      Tests  4 failed | 6 passed (10)
+
+Removing connection() from the start route made it static as well, and the smoke test caught it:
+      Tests  7 failed | 3 passed (10)
+
+Both routes now call connection(), and every /api/auth route is dynamic:
+      Tests  10 passed (10)
+
+=== GREEN ===
+npm test:           800 tests in 47 files pass (771 from Checkpoint 2 + 29 new)
+npm run test:db:    370 tests in 12 files pass (317 from Checkpoint 2 + 53 new)
+npm run test:smoke: 29 tests in 2 files pass (19 from Checkpoint 2 + 10 new)
+npx tsc --noEmit:   exit 0
+npm audit --omit=dev: 0 vulnerabilities
+
+=== SAFEGUARDS REMOVED ONE AT A TIME (throwaway clone; each should be caught) ===
+tests/db/googleAuthRoutes.test.ts (53 tests, all pass unmodified):
+
+signature-checks-off               2 failed | 51 passed (53)
+nonce-not-checked                  11 failed | 42 passed (53)
+state-check-in-handler-removed     1 failed | 52 passed (53)
+pkce-verifier-not-sent             10 failed | 43 passed (53)
+any-truthy-email-verified          1 failed | 52 passed (53)
+transaction-expiry-ignored         1 failed | 52 passed (53)
+logs-the-verification-error        2 failed | 51 passed (53)
+callback-url-from-request          10 failed | 43 passed (53)
+
+signature-checks-off shows the library doesn't check signatures here unless told to.
+state-check-in-handler-removed fails only the test that no request reaches Google: the library
+still refuses the wrong state, so that check is a second layer.
