@@ -7,6 +7,7 @@ import { USER_IDS } from '../../contracts/fixtures';
 describeUserRepositoryContract('in-memory', {
   newRepository: () => new MemoryUserRepository(),
   unknownId: 'user_999999',
+  addPasswordlessUser: (repo, email) => repo.addPasswordlessUserForTest(email),
 });
 
 describeSessionRepositoryContract('in-memory', {

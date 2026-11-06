@@ -5,20 +5,25 @@ import { OTHER_PASSWORD_HASH, PASSWORD_HASH } from './fixtures';
 
 const HASH = PASSWORD_HASH;
 
-export interface UserContractSetup {
+export interface UserContractSetup<R extends IUserRepository = IUserRepository> {
   /** Returns an empty repository. */
-  newRepository(): Promise<IUserRepository> | IUserRepository;
+  newRepository(): Promise<R> | R;
   /** An ID in this repository's format that belongs to no user. */
   unknownId: string;
+  /** Stores an account with no password, which registration can't create. */
+  addPasswordlessUser(repo: R, email: string): Promise<unknown> | unknown;
 }
 
 /**
  * Behaviour every IUserRepository must have. The MongoDB adapter will run this
  * same suite, so it must not depend on how a repository stores its records.
  */
-export function describeUserRepositoryContract(name: string, setup: UserContractSetup): void {
+export function describeUserRepositoryContract<R extends IUserRepository>(
+  name: string,
+  setup: UserContractSetup<R>,
+): void {
   describe(`IUserRepository contract: ${name}`, () => {
-    let repo: IUserRepository;
+    let repo: R;
 
     beforeEach(async () => {
       repo = await setup.newRepository();
@@ -105,6 +110,15 @@ export function describeUserRepositoryContract(name: string, setup: UserContract
         await repo.create({ email: 'a@example.com', passwordHash: HASH });
 
         expect((await repo.findByEmail('a@example.com'))?.passwordHash).toBe(HASH);
+      });
+
+      it('returns a null hash, not a missing one, for an account with no password', async () => {
+        await setup.addPasswordlessUser(repo, 'a@example.com');
+
+        const user = await repo.findByEmail('a@example.com');
+
+        expect(user).not.toBeNull();
+        expect(user?.passwordHash).toBeNull();
       });
 
       it('returns null for an unknown email', async () => {

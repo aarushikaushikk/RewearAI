@@ -43,7 +43,10 @@ Once item 1 is settled:
 4. Implement `deleteById`. Without it, a failed session can't roll back a new account.
 5. Throw `DuplicateEmailError` (`src/lib/repositories/repositoryErrors.ts`) for code 11000 on the email index only. `AuthService.register` no longer looks at message text, so this is the only way to get a 409.
 6. Throw `RepositoryUnavailableError` for connection failures, including `DatabaseConnectionError`; the routes turn it into a 503 that doesn't count toward rate limits. Throw `RepositoryError` for other database failures, which become a generic 500. Never forward driver errors: their messages can contain the database host and user emails.
-7. Run the adapters through the shared suites in `tests/contracts/`.
+7. Run the adapters through the shared suites in `tests/contracts/`. Their fixtures now pass the real models, checked by `tests/unit/repositories/contractFixtures.test.ts`.
+8. Keep `null` and `undefined` distinct for `passwordHash`: `null` means the account has no password, and `undefined` means the field wasn't loaded. `findByEmail` loads it with `.select("+passwordHash")` and returns `null` for an account with no password. `findById` won't load it, and its return type will leave the field out, so an unloaded hash can't be mistaken for `null`.
+9. Build the unique indexes explicitly before the first write. Without this, 25 of 25 concurrent registrations for one email succeeded on a fresh database, and the index then couldn't be built.
+10. Add contract tests with the adapters for what the models enforce and the memory repositories don't: `findById` omitting the hash, and malformed user IDs in `createSession` and `revokeAllSessionsForUser`.
 
 ### Accounts that can't be rolled back
 
@@ -59,14 +62,15 @@ No cleanup job exists, so an account left this way stays until someone signs in 
 
 ## 5. Merging the two branches
 
-A trial merge of `feature/6-account-signin` and `chore/28-setup-db` conflicts in three files:
+`main`, including PR #32, was merged into this branch in `4b0c9d4`. Three files conflicted:
 
-- **`vitest.config.ts`:** keep both sets of changes. The React plugin and `tests/**/*.test.tsx` must stay or component tests stop running, and `src/**/*.test.ts` and the `server-only` alias must stay for the database tests.
-- **`package.json` and `package-lock.json`:** keep both sets of dependencies, then regenerate the lockfile.
+- **`vitest.config.ts`:** kept both sets of changes. The React plugin and `tests/**/*.test.tsx` must stay or component tests stop running, and `src/**/*.test.ts` and the `server-only` alias must stay for the database tests. It also sets `MONGODB_URI` to empty, so `npm test` can't reach a real database.
+- **`package.json` and `package-lock.json`:** kept both sets of dependencies and regenerated the lockfile, with `bson` kept at `main`'s 7.3.3.
 
-The database branch's `tsconfig.json` also adds `tests/**/*.ts` to type checking, and `next build` fails on any error there. This branch has been fixed for that. A trial merge with these resolutions passes tests, type checks, lint, and build.
+**Still outstanding from the merge:**
 
-`.env.example` is untracked on this branch, because `.env*` is ignored here. The database branch fixes that rule, so its version will need these variables added: `APP_ORIGIN` and `TRUST_PROXY`.
+- **`.env.example`** now lists only `MONGODB_URI`. Add `APP_ORIGIN`, `TRUST_PROXY`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET`. `APP_ORIGIN` matters most (see §6).
+- **Connection timeout:** `src/lib/db.ts` doesn't set `serverSelectionTimeoutMS`, so requests wait 30 seconds during an outage. Aarushi owns this file, and `src/lib/db.test.ts` asserts the exact connection options, so both need to change. Until then, `serverSelectionTimeoutMS=5000` can go in the URI.
 
 ## 6. Deployment settings (#23)
 
