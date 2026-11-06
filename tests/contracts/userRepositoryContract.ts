@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { IUserRepository } from '@/lib/repositories/userRepository';
 import { DuplicateEmailError } from '@/lib/repositories/repositoryErrors';
+import { OTHER_PASSWORD_HASH, PASSWORD_HASH } from './fixtures';
 
-const HASH = '$2b$10$abcdefghijklmnopqrstuuvwxyz012345678901234567890123456';
+const HASH = PASSWORD_HASH;
 
 export interface UserContractSetup {
   /** Returns an empty repository. */
@@ -58,7 +59,7 @@ export function describeUserRepositoryContract(name: string, setup: UserContract
         async (email) => {
           await repo.create({ email: 'a@example.com', passwordHash: HASH });
 
-          await expect(repo.create({ email, passwordHash: 'other-hash' })).rejects.toBeInstanceOf(
+          await expect(repo.create({ email, passwordHash: OTHER_PASSWORD_HASH })).rejects.toBeInstanceOf(
             DuplicateEmailError,
           );
         },
@@ -68,7 +69,7 @@ export function describeUserRepositoryContract(name: string, setup: UserContract
         const first = await repo.create({ email: 'a@example.com', passwordHash: HASH, name: 'A' });
 
         await repo
-          .create({ email: 'a@example.com', passwordHash: 'other-hash', name: 'B' })
+          .create({ email: 'a@example.com', passwordHash: OTHER_PASSWORD_HASH, name: 'B' })
           .catch(() => undefined);
 
         expect(await repo.findByEmail('a@example.com')).toMatchObject({
