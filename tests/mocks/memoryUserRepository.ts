@@ -1,6 +1,11 @@
 import { IUserRepository } from '@/lib/repositories/userRepository';
-import { DuplicateEmailError } from '@/lib/repositories/repositoryErrors';
-import { UserRecord, UserWithoutPassword, CreateUserDTO } from '@/types/user';
+import { DuplicateEmailError, DuplicateUserIdError } from '@/lib/repositories/repositoryErrors';
+import {
+  CreatePasswordlessUserDTO,
+  CreateUserDTO,
+  UserRecord,
+  UserWithoutPassword,
+} from '@/types/user';
 
 export class MemoryUserRepository implements IUserRepository {
   private users: UserRecord[] = [];
@@ -56,6 +61,39 @@ export class MemoryUserRepository implements IUserRepository {
       return true;
     }
     return false;
+  }
+
+  newId(): string {
+    return `user_${this.nextId++}`;
+  }
+
+  async createWithoutPassword(data: CreatePasswordlessUserDTO): Promise<UserWithoutPassword> {
+    const email = data.email.trim().toLowerCase();
+    // Checked and inserted with no await in between, like the database's unique indexes.
+    if (this.users.some((u) => u.id === data.id)) {
+      throw new DuplicateUserIdError();
+    }
+    if (this.users.some((u) => u.email === email)) {
+      throw new DuplicateEmailError();
+    }
+
+    const now = new Date();
+    const user: UserRecord = {
+      id: data.id,
+      email,
+      passwordHash: null,
+      name: data.name ?? null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.users.push(user);
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+    };
   }
 
   // Helper for tests: registration can't create an account with no password

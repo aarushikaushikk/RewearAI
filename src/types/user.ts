@@ -16,6 +16,13 @@ export interface CreateUserDTO {
   name?: string | null;
 }
 
+// A user who signs in through a provider. There is deliberately no way to set a password here.
+export interface CreatePasswordlessUserDTO {
+  id: string;
+  email: string;
+  name?: string | null;
+}
+
 export interface SafeUser {
   id: string;
   email: string;

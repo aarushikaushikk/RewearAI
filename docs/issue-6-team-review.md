@@ -10,8 +10,33 @@ The PRD's User Story 1 criteria don't mention Google. It comes from the team's a
 
 **Needed from the team:**
 - Confirm Google is part of User Story 1, or move it to its own issue. Email and password meet the sign-in criteria without it.
-- Decide what happens when a Google sign-in uses an email that already has a password account. Linking them automatically without checking that Google has verified the email would let someone take over an account.
+- Confirm the linking rule Pranav set for Phase 5 (below).
 - Update `docs/DESIGN.md` §12 and Wireframe 01 to match.
+
+### Google sign-in never links by email
+
+A Google sign-in never links to an existing user because the email matches, including a passwordless user with no link. Password sign-up doesn't verify email, so someone could register a victim's address first and keep access through their password after a link. Existing users will need a future signed-in linking flow.
+
+### How a new Google user is written
+
+The repositories are ready for this order, tested in `tests/db/googleAccountRecovery.test.ts`. `GoogleSignInService` will implement it in Checkpoint 2.
+
+1. Write the `Account` with a newly generated user ID. A repeated identity is rejected by a unique index, and the request then uses the existing `Account`.
+2. Write the `User` with that ID.
+
+| What happened | Result | Recovery |
+|---|---|---|
+| The `Account` write fails | Nothing stored | Sign in again |
+| The `User` write fails | An `Account` pointing at no user. It gives no access and reserves no email | The next sign-in finishes it with the same ID |
+| The email is already taken | Refused, and the `Account` is removed | None needed |
+| The `Account` can't be removed after a refusal | Same leftover `Account`, still pointing at no user | The next attempt refuses and removes it |
+
+Because the `Account` always gets a new ID, it can't point at an existing user. Writing the `User` first would be worse: a failed `Account` write would leave a passwordless user that blocks its email and can't sign in.
+
+**Known limits:**
+- Leftover `Account` records stay until the same person retries. They're harmless, but no cleanup job exists.
+- A later Google sign-in recreates a deleted `User` with the same ID if its `Account` remains, and any data left under that ID would reattach. A future account deletion feature should delete the user's data, then the `User`, then the `Account`, so an interruption at any point leaves nothing to reattach.
+- A refusal can remove a link just as another request for the same identity writes the `User`. Each side checks after its own write and restores the link, and tests cover both orders. A third request for that identity arriving in the same moment could still leave a passwordless user with no `Account`, which would need fixing by hand.
 
 ## 2. Custom sessions versus Auth.js
 
@@ -34,7 +59,7 @@ Hiding it properly requires email verification, which is outside User Story 1. T
 - **Don't cache the `AuthService` instance.** Next.js bundles pages and route handlers separately, so a shared instance's errors fail `instanceof AuthError` and expected 401s become 500s. The connection and index state are cached on `globalThis` instead.
 - **Keep `null` and `undefined` distinct for `passwordHash`.** `findByEmail` returns `null` for an account with no password. `findById` never loads the field, and its return type (`UserWithoutPassword`) leaves it out. TypeScript doesn't stop an implementation returning extra fields, so the contract tests check this at runtime.
 - **Errors:** `src/lib/repositories/mongoSupport.ts` turns connection, network, and failover failures into `RepositoryUnavailableError` (503), duplicates on the email index alone into `DuplicateEmailError` (409), and everything else into `RepositoryError` (500). Logs hold only a fixed operation name and category, because driver errors can contain hosts and user emails.
-- **Indexes:** `src/lib/repositories/mongoIndexes.ts` builds them before each process's first operation. Every operation fails if they can't be built, so duplicate emails already in the database block sign-in and sign-up until someone fixes the data. Without this, 25 of 25 concurrent registrations for one email succeeded on a database with no indexes. It covers `User` and `Session` only.
+- **Indexes:** `src/lib/repositories/mongoIndexes.ts` builds them before each process's first operation, for `User`, `Session`, and `Account`. This means an `Account` index failure blocks password sign-in too. Every operation fails if they can't be built, so duplicate emails already in the database block sign-in and sign-up until someone fixes the data. Without this, 25 of 25 concurrent registrations for one email succeeded on a database with no indexes.
 - **Query input:** session lookups require a 64-character hex hash and user lookups a 24-character hex ID, because Mongoose would otherwise run an object such as `{ $ne: null }` as a query operator.
 
 ### Accounts that can't be rolled back

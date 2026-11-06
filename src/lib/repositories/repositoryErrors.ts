@@ -18,6 +18,18 @@ export class RepositoryUnavailableError extends RepositoryError {
   override message = 'The data store is unavailable';
 }
 
+/** The provider identity is already linked, or the user already has a link for that provider. */
+export class DuplicateAccountError extends RepositoryError {
+  override name = 'DuplicateAccountError';
+  override message = 'This account link already exists';
+}
+
+/** A user with this ID exists, which is expected when concurrent requests finish one sign-up. */
+export class DuplicateUserIdError extends RepositoryError {
+  override name = 'DuplicateUserIdError';
+  override message = 'A user with this ID already exists';
+}
+
 /** The email is already registered, including when concurrent requests race. */
 export class DuplicateEmailError extends RepositoryError {
   override name = 'DuplicateEmailError';
