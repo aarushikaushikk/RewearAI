@@ -1,6 +1,6 @@
 # Issue #6 (Account and Sign-In): test evidence
 
-Evidence for Phase 3 Checkpoints B and C, Phase 4 Checkpoint B, and Phase 4C Steps 2 to 10A and Phase 5 Checkpoints 1 and 2 of User Story 1. **No check in this folder ran against Atlas.** Step 3 tests the test infrastructure, Steps 5 to 8 test the repositories, and Steps 9 and 10A test the connected app, all on a temporary local MongoDB server. Nothing has run on Vercel.
+Evidence for Phase 3 Checkpoints B and C, Phase 4 Checkpoint B, and Phase 4C Steps 2 to 10A and Phase 5 Checkpoints 1 to 3 of User Story 1. **No check in this folder ran against Atlas or real Google.** Step 3 tests the test infrastructure, Steps 5 to 8 test the repositories, and Steps 9 and 10A test the connected app, all on a temporary local MongoDB server. Nothing has run on Vercel.
 
 ## What was tested, and how
 
@@ -18,6 +18,7 @@ Evidence for Phase 3 Checkpoints B and C, Phase 4 Checkpoint B, and Phase 4C Ste
 | Browser flows on real MongoDB (headless Chrome, production build) | `phase-4c-step-10a-browser-flows.txt` | `next start` on a temporary `mongod` | No, one-off script |
 | Google account data layer (Vitest, both commands) | `phase-5-checkpoint-1-red-green.txt` | Memory and `MongoAccountRepository` on a temporary `mongod`. No Google code exists yet | Contract on memory only; the rest is a separate command |
 | Google sign-in service (Vitest, both commands) | `phase-5-checkpoint-2-red-green.txt` | Memory and MongoDB repositories, with claims supplied by the tests. No Google request or token verification exists yet | Service rules only; the rest is a separate command |
+| Google OIDC routes (Vitest, `npm run test:db` and `npm run test:smoke`) | `phase-5-checkpoint-3-red-green.txt` | The real `openid-client` against a local fake with Google's hostnames, generated keys, and a temporary `mongod`. The smoke test uses the real `next start` build | No, separate commands |
 | Earlier browser flows (headless Chrome) | `checkpoint-b-browser-flows.txt`, `checkpoint-c-browser-flows.txt` | **In-memory stub** | No, one-off script |
 | Keyboard checks (headless Chrome) | `checkpoint-c-keyboard.txt` | **In-memory stub** | No, one-off script |
 | Accessibility and layout audit (axe-core 4.10.3, four viewports) | `checkpoint-c-ui-audit-before.txt`, `checkpoint-c-ui-audit-after.txt` | **In-memory stub** | No, one-off script |
@@ -71,6 +72,10 @@ The browser and audit checks from Phase 3 needed a working sign-in, which produc
 | `npm run test:db`, end of Phase 5 Checkpoint 2 | 317 tests in 11 files pass, leaving no temporary folders or `mongod` processes |
 | `npm run test:smoke`, end of Phase 5 Checkpoint 2 | 19 tests in 1 file pass |
 | Sign-in rules removed one at a time, Phase 5 Checkpoint 2 | 11 of 11 caught, 2 after adding tests |
+| `npm test`, end of Phase 5 Checkpoint 3 | 800 tests in 47 files pass |
+| `npm run test:db`, end of Phase 5 Checkpoint 3 | 370 tests in 12 files pass, leaving no temporary folders or `mongod` processes |
+| `npm run test:smoke`, end of Phase 5 Checkpoint 3 | 29 tests in 2 files pass |
+| OIDC safeguards removed one at a time, Phase 5 Checkpoint 3 | 8 of 8 caught |
 | Browser flows, Phase 3 (not rerun in Phase 4) | 28 of 28 pass |
 | Keyboard checks | 17 of 17 pass |
 | axe-core, before Checkpoint C | Violations in 13 of 16 states, including one critical (`button-name`) |
@@ -96,6 +101,7 @@ Each log has labelled sections, such as `FIX 2 - RED` followed by `FIX 2 - GREEN
 
 ## What hasn't been verified
 
+- Google sign-in with real Google credentials. No browser has run the Google flow, because it has no button yet.
 - Anything on Atlas or Vercel, including failover and index permissions. Failover errors are only simulated.
 - Rate limits across several server instances. They are known not to work across instances; see §6 of `docs/issue-6-team-review.md`.
 - Isolation of wardrobe and outfit data between users, which needs those routes to exist.
