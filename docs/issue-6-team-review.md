@@ -48,6 +48,8 @@ Once item 1 is settled:
 9. Build the unique indexes explicitly before the first write. Without this, 25 of 25 concurrent registrations for one email succeeded on a fresh database, and the index then couldn't be built.
 10. Add contract tests with the adapters for what the models enforce and the memory repositories don't: malformed user IDs in `createSession` and `revokeAllSessionsForUser`.
 
+**Progress:** `MongoUserRepository` exists and passes the user contract on a temporary MongoDB server, but nothing uses it yet. It doesn't do items 6 and 9 yet: it reports every failure except a duplicate email as `RepositoryError`, outages included, and its tests build the unique index themselves.
+
 ### Accounts that can't be rolled back
 
 MongoDB writes for a new user and its first session aren't one transaction. If the session can't be created, registration deletes the new user. The user can stay signed out with an account in place in these cases:
