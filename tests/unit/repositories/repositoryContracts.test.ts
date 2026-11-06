@@ -2,6 +2,7 @@ import { MemoryUserRepository } from '../../mocks/memoryUserRepository';
 import { MemorySessionRepository } from '../../mocks/memorySessionRepository';
 import { describeUserRepositoryContract } from '../../contracts/userRepositoryContract';
 import { describeSessionRepositoryContract } from '../../contracts/sessionRepositoryContract';
+import { USER_IDS } from '../../contracts/fixtures';
 
 describeUserRepositoryContract('in-memory', {
   newRepository: () => new MemoryUserRepository(),
@@ -10,5 +11,5 @@ describeUserRepositoryContract('in-memory', {
 
 describeSessionRepositoryContract('in-memory', {
   newRepository: () => new MemorySessionRepository(),
-  userIds: ['user_a', 'user_b'],
+  userIds: USER_IDS,
 });
