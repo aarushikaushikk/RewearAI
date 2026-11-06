@@ -1,18 +1,20 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import mongoose from 'mongoose';
 import { connectToDatabase } from '@/lib/db';
+import { IUserRepository } from '@/lib/repositories/userRepository';
 import { MongoAccountRepository } from '@/lib/repositories/mongoAccountRepository';
 import { MongoSessionRepository } from '@/lib/repositories/mongoSessionRepository';
 import { MongoUserRepository } from '@/lib/repositories/mongoUserRepository';
-import {
-  DuplicateAccountError,
-  DuplicateEmailError,
-  DuplicateUserIdError,
-  RepositoryUnavailableError,
-} from '@/lib/repositories/repositoryErrors';
+import { RepositoryUnavailableError } from '@/lib/repositories/repositoryErrors';
 import { Account } from '@/models/Account';
+import { Session } from '@/models/Session';
 import { User } from '@/models/User';
 import { AuthService } from '@/services/authService';
+import {
+  GoogleSignInService,
+  type GoogleSignInResult,
+  type VerifiedGoogleClaims,
+} from '@/services/googleSignInService';
 import { PASSWORD_HASH } from '../contracts/fixtures';
 import { errorFrom } from '../helpers/dbTestTools';
 import {
@@ -25,106 +27,66 @@ const { Collection, MongoNetworkError } = mongoose.mongo;
 
 const users = new MongoUserRepository();
 const accounts = new MongoAccountRepository();
+const sessions = new MongoSessionRepository();
+const service = new GoogleSignInService(users, accounts, sessions);
+const passwordAuth = new AuthService(users, sessions);
 
-interface GoogleIdentity {
-  sub: string;
-  email: string;
-  name?: string;
-}
+const ALEX: VerifiedGoogleClaims = {
+  sub: '108000000000000000001',
+  email: 'alex@example.com',
+  emailVerified: true,
+  name: 'Alex',
+};
+const PASSWORD = 'CorrectHorse123!';
+const REFUSED = { status: 'refused', reason: 'email-in-use' };
 
-type Outcome = { result: 'signed-in'; userId: string } | { result: 'email-in-use' };
-
-/**
- * The write order Checkpoint 2 will implement, kept here until GoogleSignInService
- * exists. It proves that the repositories support these guarantees:
- *
- * - The Account is written first, with a new user ID, so it can never point at an
- *   existing user found by email. A matching email can only ever cause a refusal.
- * - If the User write then fails, the Account points at nothing. It gives no access
- *   and reserves no email, and a retry for the same identity completes it.
- * - A User is only created for an Account that already exists. A refusal in another
- *   request can remove that Account, so each side checks after its own write. Whichever
- *   runs last sees the other's write and restores the link.
- */
-async function restoreLink(sub: string, userId: string): Promise<void> {
-  try {
-    await accounts.create({ userId, provider: 'google', providerAccountId: sub });
-  } catch (err) {
-    if (!(err instanceof DuplicateAccountError)) {
-      throw err;
-    }
-  }
-}
-
-async function signInWithGoogle(identity: GoogleIdentity): Promise<Outcome> {
-  let account = await accounts.findByProvider('google', identity.sub);
-  if (!account) {
-    try {
-      account = await accounts.create({
-        userId: users.newId(),
-        provider: 'google',
-        providerAccountId: identity.sub,
-      });
-    } catch (err) {
-      if (!(err instanceof DuplicateAccountError)) {
-        throw err;
-      }
-      account = await accounts.findByProvider('google', identity.sub);
-      if (!account) {
-        throw err;
-      }
-    }
-  }
-  const { userId } = account;
-
-  if (await users.findById(userId)) {
-    return { result: 'signed-in', userId };
-  }
-  try {
-    await users.createWithoutPassword({ id: userId, email: identity.email, name: identity.name });
-    if ((await accounts.findByProvider('google', identity.sub))?.userId !== userId) {
-      await restoreLink(identity.sub, userId);
-    }
-    return { result: 'signed-in', userId };
-  } catch (err) {
-    if (err instanceof DuplicateUserIdError) {
-      return { result: 'signed-in', userId };
-    }
-    if (!(err instanceof DuplicateEmailError)) {
-      throw err;
-    }
-    // A concurrent request for this identity may have won with the same ID.
-    if (await users.findById(userId)) {
-      return { result: 'signed-in', userId };
-    }
-    await accounts.deleteLink('google', identity.sub, userId);
-    if (await users.findById(userId)) {
-      await restoreLink(identity.sub, userId);
-      return { result: 'signed-in', userId };
-    }
-    return { result: 'email-in-use' };
-  }
-}
-
-const ALEX: GoogleIdentity = { sub: '108000000000000000001', email: 'alex@example.com', name: 'Alex' };
 const count = {
   users: () => User.collection.countDocuments({}),
   accounts: () => Account.collection.countDocuments({}),
+  sessions: () => Session.collection.countDocuments({}),
 };
 
-/** Every Account points at a real User, and every passwordless User has an Account. */
-async function expectConsistent() {
+const idOf = (result: GoogleSignInResult) => (result.status === 'signed-in' ? result.user.id : null);
+
+/**
+ * The guarantees, which must hold whatever order requests ran in:
+ * - Every passwordless user has an Account pointing at it, so none is ever stranded.
+ * - No Account points at a user with a password, so nothing was linked by email.
+ * An Account with no user is allowed: it gives no access and reserves no email.
+ */
+async function expectInvariants() {
   const allAccounts = await Account.collection.find({}).toArray();
   const allUsers = await User.collection.find({}).toArray();
-  const userIds = allUsers.map((u) => u._id.toString());
-  const linkedIds = allAccounts.map((a) => a.userId.toString());
+  const linked = new Set(allAccounts.map((a) => a.userId.toString()));
 
-  expect(linkedIds.filter((id) => !userIds.includes(id))).toEqual([]);
   expect(
-    allUsers
-      .filter((u) => u.passwordHash === null && !linkedIds.includes(u._id.toString()))
-      .map((u) => u.email),
+    allUsers.filter((u) => u.passwordHash === null && !linked.has(u._id.toString())).map((u) => u.email),
   ).toEqual([]);
+  expect(
+    allUsers.filter((u) => u.passwordHash !== null && linked.has(u._id.toString())).map((u) => u.email),
+  ).toEqual([]);
+}
+
+/** A user repository whose next passwordless write waits until released. */
+function holdUserWrite() {
+  let reached: () => void = () => undefined;
+  let release: () => void = () => undefined;
+  const atWrite = new Promise<void>((resolve) => (reached = resolve));
+  const released = new Promise<void>((resolve) => (release = resolve));
+
+  const held: IUserRepository = {
+    findByEmail: (email) => users.findByEmail(email),
+    findById: (id) => users.findById(id),
+    create: (data) => users.create(data),
+    deleteById: (id) => users.deleteById(id),
+    newId: () => users.newId(),
+    createWithoutPassword: async (data) => {
+      reached();
+      await released;
+      return users.createWithoutPassword(data);
+    },
+  };
+  return { repo: held, atWrite, release };
 }
 
 let server: MongoTestServer;
@@ -149,94 +111,110 @@ afterEach(() => {
 
 describe('a new Google identity', () => {
   it('creates one passwordless user and one link to it', async () => {
-    const outcome = await signInWithGoogle(ALEX);
+    const id = idOf(await service.signIn(ALEX));
 
-    expect(outcome.result).toBe('signed-in');
     const user = await User.collection.findOne({ email: ALEX.email });
+    expect(user?._id.toString()).toBe(id);
     expect(user?.passwordHash).toBeNull();
     const account = await Account.collection.findOne({ providerAccountId: ALEX.sub });
-    expect(account?.userId.toString()).toBe(user?._id.toString());
-    await expectConsistent();
+    expect(account?.userId.toString()).toBe(id);
+    await expectInvariants();
   });
 
   it('returns to the same user next time, by identity rather than email', async () => {
-    const first = await signInWithGoogle(ALEX);
+    const first = idOf(await service.signIn(ALEX));
 
-    const second = await signInWithGoogle({ ...ALEX, email: 'renamed@example.com' });
+    const second = idOf(await service.signIn({ ...ALEX, email: 'renamed@example.com' }));
 
-    expect(second).toEqual(first);
+    expect(second).toBe(first);
     expect(await count.users()).toBe(1);
     expect(await count.accounts()).toBe(1);
     expect(await User.collection.countDocuments({ email: ALEX.email })).toBe(1);
   });
 
+  it('stores only the hash of the session token', async () => {
+    const result = await service.signIn(ALEX);
+    const token = result.status === 'signed-in' ? result.sessionToken : '';
+
+    const stored = await Session.collection.find({}).toArray();
+
+    expect(stored).toHaveLength(1);
+    expect(stored[0].tokenHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(JSON.stringify(stored)).not.toContain(token);
+  });
+
   it('cannot use password sign-in', async () => {
-    await signInWithGoogle(ALEX);
-    const service = new AuthService(users, new MongoSessionRepository());
+    await service.signIn(ALEX);
 
     await expect(
-      service.login({ email: ALEX.email, password: 'AnyPassword123!' }),
+      passwordAuth.login({ email: ALEX.email, password: 'AnyPassword123!' }),
     ).rejects.toMatchObject({ code: 'INVALID_CREDENTIALS' });
   });
 });
 
 describe('an email that already has an account is never linked', () => {
   it('refuses a password account, leaving it unchanged and working', async () => {
-    const service = new AuthService(users, new MongoSessionRepository());
-    const password = 'CorrectHorse123!';
-    await service.register({ email: ALEX.email, password });
+    await passwordAuth.register({ email: ALEX.email, password: PASSWORD });
     const before = await User.collection.findOne({ email: ALEX.email });
 
-    const outcome = await signInWithGoogle(ALEX);
+    expect(await service.signIn(ALEX)).toEqual(REFUSED);
 
-    expect(outcome).toEqual({ result: 'email-in-use' });
     expect(await count.accounts()).toBe(0);
     expect(await User.collection.findOne({ email: ALEX.email })).toEqual(before);
-    await expect(service.login({ email: ALEX.email, password })).resolves.toBeDefined();
+    await expect(passwordAuth.login({ email: ALEX.email, password: PASSWORD })).resolves.toBeDefined();
   });
 
   it('refuses a passwordless user with no link, leaving it unchanged', async () => {
     const existing = await users.createWithoutPassword({ id: users.newId(), email: ALEX.email });
 
-    const outcome = await signInWithGoogle(ALEX);
+    expect(await service.signIn(ALEX)).toEqual(REFUSED);
 
-    expect(outcome).toEqual({ result: 'email-in-use' });
     expect(await count.accounts()).toBe(0);
     expect(await count.users()).toBe(1);
+    expect(await count.sessions()).toBe(0);
     expect((await users.findByEmail(ALEX.email))?.id).toBe(existing.id);
   });
 
   it('refuses a second Google identity with the email of a linked user', async () => {
-    const first = await signInWithGoogle(ALEX);
+    const first = idOf(await service.signIn(ALEX));
 
-    const second = await signInWithGoogle({ ...ALEX, sub: '108000000000000000002' });
+    expect(await service.signIn({ ...ALEX, sub: '108000000000000000002' })).toEqual(REFUSED);
 
-    expect(second).toEqual({ result: 'email-in-use' });
     expect(await count.accounts()).toBe(1);
-    expect((await accounts.findByProvider('google', ALEX.sub))?.userId).toBe(
-      first.result === 'signed-in' ? first.userId : '',
-    );
-    await expectConsistent();
+    expect((await accounts.findByProvider('google', ALEX.sub))?.userId).toBe(first);
+    await expectInvariants();
   });
 
-  it('never points an Account at an existing user, even at the moment of refusal', async () => {
-    const existing = await users.create({ email: ALEX.email, passwordHash: PASSWORD_HASH });
-    const create = vi.spyOn(accounts, 'create');
+  it('creates no session for the user the email check finds', async () => {
+    await users.create({ email: ALEX.email, passwordHash: PASSWORD_HASH });
 
-    await signInWithGoogle(ALEX);
+    await service.signIn(ALEX);
 
-    expect(create).toHaveBeenCalledTimes(1);
-    expect(create.mock.calls[0][0].userId).not.toBe(existing.id);
+    expect(await count.sessions()).toBe(0);
   });
 });
 
 describe('partial failures', () => {
   const outage = () => new MongoNetworkError('down');
 
-  it('writes nothing when the Account write fails', async () => {
-    vi.spyOn(Collection.prototype, 'insertOne').mockRejectedValueOnce(outage());
+  function failInsertInto(collectionName: string) {
+    const insertOne = Collection.prototype.insertOne;
+    return vi.spyOn(Collection.prototype, 'insertOne').mockImplementation(function (
+      this: InstanceType<typeof Collection>,
+      ...args: Parameters<typeof insertOne>
+    ) {
+      if (this.collectionName === collectionName) {
+        return Promise.reject(outage());
+      }
+      return insertOne.apply(this, args);
+    });
+  }
 
-    const err = await errorFrom(() => signInWithGoogle(ALEX));
+  it('writes nothing when the Account write fails', async () => {
+    const insert = failInsertInto('accounts');
+
+    const err = await errorFrom(() => service.signIn(ALEX));
+    insert.mockRestore();
 
     expect(err).toBeInstanceOf(RepositoryUnavailableError);
     expect(await count.users()).toBe(0);
@@ -244,186 +222,278 @@ describe('partial failures', () => {
   });
 
   describe('when the User write fails after the Account write', () => {
-    async function failAfterAccountWrite() {
-      const insertOne = Collection.prototype.insertOne;
-      vi.spyOn(Collection.prototype, 'insertOne').mockImplementation(function (
-        this: InstanceType<typeof Collection>,
-        ...args: Parameters<typeof insertOne>
-      ) {
-        if (this.collectionName === 'users') {
-          return Promise.reject(outage());
-        }
-        return insertOne.apply(this, args);
-      });
-      const err = await errorFrom(() => signInWithGoogle(ALEX));
-      vi.mocked(Collection.prototype.insertOne).mockRestore();
+    async function interrupt() {
+      const insert = failInsertInto('users');
+      const err = await errorFrom(() => service.signIn(ALEX));
+      insert.mockRestore();
       return err;
     }
 
-    it('leaves no User, so nothing can sign in and no email is reserved', async () => {
-      const err = await failAfterAccountWrite();
+    it('leaves a pending link that gives no access and reserves no email', async () => {
+      expect(await interrupt()).toBeInstanceOf(RepositoryUnavailableError);
 
-      expect(err).toBeInstanceOf(RepositoryUnavailableError);
       expect(await count.accounts()).toBe(1);
       expect(await count.users()).toBe(0);
+      expect(await count.sessions()).toBe(0);
       expect(await users.findByEmail(ALEX.email)).toBeNull();
     });
 
     it('completes with the same user ID on retry', async () => {
-      await failAfterAccountWrite();
-      const orphan = await accounts.findByProvider('google', ALEX.sub);
+      await interrupt();
+      const pending = await accounts.findByProvider('google', ALEX.sub);
 
-      const outcome = await signInWithGoogle(ALEX);
+      expect(idOf(await service.signIn(ALEX))).toBe(pending?.userId);
 
-      expect(outcome).toEqual({ result: 'signed-in', userId: orphan?.userId });
       expect(await count.users()).toBe(1);
       expect(await count.accounts()).toBe(1);
-      await expectConsistent();
+      await expectInvariants();
     });
 
-    it('lets someone else register that email meanwhile, then refuses and cleans up', async () => {
-      await failAfterAccountWrite();
+    it('lets someone else register that email meanwhile, and then refuses', async () => {
+      await interrupt();
+      const pending = await accounts.findByProvider('google', ALEX.sub);
 
-      const service = new AuthService(users, new MongoSessionRepository());
-      await service.register({ email: ALEX.email, password: 'CorrectHorse123!' });
-      const outcome = await signInWithGoogle(ALEX);
+      await passwordAuth.register({ email: ALEX.email, password: PASSWORD });
 
-      expect(outcome).toEqual({ result: 'email-in-use' });
-      expect(await count.accounts()).toBe(0);
+      expect(await service.signIn(ALEX)).toEqual(REFUSED);
       expect(await count.users()).toBe(1);
-      await expectConsistent();
+      expect((await accounts.findByProvider('google', ALEX.sub))?.userId).toBe(pending?.userId);
+      await expect(passwordAuth.login({ email: ALEX.email, password: PASSWORD })).resolves.toBeDefined();
+      await expectInvariants();
+    });
+
+    it('finishes later if that email becomes free again', async () => {
+      await interrupt();
+      const holder = await users.create({ email: ALEX.email, passwordHash: PASSWORD_HASH });
+      expect(await service.signIn(ALEX)).toEqual(REFUSED);
+
+      await users.deleteById(holder.id);
+
+      expect(idOf(await service.signIn(ALEX))).toBeTruthy();
+      await expectInvariants();
     });
   });
 
-  describe('when removing the Account after a refusal also fails', () => {
-    beforeEach(async () => {
-      await users.create({ email: ALEX.email, passwordHash: PASSWORD_HASH });
-      vi.spyOn(Collection.prototype, 'deleteOne').mockRejectedValueOnce(outage());
-    });
+  it('keeps a new account when its session fails, and a retry signs in to it', async () => {
+    const insert = failInsertInto('sessions');
 
-    it('reports the failure and links nothing', async () => {
-      const err = await errorFrom(() => signInWithGoogle(ALEX));
+    const err = await errorFrom(() => service.signIn(ALEX));
+    insert.mockRestore();
 
-      expect(err).toBeInstanceOf(RepositoryUnavailableError);
-      const orphan = await accounts.findByProvider('google', ALEX.sub);
-      const existing = await users.findByEmail(ALEX.email);
-      expect(orphan?.userId).not.toBe(existing?.id);
-    });
+    expect(err).toBeInstanceOf(RepositoryUnavailableError);
+    expect(await count.users()).toBe(1);
+    expect(await count.accounts()).toBe(1);
 
-    it('refuses again on retry, and this time cleans up', async () => {
-      await errorFrom(() => signInWithGoogle(ALEX));
-
-      expect(await signInWithGoogle(ALEX)).toEqual({ result: 'email-in-use' });
-
-      expect(await count.accounts()).toBe(0);
-      await expectConsistent();
-    });
+    expect(idOf(await service.signIn(ALEX))).toBe((await users.findByEmail(ALEX.email))?.id);
+    expect(await count.users()).toBe(1);
+    expect(await count.sessions()).toBe(1);
+    await expectInvariants();
   });
 });
 
-describe('a refusal racing a request that finishes the same identity', () => {
-  // These reproduce an exact order of events. A password registration holds the email, so
-  // one request is refused and removes the link. The registration then rolls back, which
-  // frees the email for a second request with the same identity to write the User.
-  async function orphanWithEmailHeldByAnotherUser() {
+describe('the three-way race', () => {
+  // The sequence that stranded a user in Checkpoint 1's design:
+  //   B finds the pending link and pauses just before writing the User.
+  //   A is refused, because a password registration holds the email.
+  //   The registration rolls back, which frees the email.
+  //   C starts while the email is free, and pauses just before writing the User.
+  //   B and C then finish, in either order.
+  async function runRace(finishFirst: 'B' | 'C') {
     const holder = await users.create({ email: ALEX.email, passwordHash: PASSWORD_HASH });
-    const account = await accounts.create({
+    const pending = await accounts.create({
       userId: users.newId(),
       provider: 'google',
       providerAccountId: ALEX.sub,
     });
-    return { holder, userId: account.userId };
+
+    const heldB = holdUserWrite();
+    const b = new GoogleSignInService(heldB.repo, accounts, sessions).signIn(ALEX);
+    await heldB.atWrite;
+
+    const a = await service.signIn(ALEX);
+
+    await users.deleteById(holder.id);
+
+    const heldC = holdUserWrite();
+    const c = new GoogleSignInService(heldC.repo, accounts, sessions).signIn(ALEX);
+    await heldC.atWrite;
+
+    const [first, second] = finishFirst === 'B' ? [heldB, heldC] : [heldC, heldB];
+    const [firstResult, secondResult] = finishFirst === 'B' ? [b, c] : [c, b];
+    first.release();
+    await firstResult.catch(() => undefined);
+    second.release();
+    await secondResult.catch(() => undefined);
+
+    return { a, b: await b, c: await c, pendingUserId: pending.userId };
   }
 
-  it('restores the link if the User appears just as the refusal removes it', async () => {
-    const { holder, userId } = await orphanWithEmailHeldByAnotherUser();
-    const deleteLink = accounts.deleteLink.bind(accounts);
-    vi.spyOn(accounts, 'deleteLink').mockImplementationOnce(async (...args) => {
-      const removed = await deleteLink(...args);
-      await users.deleteById(holder.id);
-      await users.createWithoutPassword({ id: userId, email: ALEX.email });
-      return removed;
-    });
+  it.each(['B', 'C'] as const)('leaves no stranded user when %s finishes first', async (order) => {
+    const { a, b, c } = await runRace(order);
 
-    const outcome = await signInWithGoogle(ALEX);
-
-    expect(outcome).toEqual({ result: 'signed-in', userId });
-    await expectConsistent();
-    expect(await count.accounts()).toBe(1);
+    expect(a).toEqual(REFUSED);
+    expect(idOf(b)).toBeTruthy();
+    expect(idOf(c)).toBe(idOf(b));
+    expect(await count.users()).toBe(1);
+    await expectInvariants();
   });
 
-  it('restores the link if the refusal removes it just after the User is written', async () => {
-    const { userId } = await accounts
-      .create({ userId: users.newId(), provider: 'google', providerAccountId: ALEX.sub })
-      .then((account) => ({ userId: account.userId }));
-    const createUser = users.createWithoutPassword.bind(users);
-    vi.spyOn(users, 'createWithoutPassword').mockImplementationOnce(async (data) => {
-      const created = await createUser(data);
-      await accounts.deleteLink('google', ALEX.sub, userId);
-      return created;
-    });
+  it.each(['B', 'C'] as const)('lets that person sign in afterwards when %s finishes first', async (order) => {
+    const { b } = await runRace(order);
 
-    const outcome = await signInWithGoogle(ALEX);
-
-    expect(outcome).toEqual({ result: 'signed-in', userId });
-    await expectConsistent();
-    expect(await count.accounts()).toBe(1);
+    expect(idOf(await service.signIn(ALEX))).toBe(idOf(b));
+    await expectInvariants();
   });
-});
 
-describe('a user deleted while the link remains', () => {
-  // Records the behaviour that any future account deletion must plan for.
-  it('is recreated with the same ID by the next sign-in', async () => {
-    const first = await signInWithGoogle(ALEX);
-    const userId = first.result === 'signed-in' ? first.userId : '';
-    await users.deleteById(userId);
+  it('never removes a link during any of this', async () => {
+    const deleteLink = vi.spyOn(accounts, 'deleteLink');
 
-    expect(await signInWithGoogle(ALEX)).toEqual({ result: 'signed-in', userId });
+    await runRace('B');
+
+    expect(deleteLink).not.toHaveBeenCalled();
+  });
+
+  it('does not refuse a request whose own identity just won the email', async () => {
+    // This request looks for a link before another request for its identity has written
+    // one, and then finds that request's User when it checks the email.
+    const first = await service.signIn(ALEX);
+    vi.spyOn(accounts, 'findByProvider').mockResolvedValueOnce(null);
+
+    const second = await service.signIn(ALEX);
+
+    expect(idOf(second)).toBe(idOf(first));
   });
 });
 
-describe('concurrent requests', () => {
+describe('overlapping requests', () => {
   it('creates one user and one link for 25 requests from one identity', async () => {
-    const outcomes = await Promise.all(Array.from({ length: 25 }, () => signInWithGoogle(ALEX)));
+    const outcomes = await Promise.all(Array.from({ length: 25 }, () => service.signIn(ALEX)));
 
-    const signedIn = new Set(outcomes.map((o) => (o.result === 'signed-in' ? o.userId : o.result)));
-    expect(signedIn.size).toBe(1);
-    expect(signedIn.has('email-in-use')).toBe(false);
+    expect(new Set(outcomes.map(idOf)).size).toBe(1);
+    expect(outcomes.every((o) => o.status === 'signed-in')).toBe(true);
     expect(await count.users()).toBe(1);
     expect(await count.accounts()).toBe(1);
-    await expectConsistent();
+    expect(await count.sessions()).toBe(25);
+    await expectInvariants();
   });
 
   it('lets one of several identities with one email win, and refuses the rest', async () => {
     const outcomes = await Promise.all(
       Array.from({ length: 10 }, (_, i) =>
-        signInWithGoogle({ ...ALEX, sub: `10800000000000000010${i}` }),
+        service.signIn({ ...ALEX, sub: `10800000000000000010${i}` }),
       ),
     );
 
-    expect(outcomes.filter((o) => o.result === 'signed-in')).toHaveLength(1);
-    expect(outcomes.filter((o) => o.result === 'email-in-use')).toHaveLength(9);
+    expect(outcomes.filter((o) => o.status === 'signed-in')).toHaveLength(1);
+    expect(outcomes.filter((o) => o.status === 'refused')).toHaveLength(9);
     expect(await count.users()).toBe(1);
-    expect(await count.accounts()).toBe(1);
-    await expectConsistent();
+    await expectInvariants();
   });
 
   it('keeps one consistent account when Google and password sign-up race', async () => {
-    const service = new AuthService(users, new MongoSessionRepository());
-
     for (let round = 0; round < 5; round += 1) {
       await clearTestDatabase(server);
 
       const [google, password] = await Promise.allSettled([
-        signInWithGoogle(ALEX),
-        service.register({ email: ALEX.email, password: 'CorrectHorse123!' }),
+        service.signIn(ALEX),
+        passwordAuth.register({ email: ALEX.email, password: PASSWORD }),
       ]);
 
       expect(await count.users()).toBe(1);
-      await expectConsistent();
-      const googleWon = google.status === 'fulfilled' && google.value.result === 'signed-in';
+      await expectInvariants();
+      const googleWon = google.status === 'fulfilled' && google.value.status === 'signed-in';
       expect(googleWon).toBe(password.status === 'rejected');
-      expect(await count.accounts()).toBe(googleWon ? 1 : 0);
+    }
+  });
+
+  describe('with randomized timing', () => {
+    /** Adds a small delay before each call, so requests interleave differently each round. */
+    function jittered<T extends object>(repo: T, random: () => number): T {
+      return new Proxy(repo, {
+        get(target, key) {
+          const value = Reflect.get(target, key);
+          if (typeof value !== 'function' || key === 'newId') {
+            return typeof value === 'function' ? value.bind(target) : value;
+          }
+          return async (...args: unknown[]) => {
+            await new Promise((resolve) => setTimeout(resolve, random() * 6));
+            return value.apply(target, args);
+          };
+        },
+      });
+    }
+
+    function seeded(seed: number) {
+      let state = seed;
+      return () => {
+        state = (state * 1664525 + 1013904223) % 4294967296;
+        return state / 4294967296;
+      };
+    }
+
+    it('holds the guarantees when sign-ins overlap with a registration that rolls back', async () => {
+      for (let round = 0; round < 25; round += 1) {
+        await clearTestDatabase(server);
+        const random = seeded(round + 1);
+        const slowUsers = jittered(users, random);
+        const slowAccounts = jittered(accounts, random);
+        const google = new GoogleSignInService(slowUsers, slowAccounts, sessions);
+        // Every other round, the registration's session fails, so it rolls back and frees the email.
+        const registrationSessions = new MongoSessionRepository();
+        if (round % 2 === 0) {
+          vi.spyOn(registrationSessions, 'createSession').mockRejectedValueOnce(new Error('failed'));
+        }
+        const registration = new AuthService(slowUsers, registrationSessions);
+
+        const [, ...signIns] = await Promise.allSettled([
+          registration.register({ email: ALEX.email, password: PASSWORD }),
+          google.signIn(ALEX),
+          google.signIn(ALEX),
+          google.signIn(ALEX),
+          google.signIn(ALEX),
+          google.signIn({ ...ALEX, sub: '108000000000000000002' }),
+        ]);
+
+        await expectInvariants();
+        expect(await User.collection.countDocuments({ email: ALEX.email })).toBeLessThanOrEqual(1);
+
+        // Everyone who signed in with one identity reached the same user.
+        const ids = new Set(
+          signIns
+            .slice(0, 4)
+            .flatMap((r) => (r.status === 'fulfilled' && idOf(r.value) ? [idOf(r.value)] : [])),
+        );
+        expect(ids.size).toBeLessThanOrEqual(1);
+
+        // Nothing is stuck: a retry signs in, or is refused because someone holds the email.
+        const retry = await service.signIn(ALEX);
+        if (retry.status === 'refused') {
+          expect(await users.findByEmail(ALEX.email)).not.toBeNull();
+        }
+        await expectInvariants();
+      }
+    }, 120_000);
+  });
+});
+
+describe('logs', () => {
+  it('holds no token, identity, email, or name through success, refusal, and failure', async () => {
+    const logged = vi.mocked(console.error);
+    const info = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    const result = await service.signIn(ALEX);
+    await service.signIn({ ...ALEX, sub: '108000000000000000002' });
+    await service.signIn({ ...ALEX, emailVerified: false });
+    vi.spyOn(Collection.prototype, 'findOne').mockRejectedValueOnce(
+      new MongoNetworkError(`${ALEX.sub} ${ALEX.email} ${ALEX.name}`),
+    );
+    await errorFrom(() => service.signIn(ALEX));
+
+    const output = JSON.stringify([logged.mock.calls, info.mock.calls, warn.mock.calls]);
+    const token = result.status === 'signed-in' ? result.sessionToken : 'missing';
+    for (const secret of [token, ALEX.sub, '108000000000000000002', ALEX.email, 'Alex']) {
+      expect(output).not.toContain(secret);
     }
   });
 });
