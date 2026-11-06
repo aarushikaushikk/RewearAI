@@ -5,7 +5,7 @@ by the tests until Step 8, and the repository isn't connected to the app until S
 === RED (commit a611f98): the repository doesn't exist yet ===
 npm run test:db (exit 1):
  FAIL  tests/db/mongoUserRepository.test.ts [ tests/db/mongoUserRepository.test.ts ]
-Error: Cannot find module '@/lib/repositories/mongoUserRepository' imported from 'C:/Users/prana/Documents/RewearAI/tests/db/mongoUserRepository.test.ts'.
+Error: Cannot find module '@/lib/repositories/mongoUserRepository' imported from 'tests/db/mongoUserRepository.test.ts'.
  Test Files  1 failed | 2 passed (3)
       Tests  13 passed (13)
 
