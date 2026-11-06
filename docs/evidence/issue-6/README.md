@@ -1,12 +1,12 @@
 # Issue #6 (Account and Sign-In): test evidence
 
-Evidence for Phase 3 Checkpoints B and C, Phase 4 Checkpoint B, and Phase 4C Steps 2 and 3 of User Story 1. **No check in this folder ran against Atlas or exercised sign-in on a real database.** Step 3 tests only the test infrastructure, on a temporary local MongoDB server. MongoDB integration is still pending, and the production service fails closed until it arrives.
+Evidence for Phase 3 Checkpoints B and C, Phase 4 Checkpoint B, and Phase 4C Steps 2 to 4 of User Story 1. **No check in this folder ran against Atlas or exercised sign-in on a real database.** Step 3 tests only the test infrastructure, on a temporary local MongoDB server. MongoDB integration is still pending, and the production service fails closed until it arrives.
 
 ## What was tested, and how
 
 | Evidence | Files | Auth backend | Runs in CI-style `npm test`? |
 |---|---|---|---|
-| Unit and integration tests (Vitest) | `checkpoint-b-red-green.txt`, `checkpoint-c-red-green.txt`, `phase-4-checkpoint-b-red-green.txt`, `phase-4c-step-2-red-green.txt` | In-memory repositories from `tests/mocks/`, mocked `fetch` and router for components, or the Mongoose models' `validate()` with no connection | Yes |
+| Unit and integration tests (Vitest) | `checkpoint-b-red-green.txt`, `checkpoint-c-red-green.txt`, `phase-4-checkpoint-b-red-green.txt`, `phase-4c-step-2-red-green.txt`, `phase-4c-step-4-red-green.txt` | In-memory repositories from `tests/mocks/`, mocked `fetch` and router for components, or the Mongoose models' `validate()` with no connection | Yes |
 | Test server isolation (Vitest, `npm run test:db`) | `phase-4c-step-3-red-green.txt` | None: no auth code runs. Temporary `mongod` on `127.0.0.1` | No, separate command |
 | Real build smoke test (curl against `next start`) | Reported in the checkpoint summaries | None: the real fail-closed factory, so login returns 503 | No, run by hand |
 | Browser flows (headless Chrome) | `checkpoint-b-browser-flows.txt`, `checkpoint-c-browser-flows.txt` | **In-memory stub** | No, one-off script |
@@ -31,6 +31,9 @@ The browser checks needed a working sign-in, which production code can't provide
 | `npm test`, end of Phase 4C Step 3 | 608 tests in 41 files pass |
 | `npm run test:db`, end of Phase 4C Step 3 | 13 tests in 2 files pass |
 | Test server safeguards removed one at a time, Phase 4C Step 3 | 11 of 11 caught by the tests |
+| `npm test`, end of Phase 4C Step 4 | 618 tests in 42 files pass |
+| `npm run test:db`, end of Phase 4C Step 4 | 13 tests in 2 files pass |
+| Password hash safeguards removed one at a time, Phase 4C Step 4 | 9 of 9 caught, 8 by the tests and 1 by `tsc` |
 | Browser flows, Phase 3 (not rerun in Phase 4) | 28 of 28 pass |
 | Keyboard checks | 17 of 17 pass |
 | axe-core, before Checkpoint C | Violations in 13 of 16 states, including one critical (`button-name`) |
@@ -50,6 +53,7 @@ Each log has labelled sections, such as `FIX 2 - RED` followed by `FIX 2 - GREEN
   - `TASK 3a` has two green runs. The first still failed, because the first draft of `RepositoryError` accepted a message that could have carried driver text.
   - The page outage tests passed on their first run, so they have no red run. They record behaviour that already worked.
 - `phase-4c-step-2-red-green.txt` has one red and one green section. The new contract test for a null password hash passed on its first run, so it isn't in the red section.
+- `phase-4c-step-4-red-green.txt` has one red and one green section. The other 6 new tests passed on their first run, because they record behaviour that already worked.
 
 ## What only real database integration can verify
 

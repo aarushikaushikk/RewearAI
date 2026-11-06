@@ -44,9 +44,9 @@ Once item 1 is settled:
 5. Throw `DuplicateEmailError` (`src/lib/repositories/repositoryErrors.ts`) for code 11000 on the email index only. `AuthService.register` no longer looks at message text, so this is the only way to get a 409.
 6. Throw `RepositoryUnavailableError` for connection failures, including `DatabaseConnectionError`; the routes turn it into a 503 that doesn't count toward rate limits. Throw `RepositoryError` for other database failures, which become a generic 500. Never forward driver errors: their messages can contain the database host and user emails.
 7. Run the adapters through the shared suites in `tests/contracts/`. Their fixtures now pass the real models, checked by `tests/unit/repositories/contractFixtures.test.ts`.
-8. Keep `null` and `undefined` distinct for `passwordHash`: `null` means the account has no password, and `undefined` means the field wasn't loaded. `findByEmail` loads it with `.select("+passwordHash")` and returns `null` for an account with no password. `findById` won't load it, and its return type will leave the field out, so an unloaded hash can't be mistaken for `null`.
+8. Keep `null` and `undefined` distinct for `passwordHash`: `null` means the account has no password, and `undefined` means the field wasn't loaded. `findByEmail` loads it with `.select("+passwordHash")` and returns `null` for an account with no password. `findById` must not load it, and its return type (`UserWithoutPassword`) leaves the field out, so an unloaded hash can't be mistaken for `null`. TypeScript doesn't stop an implementation returning extra fields, so map the fields explicitly; the contract suite checks this at runtime.
 9. Build the unique indexes explicitly before the first write. Without this, 25 of 25 concurrent registrations for one email succeeded on a fresh database, and the index then couldn't be built.
-10. Add contract tests with the adapters for what the models enforce and the memory repositories don't: `findById` omitting the hash, and malformed user IDs in `createSession` and `revokeAllSessionsForUser`.
+10. Add contract tests with the adapters for what the models enforce and the memory repositories don't: malformed user IDs in `createSession` and `revokeAllSessionsForUser`.
 
 ### Accounts that can't be rolled back
 

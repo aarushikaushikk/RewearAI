@@ -7,6 +7,9 @@ export interface UserRecord {
   updatedAt: Date;
 }
 
+// A user loaded without credentials, for everything except checking a password
+export type UserWithoutPassword = Omit<UserRecord, 'passwordHash'>;
+
 export interface CreateUserDTO {
   email: string;
   passwordHash: string;

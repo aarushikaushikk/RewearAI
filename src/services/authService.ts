@@ -5,7 +5,7 @@ import {
   RepositoryUnavailableError,
 } from '@/lib/repositories/repositoryErrors';
 import { RegisterInput, LoginInput } from '@/types/auth';
-import { SafeUser, UserRecord } from '@/types/user';
+import { SafeUser, UserRecord, UserWithoutPassword } from '@/types/user';
 import { SessionRecord } from '@/types/session';
 import {
   normalizeEmail,
@@ -38,7 +38,7 @@ export interface AuthResult {
   expiresAt: Date;
 }
 
-export function toSafeUser(user: UserRecord): SafeUser {
+export function toSafeUser(user: UserWithoutPassword): SafeUser {
   return {
     id: user.id,
     email: user.email,

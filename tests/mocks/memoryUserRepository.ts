@@ -1,6 +1,6 @@
 import { IUserRepository } from '@/lib/repositories/userRepository';
 import { DuplicateEmailError } from '@/lib/repositories/repositoryErrors';
-import { UserRecord, CreateUserDTO } from '@/types/user';
+import { UserRecord, UserWithoutPassword, CreateUserDTO } from '@/types/user';
 
 export class MemoryUserRepository implements IUserRepository {
   private users: UserRecord[] = [];
@@ -12,9 +12,19 @@ export class MemoryUserRepository implements IUserRepository {
     return user ? { ...user } : null;
   }
 
-  async findById(id: string): Promise<UserRecord | null> {
+  async findById(id: string): Promise<UserWithoutPassword | null> {
     const user = this.users.find((u) => u.id === id);
-    return user ? { ...user } : null;
+    if (!user) {
+      return null;
+    }
+    // Copied field by field, because the type alone wouldn't remove the hash at runtime.
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+    };
   }
 
   async create(data: CreateUserDTO): Promise<UserRecord> {
