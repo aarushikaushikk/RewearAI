@@ -243,7 +243,7 @@ describe('MongoUserRepository on a real database', () => {
       ['a prefixed ID', 'user_1'],
       ['free text', 'not-an-id'],
       ['an empty string', ''],
-      ['12 characters, which Mongoose would otherwise accept', '123456789012'],
+      ['12 characters, which Mongoose documents as a valid ID', '123456789012'],
       ['24 characters that are not hex', 'z'.repeat(24)],
       ['a valid ID with trailing text', `${UNKNOWN_ID}x`],
       ['a query operator as text', '{"$ne":null}'],
@@ -376,7 +376,7 @@ describe('MongoUserRepository on a real database', () => {
     it('runs on the temporary database only', async () => {
       expect(mongoose.connection.host).toBe('127.0.0.1');
       expect(mongoose.connection.name).toBe(server.dbName);
-      expect(User.collection.dbName).toBe(server.dbName);
+      expect(User.db.name).toBe(server.dbName);
     });
 
     it('leaves another database on the same server untouched', async () => {
