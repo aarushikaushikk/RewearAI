@@ -10,7 +10,7 @@ const FIELDS_WITHOUT_PASSWORD = 'email name createdAt updatedAt';
 
 export class MongoUserRepository implements IUserRepository {
   async findByEmail(email: string): Promise<UserRecord | null> {
-    return withDatabase(async () => {
+    return withDatabase('user.findByEmail', async () => {
       const user = await User.findOne({ email: normalizeEmail(email) })
         .select('+passwordHash')
         .lean();
@@ -33,7 +33,7 @@ export class MongoUserRepository implements IUserRepository {
     if (!isObjectIdString(id)) {
       return null;
     }
-    return withDatabase(async () => {
+    return withDatabase('user.findById', async () => {
       const user = await User.findById(id).select(FIELDS_WITHOUT_PASSWORD).lean();
       if (!user) {
         return null;
@@ -49,7 +49,7 @@ export class MongoUserRepository implements IUserRepository {
   }
 
   async create(data: CreateUserDTO): Promise<UserRecord> {
-    return withDatabase(async () => {
+    return withDatabase('user.create', async () => {
       const user = await User.create({
         email: normalizeEmail(data.email),
         passwordHash: data.passwordHash,
@@ -70,7 +70,7 @@ export class MongoUserRepository implements IUserRepository {
     if (!isObjectIdString(id)) {
       return false;
     }
-    return withDatabase(async () => {
+    return withDatabase('user.deleteById', async () => {
       const { deletedCount } = await User.deleteOne({ _id: id });
       return deletedCount === 1;
     });

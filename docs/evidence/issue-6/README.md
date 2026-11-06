@@ -1,6 +1,6 @@
 # Issue #6 (Account and Sign-In): test evidence
 
-Evidence for Phase 3 Checkpoints B and C, Phase 4 Checkpoint B, and Phase 4C Steps 2 to 6 of User Story 1. **No check in this folder ran against Atlas.** Step 3 tests the test infrastructure, and Steps 5 and 6 test the repositories, all on a temporary local MongoDB server. The production service isn't connected to either and still fails closed.
+Evidence for Phase 3 Checkpoints B and C, Phase 4 Checkpoint B, and Phase 4C Steps 2 to 7 of User Story 1. **No check in this folder ran against Atlas.** Step 3 tests the test infrastructure, and Steps 5 to 7 test the repositories, all on a temporary local MongoDB server. The production service isn't connected to either and still fails closed.
 
 ## What was tested, and how
 
@@ -10,6 +10,7 @@ Evidence for Phase 3 Checkpoints B and C, Phase 4 Checkpoint B, and Phase 4C Ste
 | Test server isolation (Vitest, `npm run test:db`) | `phase-4c-step-3-red-green.txt` | None: no auth code runs. Temporary `mongod` on `127.0.0.1` | No, separate command |
 | User repository on real MongoDB (Vitest, `npm run test:db`) | `phase-4c-step-5-red-green.txt` | `MongoUserRepository` on a temporary `mongod`. Sessions are in memory where `AuthService` is used | No, separate command |
 | Session repository on real MongoDB (Vitest, `npm run test:db`) | `phase-4c-step-6-red-green.txt` | `MongoSessionRepository` and `MongoUserRepository` on a temporary `mongod` | No, separate command |
+| Repository failures (Vitest, both commands) | `phase-4c-step-7-red-green.txt` | Both repositories on a temporary `mongod`, with driver failures simulated, then the server shut down | Mapping rules only; the rest is a separate command |
 | Real build smoke test (curl against `next start`) | Reported in the checkpoint summaries | None: the real fail-closed factory, so login returns 503 | No, run by hand |
 | Browser flows (headless Chrome) | `checkpoint-b-browser-flows.txt`, `checkpoint-c-browser-flows.txt` | **In-memory stub** | No, one-off script |
 | Keyboard checks (headless Chrome) | `checkpoint-c-keyboard.txt` | **In-memory stub** | No, one-off script |
@@ -42,6 +43,9 @@ The browser checks needed a working sign-in, which production code can't provide
 | `npm test`, end of Phase 4C Step 6 | 618 tests in 42 files pass |
 | `npm run test:db`, end of Phase 4C Step 6 | 155 tests in 6 files pass, including all 16 session contract tests |
 | Session safeguards removed one at a time, Phase 4C Step 6 | 7 of 7 caught |
+| `npm test`, end of Phase 4C Step 7 | 663 tests in 43 files pass |
+| `npm run test:db`, end of Phase 4C Step 7 | 190 tests in 7 files pass |
+| Error mapping and logging safeguards removed one at a time, Phase 4C Step 7 | 9 of 9 caught |
 | Browser flows, Phase 3 (not rerun in Phase 4) | 28 of 28 pass |
 | Keyboard checks | 17 of 17 pass |
 | axe-core, before Checkpoint C | Violations in 13 of 16 states, including one critical (`button-name`) |
@@ -69,5 +73,5 @@ Each log has labelled sections, such as `FIX 2 - RED` followed by `FIX 2 - GREEN
 
 - Sign-in on Atlas.
 - Sessions surviving a server restart, and revocation and expiry across server instances.
-- How real database failures reach users.
+- How database failures on Atlas reach users. Step 7 covers a local server shutting down and simulated driver failures.
 - Isolation of wardrobe and outfit data between users, which also needs those routes to exist.
