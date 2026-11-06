@@ -1,5 +1,7 @@
 import 'server-only';
+import type { Connection } from 'mongoose';
 import { connectToDatabase } from '@/lib/db';
+import { ensureAuthIndexes } from './mongoIndexes';
 import {
   DuplicateEmailError,
   RepositoryError,
@@ -27,6 +29,7 @@ export type ErrorCategory =
   | 'connection'
   | 'network'
   | 'failover'
+  | 'index_init'
   | 'duplicate_email'
   | 'duplicate_key'
   | 'validation'
@@ -51,6 +54,8 @@ const FAILOVER_CODES = new Set([6, 7, 89, 91, 189, 9001, 10107, 11600, 11602, 13
 
 const VALIDATION_ERROR_NAMES = new Set(['ValidationError', 'CastError']);
 
+const INDEX_INITIALIZATION_ERROR = 'IndexInitializationError';
+
 function isEmailIndexOnly(keyPattern: unknown): boolean {
   if (typeof keyPattern !== 'object' || keyPattern === null) {
     return false;
@@ -73,6 +78,9 @@ export function categorizeError(err: unknown): ErrorCategory {
   if (name === 'DatabaseConnectionError') {
     return 'connection';
   }
+  if (name === INDEX_INITIALIZATION_ERROR) {
+    return 'index_init';
+  }
   if (typeof name === 'string' && NETWORK_ERROR_NAMES.has(name)) {
     return 'network';
   }
@@ -90,17 +98,15 @@ export function categorizeError(err: unknown): ErrorCategory {
   return 'unknown';
 }
 
+function isOutage(category: ErrorCategory): boolean {
+  return category === 'connection' || category === 'network' || category === 'failover';
+}
+
 function errorForCategory(category: ErrorCategory): RepositoryError {
-  switch (category) {
-    case 'connection':
-    case 'network':
-    case 'failover':
-      return new RepositoryUnavailableError();
-    case 'duplicate_email':
-      return new DuplicateEmailError();
-    default:
-      return new RepositoryError();
+  if (isOutage(category)) {
+    return new RepositoryUnavailableError();
   }
+  return category === 'duplicate_email' ? new DuplicateEmailError() : new RepositoryError();
 }
 
 /** Builds a new error with a fixed message; driver errors can contain hosts and user emails. */
@@ -109,7 +115,26 @@ export function toRepositoryError(err: unknown): RepositoryError {
 }
 
 /**
- * Connects, runs the operation, and replaces any failure with a repository error.
+ * Keeps an outage as it is, and marks anything else as an index failure. Building the
+ * unique email index over stored duplicates raises the same error as registering a taken
+ * email, and must not be reported to the user as one.
+ */
+async function ensureIndexes(connection: Connection): Promise<void> {
+  try {
+    await ensureAuthIndexes(connection);
+  } catch (err) {
+    if (isOutage(categorizeError(err))) {
+      throw err;
+    }
+    throw Object.assign(new Error('Index initialization failed'), {
+      name: INDEX_INITIALIZATION_ERROR,
+    });
+  }
+}
+
+/**
+ * Connects, makes sure the required indexes exist, runs the operation, and replaces any
+ * failure with a repository error, so nothing runs if the indexes can't be confirmed.
  * Logs only fixed values. A duplicate email isn't logged, because it is an expected result.
  */
 export async function withDatabase<T>(
@@ -117,7 +142,8 @@ export async function withDatabase<T>(
   run: () => Promise<T>,
 ): Promise<T> {
   try {
-    await connectToDatabase();
+    const { connection } = await connectToDatabase();
+    await ensureIndexes(connection);
     return await run();
   } catch (err) {
     const category = categorizeError(err);
