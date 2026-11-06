@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import mongoose from 'mongoose';
 import { MongoSessionRepository } from '@/lib/repositories/mongoSessionRepository';
-import { RepositoryError } from '@/lib/repositories/repositoryErrors';
+import { RepositoryUnavailableError } from '@/lib/repositories/repositoryErrors';
 import { tokenHashFor, USER_IDS } from '../contracts/fixtures';
 import { errorFrom } from '../helpers/dbTestTools';
 import { startMongoTestServer, type MongoTestServer } from '../helpers/mongoTestServer';
@@ -26,8 +26,8 @@ describe('MongoSessionRepository connection', () => {
 
     const err = await errorFrom(run);
 
-    expect(err).toBeInstanceOf(RepositoryError);
-    expect(err.message).toBe('The data operation failed');
+    expect(err).toBeInstanceOf(RepositoryUnavailableError);
+    expect(err.message).toBe('The data store is unavailable');
     expect(err.cause).toBeUndefined();
     logged.mockRestore();
   });
