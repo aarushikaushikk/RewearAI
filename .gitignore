@@ -12,7 +12,9 @@ coverage/
 next-env.d.ts
 
 # env and secrets
+
 .env*
+!.env.example
 *.pem
 
 # misc
