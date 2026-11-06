@@ -110,10 +110,20 @@ describe('MongoSessionRepository on a real database', () => {
     });
 
     it('rejects an expired record that is still stored, without waiting for its deletion', async () => {
-      await create(HASH, USER_A, new Date(Date.now() - 1000));
+      // Expires in the future for mongod, so its cleanup can't remove the record during
+      // the test, and in the past for the repository, whose clock is moved forward.
+      const expiresAt = inOneHour();
+      await create(HASH, USER_A, expiresAt);
 
-      expect(await Session.collection.countDocuments({ tokenHash: HASH })).toBe(1);
-      expect(await repo.findActiveSessionByTokenHash(HASH)).toBeNull();
+      vi.useFakeTimers({ toFake: ['Date'] });
+      try {
+        vi.setSystemTime(expiresAt.getTime() + 1000);
+
+        expect(await Session.collection.countDocuments({ tokenHash: HASH })).toBe(1);
+        expect(await repo.findActiveSessionByTokenHash(HASH)).toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 
