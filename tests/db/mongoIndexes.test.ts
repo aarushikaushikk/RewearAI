@@ -13,11 +13,14 @@ import mongoose from 'mongoose';
 import { connectToDatabase } from '@/lib/db';
 import { MongoSessionRepository } from '@/lib/repositories/mongoSessionRepository';
 import { MongoUserRepository } from '@/lib/repositories/mongoUserRepository';
+import { MongoAccountRepository } from '@/lib/repositories/mongoAccountRepository';
 import {
+  DuplicateAccountError,
   DuplicateEmailError,
   RepositoryError,
   RepositoryUnavailableError,
 } from '@/lib/repositories/repositoryErrors';
+import { Account } from '@/models/Account';
 import { Session } from '@/models/Session';
 import { User } from '@/models/User';
 import { AuthService } from '@/services/authService';
@@ -40,6 +43,7 @@ const newSession = () => ({ userId: USER_ID, tokenHash: HASH, expiresAt: inOneMi
 
 const users = new MongoUserRepository();
 const sessions = new MongoSessionRepository();
+const accounts = new MongoAccountRepository();
 
 let server: MongoTestServer;
 let logged: MockInstance<typeof console.error>;
@@ -54,7 +58,7 @@ beforeAll(async () => {
   await connectToDatabase();
   // Mongoose starts its own index build on connect. It has to finish before the tests
   // remove the indexes, or it could rebuild them and hide what is being tested.
-  await Promise.allSettled([User.init(), Session.init()]);
+  await Promise.allSettled([User.init(), Session.init(), Account.init()]);
 });
 
 afterAll(async () => {
@@ -90,6 +94,29 @@ describe('before any index exists', () => {
       expireAfterSeconds: 0,
     });
     expect(await indexOn(Session.collection, 'userId')).toMatchObject({ key: { userId: 1 } });
+    expect(await indexOn(Account.collection, 'provider,providerAccountId')).toMatchObject({
+      key: { provider: 1, providerAccountId: 1 },
+      unique: true,
+    });
+    expect(await indexOn(Account.collection, 'userId,provider')).toMatchObject({
+      key: { userId: 1, provider: 1 },
+      unique: true,
+    });
+  });
+
+  it('stores one link when 25 concurrent writes use one identity', async () => {
+    const results = await Promise.allSettled(
+      Array.from({ length: 25 }, () =>
+        accounts.create({ userId: users.newId(), provider: 'google', providerAccountId: 'sub-1' }),
+      ),
+    );
+
+    const rejected = results.filter((r) => r.status === 'rejected');
+    expect(rejected).toHaveLength(24);
+    for (const result of rejected) {
+      expect(result.reason).toBeInstanceOf(DuplicateAccountError);
+    }
+    expect(await Account.collection.countDocuments({})).toBe(1);
   });
 
   it('stores one account when 25 concurrent writes use one email', async () => {
@@ -132,6 +159,7 @@ describe('coordination', () => {
   it('runs one build for many concurrent operations of every kind', async () => {
     const userBuild = vi.spyOn(User, 'createIndexes');
     const sessionBuild = vi.spyOn(Session, 'createIndexes');
+    const accountBuild = vi.spyOn(Account, 'createIndexes');
 
     await Promise.all([
       ...Array.from({ length: 5 }, (_, i) => users.create(newUser(`u${i}@example.com`))),
@@ -140,6 +168,7 @@ describe('coordination', () => {
 
     expect(userBuild).toHaveBeenCalledTimes(1);
     expect(sessionBuild).toHaveBeenCalledTimes(1);
+    expect(accountBuild).toHaveBeenCalledTimes(1);
   });
 
   it('does not build again once the build has succeeded', async () => {
@@ -205,6 +234,19 @@ describe('when the build fails', () => {
     expect(await Session.collection.countDocuments({})).toBe(0);
 
     await expect(sessions.createSession(newSession())).resolves.toMatchObject({ tokenHash: HASH });
+  });
+
+  it('blocks link writes if an Account index cannot be built, and recovers on retry', async () => {
+    vi.spyOn(Account, 'createIndexes').mockRejectedValueOnce(
+      new MongoServerError({ message: 'failed', code: 13 }),
+    );
+    const link = () =>
+      accounts.create({ userId: users.newId(), provider: 'google', providerAccountId: 'sub-1' });
+
+    expect((await errorFrom(link)).constructor).toBe(RepositoryError);
+    expect(await Account.collection.countDocuments({})).toBe(0);
+
+    await expect(link()).resolves.toMatchObject({ providerAccountId: 'sub-1' });
   });
 
   it('also refuses reads, so nothing runs on a database in an unknown state', async () => {

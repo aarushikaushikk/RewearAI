@@ -3,7 +3,9 @@ import mongoose from 'mongoose';
 import { DatabaseConnectionError } from '@/lib/db';
 import { categorizeError, toRepositoryError } from '@/lib/repositories/mongoSupport';
 import {
+  DuplicateAccountError,
   DuplicateEmailError,
+  DuplicateUserIdError,
   RepositoryError,
   RepositoryUnavailableError,
 } from '@/lib/repositories/repositoryErrors';
@@ -100,6 +102,36 @@ describe('MongoDB error mapping', () => {
       expect(toRepositoryError(new Error('E11000 duplicate key email'))).not.toBeInstanceOf(
         DuplicateEmailError,
       );
+    });
+  });
+
+  describe('other duplicates the sign-in flow has to recognize', () => {
+    it.each([
+      ['an identity already linked', { provider: 1, providerAccountId: 1 }],
+      ['a user already linked', { userId: 1, provider: 1 }],
+    ])('%s becomes DuplicateAccountError', (_name, keyPattern) => {
+      const err = serverError({ code: 11000, keyPattern });
+
+      expect(toRepositoryError(err)).toBeInstanceOf(DuplicateAccountError);
+      expect(categorizeError(err)).toBe('duplicate_account');
+    });
+
+    it('a repeated ID becomes DuplicateUserIdError', () => {
+      const err = serverError({ code: 11000, keyPattern: { _id: 1 } });
+
+      expect(toRepositoryError(err)).toBeInstanceOf(DuplicateUserIdError);
+      expect(categorizeError(err)).toBe('duplicate_user_id');
+    });
+
+    it.each([
+      ['only part of the identity index', { providerAccountId: 1 }],
+      ['an index that adds a field', { provider: 1, providerAccountId: 1, name: 1 }],
+      ['an index that adds a field to the ID', { _id: 1, email: 1 }],
+    ])('not for %s', (_name, keyPattern) => {
+      const err = serverError({ code: 11000, keyPattern });
+
+      expect(toRepositoryError(err).constructor).toBe(RepositoryError);
+      expect(categorizeError(err)).toBe('duplicate_key');
     });
   });
 
