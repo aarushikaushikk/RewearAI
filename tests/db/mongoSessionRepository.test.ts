@@ -26,9 +26,6 @@ let server: MongoTestServer;
 beforeAll(async () => {
   server = await startMongoTestServer();
   await connectToDatabase();
-  // Index creation moves into the app in Step 8. Until then the tests build them.
-  await Session.createIndexes();
-  await User.createIndexes();
 });
 
 afterAll(async () => {

@@ -22,9 +22,6 @@ let server: MongoTestServer;
 beforeAll(async () => {
   server = await startMongoTestServer();
   await connectToDatabase();
-  // Index creation moves into the app in Step 8. Until then the tests build it,
-  // because concurrent duplicates can only be rejected once it exists.
-  await User.createIndexes();
 });
 
 afterAll(async () => {

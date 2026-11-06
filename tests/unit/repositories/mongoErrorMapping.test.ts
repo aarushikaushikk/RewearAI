@@ -118,6 +118,13 @@ describe('MongoDB error mapping', () => {
       expect(categorizeError(err)).toBe(category);
     });
 
+    it('an index that could not be built, even though it reports a duplicate email', () => {
+      const err = named('IndexInitializationError');
+
+      expect(toRepositoryError(err).constructor).toBe(RepositoryError);
+      expect(categorizeError(err)).toBe('index_init');
+    });
+
     it('does not take an unrecognized error name as its category', () => {
       expect(categorizeError(named(SECRET_TEXT))).toBe('unknown');
     });
