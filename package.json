@@ -10,6 +10,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:db": "vitest run --config vitest.db.config.ts",
+    "test:smoke": "next build && vitest run --config vitest.smoke.config.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

@@ -29,6 +29,7 @@
     "tests/**/*.ts",
     "vitest.config.ts",
     "vitest.db.config.ts",
+    "vitest.smoke.config.ts",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],
