@@ -1,17 +1,10 @@
 # Issue #6: decisions for team review before merging
 
-For Aarushi and Pranav. Email and password sign-in now works on MongoDB in a production build, checked with a temporary local database and real Chrome. **It hasn't run on Atlas or Vercel.** §8 lists what's left, and §1 and §6 need decisions first.
+For Aarushi and Pranav. Email and password sign-in and Google sign-in both work in a production build, checked in real Chrome with a temporary local database and a local fake Google. **Neither has run on Atlas, Vercel, or real Google.** §8 lists what's left.
 
-## 1. Google sign-in and the sign-in method
+## 1. Google sign-in
 
-The models now support both methods: `User.passwordHash` is optional and hidden by default, and `Account` links a Google identity to a user. No Google sign-in code exists.
-
-The PRD's User Story 1 criteria don't mention Google. It comes from the team's agreement to support both methods, and `docs/DESIGN.md` §12 still lists the method as unconfirmed.
-
-**Needed from the team:**
-- Confirm Google is part of User Story 1, or move it to its own issue. Email and password meet the sign-in criteria without it.
-- Confirm the linking rule Pranav set for Phase 5 (below).
-- Update `docs/DESIGN.md` §12 and Wireframe 01 to match.
+Both partners have agreed to support email/password and Google, with the linking rule below. The PRD's User Story 1 criteria don't mention Google, so it's a team addition rather than a PRD requirement. `docs/DESIGN.md` now records this, but Wireframe 01 still predates it.
 
 ### Google sign-in never links by email
 
@@ -42,7 +35,7 @@ Because the `Account` always gets a new ID, it can't point at an existing user. 
 
 ### The Google sign-in flow
 
-`GET /api/auth/google` redirects to Google, and `GET /api/auth/google/callback` handles the return. The sign-in page has no Google button yet, so nothing links to them, and the `/sign-in?reason=google-*` messages don't display yet.
+`GET /api/auth/google` redirects to Google, and `GET /api/auth/google/callback` handles the return. Sign-in and sign-up show a **Continue with Google** link when it's configured, and the sign-in page shows a fixed message for each failure. Invalid, expired, and general failures share one message, because the next step is the same.
 
 - **Library:** `openid-client` 6, which also adds `oauth4webapi` and `jose`. It handles Authorization Code Flow with PKCE S256, and checks the ID token's signature, issuer, audience, expiry, and nonce. Signature checks are optional in the library and turned on here.
 - **Issuer:** fixed to `https://accounts.google.com` in code, with no setting to change it.
@@ -62,11 +55,9 @@ Because the `Account` always gets a new ID, it can't point at an existing user. 
 
 With Cache Components, Next.js prerendered a `GET` route handler at build even though it read `req.url`, freezing one response for every visitor. The Google callback hit this, and the start route would have given every visitor the same state. Both now call `await connection()`. The build output shows it: `/api/...` routes must be listed as `ƒ`, not `○`.
 
-## 2. Custom sessions versus Auth.js
+## 2. Custom sessions rather than Auth.js
 
-`AGENTS.md` §2 lists Auth.js / NextAuth as the approved authentication tool. Phases 1 to 3 instead use custom opaque-token sessions: random tokens, stored hashed, revocable on the server. Pranav decided to keep these for now.
-
-**Needed from the team:** confirm this and update `AGENTS.md` with both partners' agreement, or plan a switch. Choosing how to add Google OAuth is the natural moment to decide, since Auth.js is the usual route for it and adopting it would replace much of Phase 2.
+Both partners have agreed to keep custom opaque-token sessions (random tokens, stored hashed, revocable on the server), and to use `openid-client` for Google. `AGENTS.md` §2 records this.
 
 ## 3. Sign-up reveals whether an email is registered
 
@@ -150,21 +141,17 @@ No cleanup job exists, so an account left this way stays until someone signs in 
 
 - **Home:** Wireframe 02 shows three "Open" cards (My Wardrobe, Create Outfit, Saved Outfits), while §5.2's text describes a primary Add Clothing or Create Outfit action plus links. The current page follows §5.2. Which one should it be?
 - **Input borders:** inputs use the muted text color rather than `--color-border`, which is only about 1.4:1 against white, below the 3:1 that WCAG asks for on control boundaries. Is that acceptable, or should the token change?
-- **Sign-in method:** §12 still lists this as unconfirmed, and Wireframe 01 says not to depict both methods until one is selected. This needs updating once Google OAuth is confirmed.
+- **Wireframe 01:** it predates Google sign-in and says not to show both methods until one is selected. It's only a PDF here, so it hasn't been redrawn. Should it be?
 
 ## 8. What's left for User Story 1
 
 | Item | Who | Blocks |
 |---|---|---|
-| Google sign-in and sign-up buttons, and their messages | Next checkpoint | Using Google sign-in |
-| Check with real Google credentials (§1) | Pranav | Merging, if Google is in scope |
-| Confirm Google sign-in and the no-linking rule (§1) | Both | Closing #6, if Google is in scope |
-| Agree to `openid-client` and update `AGENTS.md` (§2) | Both | Merging |
-| Keep custom sessions or move to Auth.js, and update `AGENTS.md` (§2) | Both | Choosing how to build Google sign-in |
+| Check with real Google credentials (§1) | Pranav | Merging |
 | Accept the sign-up 409 or add it to the backlog (§3) | Both | Closing #6 |
-| Check on a dedicated Atlas database | Pranav | Merging |
-| Connection timeout (§5) | Aarushi | Reliable outage responses |
-| Shared rate limiter (§6) | Both agree | Public deployment |
+| Check on a dedicated Atlas database | Both | Merging |
+| Connection timeout (§5) | Both, in Aarushi's file | Deployment |
+| Shared rate limiter, including the Google routes (§6) | Both | Public deployment |
 | Vercel settings and a check on the deployed URL (§6) | #23 | Deployment |
 | Turn the browser checks into Playwright tests and add CI (§6) | #23 | Course quality gates |
 | Review and merge PR #33 | Aarushi | Closing #6 |
