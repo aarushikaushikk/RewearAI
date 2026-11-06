@@ -1,7 +1,11 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterAll, afterEach } from 'vitest';
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import {
   assertLocalTestUri,
   MongoTestServerError,
+  removeCrashedServerFiles,
   startMongoTestServer,
   type MongoTestServer,
   type TestInstance,
@@ -30,6 +34,44 @@ async function errorFrom(promise: Promise<unknown>): Promise<unknown> {
     (err: unknown) => err,
   );
 }
+
+describe('removeCrashedServerFiles', () => {
+  // Nested, so that the path that climbs out stays inside this test's own folder.
+  const outer = mkdtempSync(path.join(tmpdir(), 'rewear-unit-'));
+  const root = path.join(outer, 'temp');
+  mkdirSync(root);
+
+  afterAll(() => {
+    rmSync(outer, { recursive: true, force: true });
+  });
+
+  it('removes a temporary server folder directly inside the temp folder', () => {
+    const folder = mkdtempSync(path.join(root, 'mongo-mem-'));
+
+    removeCrashedServerFiles(folder, root);
+
+    expect(existsSync(folder)).toBe(false);
+  });
+
+  it('does nothing when the folder is already gone', () => {
+    expect(() => removeCrashedServerFiles(path.join(root, 'mongo-mem-gone'), root)).not.toThrow();
+  });
+
+  it.each([
+    ['another folder name', 'my-documents'],
+    ['a similar name', 'mongo-memory'],
+    ['a nested folder', path.join('nested', 'mongo-mem-abc')],
+    ['a path that climbs out', path.join('..', 'mongo-mem-abc')],
+    ['the temp folder itself', '.'],
+  ])('refuses %s, and leaves it in place', (_name, relative) => {
+    const target = path.join(root, relative);
+    mkdirSync(target, { recursive: true });
+
+    expect(() => removeCrashedServerFiles(target, root)).toThrow(MongoTestServerError);
+
+    expect(existsSync(target)).toBe(true);
+  });
+});
 
 describe('assertLocalTestUri', () => {
   it.each([
