@@ -1,6 +1,6 @@
 # Issue #6 (Account and Sign-In): test evidence
 
-Evidence for Phase 3 Checkpoints B and C, Phase 4 Checkpoint B, and Phase 4C Steps 2 to 10A of User Story 1. **No check in this folder ran against Atlas.** Step 3 tests the test infrastructure, Steps 5 to 8 test the repositories, and Steps 9 and 10A test the connected app, all on a temporary local MongoDB server. Nothing has run on Vercel.
+Evidence for Phase 3 Checkpoints B and C, Phase 4 Checkpoint B, and Phase 4C Steps 2 to 10A and Phase 5 Checkpoint 1 of User Story 1. **No check in this folder ran against Atlas.** Step 3 tests the test infrastructure, Steps 5 to 8 test the repositories, and Steps 9 and 10A test the connected app, all on a temporary local MongoDB server. Nothing has run on Vercel.
 
 ## What was tested, and how
 
@@ -16,6 +16,7 @@ Evidence for Phase 3 Checkpoints B and C, Phase 4 Checkpoint B, and Phase 4C Ste
 | Production build smoke test (`npm run test:smoke`) | `phase-4c-step-9-red-green.txt` | `next start` on a temporary `mongod` | No, separate command |
 | Earlier smoke test (curl against `next start`, before Step 9) | Reported in the checkpoint summaries | None: the fail-closed factory, so login returned 503 | No, run by hand |
 | Browser flows on real MongoDB (headless Chrome, production build) | `phase-4c-step-10a-browser-flows.txt` | `next start` on a temporary `mongod` | No, one-off script |
+| Google account data layer (Vitest, both commands) | `phase-5-checkpoint-1-red-green.txt` | Memory and `MongoAccountRepository` on a temporary `mongod`. No Google code exists yet | Contract on memory only; the rest is a separate command |
 | Earlier browser flows (headless Chrome) | `checkpoint-b-browser-flows.txt`, `checkpoint-c-browser-flows.txt` | **In-memory stub** | No, one-off script |
 | Keyboard checks (headless Chrome) | `checkpoint-c-keyboard.txt` | **In-memory stub** | No, one-off script |
 | Accessibility and layout audit (axe-core 4.10.3, four viewports) | `checkpoint-c-ui-audit-before.txt`, `checkpoint-c-ui-audit-after.txt` | **In-memory stub** | No, one-off script |
@@ -61,6 +62,10 @@ The browser and audit checks from Phase 3 needed a working sign-in, which produc
 | `npm run test:db`, end of Phase 4C Step 10A | 230 tests in 9 files pass |
 | `npm run test:smoke`, end of Phase 4C Step 10A | 19 tests in 1 file pass |
 | Browser flows on real MongoDB, Phase 4C Step 10A | 29 of 29 pass |
+| `npm test`, end of Phase 5 Checkpoint 1 | 736 tests in 45 files pass |
+| `npm run test:db`, end of Phase 5 Checkpoint 1 | 311 tests in 11 files pass, leaving no temporary folders or `mongod` processes |
+| `npm run test:smoke`, end of Phase 5 Checkpoint 1 | 19 tests in 1 file pass |
+| Data layer safeguards removed one at a time, Phase 5 Checkpoint 1 | 8 of 8 caught |
 | Browser flows, Phase 3 (not rerun in Phase 4) | 28 of 28 pass |
 | Keyboard checks | 17 of 17 pass |
 | axe-core, before Checkpoint C | Violations in 13 of 16 states, including one critical (`button-name`) |

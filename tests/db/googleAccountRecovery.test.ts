@@ -42,9 +42,20 @@ type Outcome = { result: 'signed-in'; userId: string } | { result: 'email-in-use
  *   existing user found by email. A matching email can only ever cause a refusal.
  * - If the User write then fails, the Account points at nothing. It gives no access
  *   and reserves no email, and a retry for the same identity completes it.
- * - A User is only created for an Account that already exists, so no User can be
- *   left without one by this sequence.
+ * - A User is only created for an Account that already exists. A refusal in another
+ *   request can remove that Account, so each side checks after its own write. Whichever
+ *   runs last sees the other's write and restores the link.
  */
+async function restoreLink(sub: string, userId: string): Promise<void> {
+  try {
+    await accounts.create({ userId, provider: 'google', providerAccountId: sub });
+  } catch (err) {
+    if (!(err instanceof DuplicateAccountError)) {
+      throw err;
+    }
+  }
+}
+
 async function signInWithGoogle(identity: GoogleIdentity): Promise<Outcome> {
   let account = await accounts.findByProvider('google', identity.sub);
   if (!account) {
@@ -71,6 +82,9 @@ async function signInWithGoogle(identity: GoogleIdentity): Promise<Outcome> {
   }
   try {
     await users.createWithoutPassword({ id: userId, email: identity.email, name: identity.name });
+    if ((await accounts.findByProvider('google', identity.sub))?.userId !== userId) {
+      await restoreLink(identity.sub, userId);
+    }
     return { result: 'signed-in', userId };
   } catch (err) {
     if (err instanceof DuplicateUserIdError) {
@@ -84,6 +98,10 @@ async function signInWithGoogle(identity: GoogleIdentity): Promise<Outcome> {
       return { result: 'signed-in', userId };
     }
     await accounts.deleteLink('google', identity.sub, userId);
+    if (await users.findById(userId)) {
+      await restoreLink(identity.sub, userId);
+      return { result: 'signed-in', userId };
+    }
     return { result: 'email-in-use' };
   }
 }
@@ -300,6 +318,67 @@ describe('partial failures', () => {
       expect(await count.accounts()).toBe(0);
       await expectConsistent();
     });
+  });
+});
+
+describe('a refusal racing a request that finishes the same identity', () => {
+  // These reproduce an exact order of events. A password registration holds the email, so
+  // one request is refused and removes the link. The registration then rolls back, which
+  // frees the email for a second request with the same identity to write the User.
+  async function orphanWithEmailHeldByAnotherUser() {
+    const holder = await users.create({ email: ALEX.email, passwordHash: PASSWORD_HASH });
+    const account = await accounts.create({
+      userId: users.newId(),
+      provider: 'google',
+      providerAccountId: ALEX.sub,
+    });
+    return { holder, userId: account.userId };
+  }
+
+  it('restores the link if the User appears just as the refusal removes it', async () => {
+    const { holder, userId } = await orphanWithEmailHeldByAnotherUser();
+    const deleteLink = accounts.deleteLink.bind(accounts);
+    vi.spyOn(accounts, 'deleteLink').mockImplementationOnce(async (...args) => {
+      const removed = await deleteLink(...args);
+      await users.deleteById(holder.id);
+      await users.createWithoutPassword({ id: userId, email: ALEX.email });
+      return removed;
+    });
+
+    const outcome = await signInWithGoogle(ALEX);
+
+    expect(outcome).toEqual({ result: 'signed-in', userId });
+    await expectConsistent();
+    expect(await count.accounts()).toBe(1);
+  });
+
+  it('restores the link if the refusal removes it just after the User is written', async () => {
+    const { userId } = await accounts
+      .create({ userId: users.newId(), provider: 'google', providerAccountId: ALEX.sub })
+      .then((account) => ({ userId: account.userId }));
+    const createUser = users.createWithoutPassword.bind(users);
+    vi.spyOn(users, 'createWithoutPassword').mockImplementationOnce(async (data) => {
+      const created = await createUser(data);
+      await accounts.deleteLink('google', ALEX.sub, userId);
+      return created;
+    });
+
+    const outcome = await signInWithGoogle(ALEX);
+
+    expect(outcome).toEqual({ result: 'signed-in', userId });
+    await expectConsistent();
+    expect(await count.accounts()).toBe(1);
+  });
+});
+
+describe('a user deleted while the link remains', () => {
+  // Records the behaviour that any future account deletion must plan for.
+  it('is recreated with the same ID by the next sign-in', async () => {
+    const first = await signInWithGoogle(ALEX);
+    const userId = first.result === 'signed-in' ? first.userId : '';
+    await users.deleteById(userId);
+
+    expect(await signInWithGoogle(ALEX)).toEqual({ result: 'signed-in', userId });
   });
 });
 

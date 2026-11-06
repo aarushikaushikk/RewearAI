@@ -1,5 +1,6 @@
 import 'server-only';
 import type { Connection } from 'mongoose';
+import { Account } from '@/models/Account';
 import { Session } from '@/models/Session';
 import { User } from '@/models/User';
 
@@ -17,7 +18,7 @@ const initialization = (globalForIndexes.authIndexInitialization ??= new Map());
  *
  * Mongoose's own index build on connect can't be relied on: it runs in the background,
  * so writes can overtake it, and it isn't retried after it fails. Without the unique
- * indexes, concurrent requests store duplicate emails and token hashes.
+ * indexes, concurrent requests store duplicate emails, token hashes, and account links.
  */
 export function ensureAuthIndexes(connection: Connection): Promise<void> {
   const database = `${connection.host}:${connection.port}/${connection.name}`;
@@ -27,7 +28,11 @@ export function ensureAuthIndexes(connection: Connection): Promise<void> {
     return existing;
   }
 
-  const attempt = Promise.all([User.createIndexes(), Session.createIndexes()]).then(() => undefined);
+  const attempt = Promise.all([
+    User.createIndexes(),
+    Session.createIndexes(),
+    Account.createIndexes(),
+  ]).then(() => undefined);
   initialization.set(database, attempt);
   attempt.catch(() => {
     initialization.delete(database);

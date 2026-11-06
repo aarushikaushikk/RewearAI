@@ -3,7 +3,9 @@ import type { Connection } from 'mongoose';
 import { connectToDatabase } from '@/lib/db';
 import { ensureAuthIndexes } from './mongoIndexes';
 import {
+  DuplicateAccountError,
   DuplicateEmailError,
+  DuplicateUserIdError,
   RepositoryError,
   RepositoryUnavailableError,
 } from './repositoryErrors';
@@ -20,6 +22,10 @@ export type RepositoryOperation =
   | 'user.findById'
   | 'user.create'
   | 'user.deleteById'
+  | 'user.createWithoutPassword'
+  | 'account.findByProvider'
+  | 'account.create'
+  | 'account.deleteLink'
   | 'session.create'
   | 'session.findActive'
   | 'session.revoke'
@@ -31,6 +37,8 @@ export type ErrorCategory =
   | 'failover'
   | 'index_init'
   | 'duplicate_email'
+  | 'duplicate_account'
+  | 'duplicate_user_id'
   | 'duplicate_key'
   | 'validation'
   | 'unknown';
@@ -56,12 +64,27 @@ const VALIDATION_ERROR_NAMES = new Set(['ValidationError', 'CastError']);
 
 const INDEX_INITIALIZATION_ERROR = 'IndexInitializationError';
 
-function isEmailIndexOnly(keyPattern: unknown): boolean {
+// Only these exact indexes have a meaning of their own; anything else is a plain failure.
+const DUPLICATE_CATEGORIES = new Map<string, ErrorCategory>([
+  ['email', 'duplicate_email'],
+  ['_id', 'duplicate_user_id'],
+  ['provider,providerAccountId', 'duplicate_account'],
+  ['provider,userId', 'duplicate_account'],
+]);
+
+// Expected when requests race, so they aren't logged as failures.
+const EXPECTED_DUPLICATES = new Set<ErrorCategory>([
+  'duplicate_email',
+  'duplicate_account',
+  'duplicate_user_id',
+]);
+
+function categorizeDuplicate(keyPattern: unknown): ErrorCategory {
   if (typeof keyPattern !== 'object' || keyPattern === null) {
-    return false;
+    return 'duplicate_key';
   }
-  const fields = Object.keys(keyPattern);
-  return fields.length === 1 && fields[0] === 'email';
+  const fields = Object.keys(keyPattern).sort().join();
+  return DUPLICATE_CATEGORIES.get(fields) ?? 'duplicate_key';
 }
 
 /**
@@ -88,9 +111,7 @@ export function categorizeError(err: unknown): ErrorCategory {
     return 'failover';
   }
   if (code === DUPLICATE_KEY_CODE) {
-    return 'keyPattern' in err && isEmailIndexOnly(err.keyPattern)
-      ? 'duplicate_email'
-      : 'duplicate_key';
+    return categorizeDuplicate('keyPattern' in err ? err.keyPattern : undefined);
   }
   if (typeof name === 'string' && VALIDATION_ERROR_NAMES.has(name)) {
     return 'validation';
@@ -106,7 +127,16 @@ function errorForCategory(category: ErrorCategory): RepositoryError {
   if (isOutage(category)) {
     return new RepositoryUnavailableError();
   }
-  return category === 'duplicate_email' ? new DuplicateEmailError() : new RepositoryError();
+  switch (category) {
+    case 'duplicate_email':
+      return new DuplicateEmailError();
+    case 'duplicate_account':
+      return new DuplicateAccountError();
+    case 'duplicate_user_id':
+      return new DuplicateUserIdError();
+    default:
+      return new RepositoryError();
+  }
 }
 
 /** Builds a new error with a fixed message; driver errors can contain hosts and user emails. */
@@ -135,7 +165,7 @@ async function ensureIndexes(connection: Connection): Promise<void> {
 /**
  * Connects, makes sure the required indexes exist, runs the operation, and replaces any
  * failure with a repository error, so nothing runs if the indexes can't be confirmed.
- * Logs only fixed values. A duplicate email isn't logged, because it is an expected result.
+ * Logs only fixed values, and not the duplicates that are an expected result.
  */
 export async function withDatabase<T>(
   operation: RepositoryOperation,
@@ -147,7 +177,7 @@ export async function withDatabase<T>(
     return await run();
   } catch (err) {
     const category = categorizeError(err);
-    if (category !== 'duplicate_email') {
+    if (!EXPECTED_DUPLICATES.has(category)) {
       console.error('[repository] operation failed', { operation, category });
     }
     throw errorForCategory(category);

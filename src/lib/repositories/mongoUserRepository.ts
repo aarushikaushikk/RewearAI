@@ -1,8 +1,15 @@
 import 'server-only';
+import { Types } from 'mongoose';
 import { normalizeEmail } from '@/lib/validation/authValidation';
 import { User } from '@/models/User';
-import { CreateUserDTO, UserRecord, UserWithoutPassword } from '@/types/user';
+import {
+  CreatePasswordlessUserDTO,
+  CreateUserDTO,
+  UserRecord,
+  UserWithoutPassword,
+} from '@/types/user';
 import { isObjectIdString, withDatabase } from './mongoSupport';
+import { RepositoryError } from './repositoryErrors';
 import { IUserRepository } from './userRepository';
 
 // Named fields rather than the default, so a new schema field stays out until added here.
@@ -59,6 +66,31 @@ export class MongoUserRepository implements IUserRepository {
         id: user._id.toString(),
         email: user.email,
         passwordHash: user.passwordHash ?? null,
+        name: user.name ?? null,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+      };
+    });
+  }
+
+  newId(): string {
+    return new Types.ObjectId().toString();
+  }
+
+  async createWithoutPassword(data: CreatePasswordlessUserDTO): Promise<UserWithoutPassword> {
+    if (!isObjectIdString(data.id)) {
+      throw new RepositoryError();
+    }
+    return withDatabase('user.createWithoutPassword', async () => {
+      const user = await User.create({
+        _id: new Types.ObjectId(data.id),
+        email: normalizeEmail(data.email),
+        name: data.name ?? undefined,
+        passwordHash: null,
+      });
+      return {
+        id: user._id.toString(),
+        email: user.email,
         name: user.name ?? null,
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
