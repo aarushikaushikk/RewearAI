@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import mongoose from 'mongoose';
 import { MongoUserRepository } from '@/lib/repositories/mongoUserRepository';
-import { RepositoryError } from '@/lib/repositories/repositoryErrors';
+import { RepositoryUnavailableError } from '@/lib/repositories/repositoryErrors';
 import { PASSWORD_HASH } from '../contracts/fixtures';
 import { startMongoTestServer, type MongoTestServer } from '../helpers/mongoTestServer';
 
@@ -19,8 +19,8 @@ describe('MongoUserRepository connection', () => {
 
     const err = await repo.findByEmail('secret@example.com').catch((e: unknown) => e);
 
-    expect(err).toBeInstanceOf(RepositoryError);
-    expect((err as Error).message).toBe('The data operation failed');
+    expect(err).toBeInstanceOf(RepositoryUnavailableError);
+    expect((err as Error).message).toBe('The data store is unavailable');
     expect((err as Error).cause).toBeUndefined();
     expect(JSON.stringify(logged.mock.calls)).not.toContain('secret@');
     logged.mockRestore();
