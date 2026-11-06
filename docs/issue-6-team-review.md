@@ -46,9 +46,9 @@ Once item 1 is settled:
 7. Run the adapters through the shared suites in `tests/contracts/`. Their fixtures now pass the real models, checked by `tests/unit/repositories/contractFixtures.test.ts`.
 8. Keep `null` and `undefined` distinct for `passwordHash`: `null` means the account has no password, and `undefined` means the field wasn't loaded. `findByEmail` loads it with `.select("+passwordHash")` and returns `null` for an account with no password. `findById` must not load it, and its return type (`UserWithoutPassword`) leaves the field out, so an unloaded hash can't be mistaken for `null`. TypeScript doesn't stop an implementation returning extra fields, so map the fields explicitly; the contract suite checks this at runtime.
 9. Build the unique indexes explicitly before the first write. Without this, 25 of 25 concurrent registrations for one email succeeded on a fresh database, and the index then couldn't be built.
-10. Add contract tests with the adapters for what the models enforce and the memory repositories don't: malformed user IDs in `createSession` and `revokeAllSessionsForUser`.
+10. Malformed user IDs in `createSession` and `revokeAllSessionsForUser` are tested in `tests/db/mongoSessionRepository.test.ts`, not the shared contract, because the memory repository accepts any string as a user ID.
 
-**Progress:** `MongoUserRepository` exists and passes the user contract on a temporary MongoDB server, but nothing uses it yet. It doesn't do items 6 and 9 yet: it reports every failure except a duplicate email as `RepositoryError`, outages included, and its tests build the unique index themselves.
+**Progress:** `MongoUserRepository` and `MongoSessionRepository` exist and pass their contracts on a temporary MongoDB server, but nothing uses them yet. They don't do items 6 and 9 yet: they report every failure except a duplicate email as `RepositoryError`, outages included, and their tests build the unique indexes themselves.
 
 ### Accounts that can't be rolled back
 
