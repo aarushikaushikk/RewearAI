@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getGoogleSettings } from '@/lib/auth/googleOidc';
+import { getGoogleSettings } from '@/lib/auth/googleSettings';
 import { openTransaction, sealTransaction, TRANSACTION_LIFETIME_MS } from '@/lib/auth/googleTransaction';
 
 const SECRET = 'test-client-secret-value';
