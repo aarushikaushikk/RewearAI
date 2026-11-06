@@ -1,4 +1,7 @@
 import { randomBytes } from 'node:crypto';
+import { rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import mongoose, { type Connection } from 'mongoose';
 
 const LOCAL_TEST_URI =
@@ -136,6 +139,22 @@ export async function startMongoTestServer(
     dbPath: instance.instanceInfo?.dbPath,
     stop: () => (stopping ??= shutDown()),
   };
+}
+
+/**
+ * Removes the files of a server whose test process was killed, which can't clean up after
+ * itself. Only accepts a `mongo-mem-` folder directly inside the temp folder, so it can't
+ * remove anything else, however the path is written.
+ */
+export function removeCrashedServerFiles(dbPath: string, tempRoot: string = tmpdir()): void {
+  const resolved = path.resolve(dbPath);
+  if (
+    path.dirname(resolved) !== path.resolve(tempRoot) ||
+    !/^mongo-mem-[A-Za-z0-9_-]+$/.test(path.basename(resolved))
+  ) {
+    throw new MongoTestServerError(REFUSED);
+  }
+  rmSync(resolved, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
 }
 
 /** Refuses unless the connection is open to this exact server and database. */
