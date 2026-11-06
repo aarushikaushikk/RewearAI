@@ -45,6 +45,24 @@ RewearAI/
 └── run-b-with-rules/                       # HW-3: User Story 5 built WITH rules
 ```
 
+## Database Setup (MongoDB Atlas)
+
+The app stores its data in MongoDB Atlas through Mongoose. The connection helper is [src/lib/db.ts](src/lib/db.ts) (server-only).
+
+1. Create a free cluster at [MongoDB Atlas](https://www.mongodb.com/cloud/atlas).
+2. Under **Database Access**, add a database user with a strong password.
+3. Under **Network Access**, allow your IP address (for Vercel, allow `0.0.0.0/0` or use Vercel's Atlas integration).
+4. Click **Connect → Drivers** and copy the connection string.
+5. Copy the example env file and paste the string into `MONGODB_URI`, replacing the user, password, and cluster host. Keep `/rewear` as the database name:
+
+   ```bash
+   cp .env.example .env.local
+   ```
+
+6. Run `npm run dev`. Route Handlers call `connectToDatabase()`, which reuses one cached connection.
+
+`.env.local` is git-ignored; never commit real credentials. If the URI is missing or the connection fails, the helper logs only the error type on the server and throws a `DatabaseConnectionError` with a safe, generic message.
+
 ## HW-3 Rules Experiment
 
 To test whether our rules file makes a measurable difference, we built the same feature twice with Claude Code in VS Code: once without rules and once with them.
