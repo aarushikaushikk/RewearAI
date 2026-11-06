@@ -154,7 +154,8 @@ export function removeCrashedServerFiles(dbPath: string, tempRoot: string = tmpd
   ) {
     throw new MongoTestServerError(REFUSED);
   }
-  rmSync(resolved, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+  // On Windows, mongod can hold its files for some seconds after its port has closed.
+  rmSync(resolved, { recursive: true, force: true, maxRetries: 150, retryDelay: 200 });
 }
 
 /** Refuses unless the connection is open to this exact server and database. */
