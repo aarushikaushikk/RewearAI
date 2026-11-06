@@ -286,10 +286,10 @@ describe('production authentication on MongoDB', () => {
       await login(ALEX);
       await session(cookie);
       await logout(cookie);
+      const stored = await User.collection.findOne({ email: ALEX.email });
       vi.spyOn(Collection.prototype, 'findOne').mockRejectedValue(new Error(ALEX.password));
       await login(ALEX);
 
-      const stored = await User.collection.findOne({ email: ALEX.email });
       const logs = JSON.stringify(logged.mock.calls);
       for (const secret of [ALEX.password, ALEX.email, stored?.passwordHash, tokenIn(cookie), server.dbName]) {
         expect(logs).not.toContain(secret);

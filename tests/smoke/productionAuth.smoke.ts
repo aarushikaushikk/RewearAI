@@ -91,6 +91,22 @@ function cookieFrom(res: Response): string {
   return (res.headers.get('set-cookie') ?? '').split(';')[0];
 }
 
+/**
+ * Pages use Cache Components, so a redirect after the session check is streamed in a
+ * 200 response for the browser to follow, and only a visitor with no cookie gets a 307
+ * from the proxy. Either way, the response must carry no private content.
+ */
+async function expectStreamedRedirect(res: Response, target: string) {
+  const body = await res.text();
+
+  expect(res.status).toBe(200);
+  expect(body).toContain(`NEXT_REDIRECT;replace;${target};307`);
+  expect(body).not.toContain('Welcome back');
+  expect(body).not.toContain(ALEX.email);
+}
+
+const SESSION_ENDED = '/sign-in?reason=session-ended';
+
 const withTimeout = (uri: string) => `${uri}?serverSelectionTimeoutMS=1000`;
 const LEAK = /mongodb:\/\/|127\.0\.0\.1:\d+\/rewear|rewear_test_|E11000|MongoNetwork|MongoServerSelection/;
 
@@ -202,14 +218,15 @@ describe('production build on a temporary MongoDB server', () => {
     const res = await api.page('/', cookie);
 
     expect(res.status).toBe(200);
-    expect(await res.text()).toContain('Welcome back, Alex');
+    const body = (await res.text()).replaceAll('<!-- -->', '');
+    expect(body).toContain('Welcome back, Alex');
+    expect(body).not.toContain('NEXT_REDIRECT');
   });
 
   it('sends a signed-in user from the sign-in page to the app', async () => {
     const res = await api.page('/sign-in', cookie);
 
-    expect([303, 307]).toContain(res.status);
-    expect(res.headers.get('location')).toMatch(/\/$/);
+    await expectStreamedRedirect(res, '/');
   });
 
   it('redirects from a private page for a missing or forged cookie', async () => {
@@ -218,8 +235,7 @@ describe('production build on a temporary MongoDB server', () => {
 
     expect(missing.status).toBe(307);
     expect(missing.headers.get('location')).toContain('/sign-in');
-    expect([303, 307]).toContain(forged.status);
-    expect(forged.headers.get('location')).toContain('/sign-in');
+    await expectStreamedRedirect(forged, SESSION_ENDED);
   });
 
   it('keeps sessions and accounts when the server restarts', async () => {
@@ -241,9 +257,7 @@ describe('production build on a temporary MongoDB server', () => {
     expect(res.status).toBe(200);
     expect(revoked).toBe(1);
     expect((await api.session(cookie)).status).toBe(401);
-    const page = await api.page('/', cookie);
-    expect([303, 307]).toContain(page.status);
-    expect(page.headers.get('location')).toContain('/sign-in');
+    await expectStreamedRedirect(await api.page('/', cookie), SESSION_ENDED);
   });
 
   it('answers 429 after repeated failed sign-ins', async () => {
@@ -286,6 +300,7 @@ describe('production build on a temporary MongoDB server', () => {
       const body = await res.text();
 
       expect(res.headers.get('location') ?? '').not.toContain('/sign-in');
+      expect(body).not.toContain('NEXT_REDIRECT');
       expect(body).not.toContain('Welcome back');
       expect(body).not.toMatch(LEAK);
     });
