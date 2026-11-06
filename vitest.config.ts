@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig({
@@ -15,6 +15,8 @@ export default defineConfig({
     environment: 'node',
     globals: true,
     include: ['src/**/*.test.ts', 'tests/**/*.test.ts', 'tests/**/*.test.tsx'],
+    // Real-database tests run separately through `npm run test:db`.
+    exclude: [...configDefaults.exclude, 'tests/db/**'],
     environmentOptions: {},
     // Overrides the shell, so this suite can never connect to a real database.
     env: { MONGODB_URI: '' },

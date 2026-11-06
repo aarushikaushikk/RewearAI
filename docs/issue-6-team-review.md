@@ -74,6 +74,9 @@ No cleanup job exists, so an account left this way stays until someone signs in 
 
 ## 6. Deployment settings (#23)
 
+- Set `MONGOMS_DISABLE_POSTINSTALL=1` on Vercel. `mongodb-memory-server` is a dev dependency, and Vercel installs those to build, so otherwise each install also downloads `mongod`.
+- CI needs to run both `npm test` and `npm run test:db`. No CI workflow exists yet, so `test:db` only runs by hand.
+- `npm audit` reports 11 findings in dev tools, including 2 critical in `vitest` 3 and `tinypool`, and none in production dependencies. They predate `mongodb-memory-server`. The fix is a major `vitest` upgrade, which needs its own task.
 - `APP_ORIGIN` must match the deployed URL, or all sign-in, sign-up, and sign-out requests return 403. Vercel preview URLs won't match, so previews need a plan.
 - `TRUST_PROXY=true` is needed on Vercel. Otherwise all users share one rate-limit bucket.
 - Rate limiting is in memory, so limits are per server instance and reset on restart.
