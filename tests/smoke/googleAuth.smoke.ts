@@ -50,6 +50,12 @@ describe('production build with no Google settings', () => {
     expect(callback.headers.get('location')).toBe('/sign-in?reason=google-unavailable');
   });
 
+  it.each(['/sign-in', '/sign-up'])('shows no Google option on %s', async (route) => {
+    const res = await fetch(`${app.origin}${route}`);
+
+    expect(await res.text()).not.toContain('Continue with Google');
+  });
+
   it('keeps password sign-up working', async () => {
     const res = await fetch(`${app.origin}/api/auth/register`, {
       method: 'POST',
@@ -109,6 +115,23 @@ describe('production build with Google settings and a fake Google', () => {
     await database?.close();
     await server?.stop();
     await new Promise((resolve) => fakeServer?.close(resolve));
+  });
+
+  it.each(['/sign-in', '/sign-up'])('offers Google on %s, reading settings at request time', async (route) => {
+    const body = await (await fetch(`${app.origin}${route}`)).text();
+
+    expect(body).toContain('Continue with Google');
+    expect(body).toContain('href="/api/auth/google"');
+    expect(body).not.toContain(CLIENT_SECRET);
+    expect(body).not.toContain(CLIENT_ID);
+  });
+
+  it('shows a fixed message for a known failure reason only', async () => {
+    const body = await (await fetch(`${app.origin}/sign-in?reason=google-cancelled`)).text();
+    const unknown = await (await fetch(`${app.origin}/sign-in?reason=mystery`)).text();
+
+    expect(body).toContain('Sign-in with Google was cancelled');
+    expect(unknown).not.toContain('Sign-in with Google was cancelled');
   });
 
   it('builds a redirect to Google with the fixed callback URL', async () => {
