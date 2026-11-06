@@ -8,6 +8,7 @@ import { AuthService } from '@/services/authService';
 import { describeUserRepositoryContract } from '../contracts/userRepositoryContract';
 import { OTHER_PASSWORD_HASH, PASSWORD_HASH } from '../contracts/fixtures';
 import { MemorySessionRepository } from '../mocks/memorySessionRepository';
+import { errorFrom, recordQueries } from '../helpers/dbTestTools';
 import {
   clearTestDatabase,
   startMongoTestServer,
@@ -29,29 +30,6 @@ beforeAll(async () => {
 afterAll(async () => {
   await server?.stop();
 });
-
-/** Every command Mongoose sends while `run` executes. */
-async function recordQueries(run: () => Promise<unknown>) {
-  const queries: { method: string; args: unknown[] }[] = [];
-  mongoose.set('debug', (_collection: string, method: string, ...args: unknown[]) => {
-    queries.push({ method, args });
-  });
-  try {
-    await run();
-  } finally {
-    mongoose.set('debug', false);
-  }
-  return queries;
-}
-
-async function errorFrom(run: () => Promise<unknown>): Promise<Error> {
-  const err = await run().then(
-    () => null,
-    (e: unknown) => e,
-  );
-  expect(err).toBeInstanceOf(Error);
-  return err as Error;
-}
 
 describeUserRepositoryContract('MongoDB', {
   newRepository: async () => {
