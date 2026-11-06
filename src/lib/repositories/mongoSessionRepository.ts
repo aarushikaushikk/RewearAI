@@ -38,7 +38,7 @@ export class MongoSessionRepository implements ISessionRepository {
     if (!isObjectIdString(data.userId)) {
       throw new RepositoryError();
     }
-    return withDatabase(async () =>
+    return withDatabase('session.create', async () =>
       toSessionRecord(
         await Session.create({
           userId: data.userId,
@@ -53,7 +53,7 @@ export class MongoSessionRepository implements ISessionRepository {
     if (!isTokenHash(tokenHash)) {
       return null;
     }
-    return withDatabase(async () => {
+    return withDatabase('session.findActive', async () => {
       // Checked here because MongoDB deletes expired sessions only periodically.
       const session = await Session.findOne({
         tokenHash,
@@ -68,7 +68,7 @@ export class MongoSessionRepository implements ISessionRepository {
     if (!isTokenHash(tokenHash)) {
       return false;
     }
-    return withDatabase(async () => {
+    return withDatabase('session.revoke', async () => {
       // A single conditional update, so only one concurrent revocation can succeed.
       const { modifiedCount } = await Session.updateOne(
         { tokenHash, revokedAt: null },
@@ -82,7 +82,7 @@ export class MongoSessionRepository implements ISessionRepository {
     if (!isObjectIdString(userId)) {
       return 0;
     }
-    return withDatabase(async () => {
+    return withDatabase('session.revokeAll', async () => {
       const { modifiedCount } = await Session.updateMany(
         { userId, revokedAt: null },
         { $set: { revokedAt: new Date() } },
