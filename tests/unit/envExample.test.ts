@@ -20,6 +20,8 @@ describe('.env.example', () => {
     'CLOUDINARY_CLOUD_NAME',
     'CLOUDINARY_API_KEY',
     'CLOUDINARY_API_SECRET',
+    'GOOGLE_CLIENT_ID',
+    'GOOGLE_CLIENT_SECRET',
   ])('documents %s', (name) => {
     expect(entries.has(name)).toBe(true);
   });
@@ -28,12 +30,23 @@ describe('.env.example', () => {
     expect(entries.get('MONGODB_URI')).toContain('<username>:<password>@<cluster-host>');
   });
 
-  it.each(['APP_ORIGIN', 'CLOUDINARY_CLOUD_NAME', 'CLOUDINARY_API_KEY', 'CLOUDINARY_API_SECRET'])(
+  it.each([
+    'APP_ORIGIN',
+    'CLOUDINARY_CLOUD_NAME',
+    'CLOUDINARY_API_KEY',
+    'CLOUDINARY_API_SECRET',
+    'GOOGLE_CLIENT_ID',
+    'GOOGLE_CLIENT_SECRET',
+  ])(
     'leaves %s empty',
     (name) => {
       expect(entries.get(name)).toBe('');
     },
   );
+
+  it('documents the Google redirect URI', () => {
+    expect(text).toContain('/api/auth/google/callback');
+  });
 
   it('does not trust proxy headers by default', () => {
     expect(entries.get('TRUST_PROXY')).toBe('false');
