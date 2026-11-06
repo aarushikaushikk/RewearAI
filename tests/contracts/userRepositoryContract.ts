@@ -147,6 +147,50 @@ export function describeUserRepositoryContract<R extends IUserRepository>(
           await expect(repo.findById(id)).resolves.toBeNull();
         },
       );
+
+      it('returns the account details without the password hash', async () => {
+        const user = await repo.create({ email: 'a@example.com', passwordHash: HASH, name: 'A' });
+
+        const found = await repo.findById(user.id);
+
+        expect(found).toMatchObject({ id: user.id, email: 'a@example.com', name: 'A' });
+        expect(found?.createdAt).toBeInstanceOf(Date);
+        expect(found?.updatedAt).toBeInstanceOf(Date);
+        // Fails for a key set to undefined too, which a careless mapping could produce.
+        expect(found).not.toHaveProperty('passwordHash');
+        expect(JSON.stringify(found)).not.toContain(HASH);
+      });
+
+      it('leaves the field out for an account with no password, rather than returning null', async () => {
+        await setup.addPasswordlessUser(repo, 'a@example.com');
+        const account = await repo.findByEmail('a@example.com');
+
+        const found = await repo.findById(account!.id);
+
+        expect(found?.email).toBe('a@example.com');
+        expect(found).not.toHaveProperty('passwordHash');
+      });
+
+      it('has no password hash in its return type, so it cannot be read by mistake', async () => {
+        const user = await repo.create({ email: 'a@example.com', passwordHash: HASH });
+
+        const found = await repo.findById(user.id);
+
+        // @ts-expect-error findById's result has no passwordHash. Checked by tsc.
+        expect(found?.passwordHash).toBeUndefined();
+      });
+
+      it('does not change what findByEmail returns afterwards', async () => {
+        const withPassword = await repo.create({ email: 'a@example.com', passwordHash: HASH });
+        await setup.addPasswordlessUser(repo, 'b@example.com');
+        const withoutPassword = await repo.findByEmail('b@example.com');
+
+        await repo.findById(withPassword.id);
+        await repo.findById(withoutPassword!.id);
+
+        expect((await repo.findByEmail('a@example.com'))?.passwordHash).toBe(HASH);
+        expect((await repo.findByEmail('b@example.com'))?.passwordHash).toBeNull();
+      });
     });
 
     describe('deleteById', () => {
