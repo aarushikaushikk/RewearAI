@@ -1,6 +1,6 @@
 # Issue #6 (Account and Sign-In): test evidence
 
-Evidence for Phase 3 Checkpoints B and C, Phase 4 Checkpoint B, and Phase 4C Steps 2 to 5 of User Story 1. **No check in this folder ran against Atlas, and no check has stored sessions in MongoDB.** Step 3 tests the test infrastructure, and Step 5 tests the user repository, both on a temporary local MongoDB server. The production service isn't connected to either and still fails closed.
+Evidence for Phase 3 Checkpoints B and C, Phase 4 Checkpoint B, and Phase 4C Steps 2 to 6 of User Story 1. **No check in this folder ran against Atlas.** Step 3 tests the test infrastructure, and Steps 5 and 6 test the repositories, all on a temporary local MongoDB server. The production service isn't connected to either and still fails closed.
 
 ## What was tested, and how
 
@@ -9,6 +9,7 @@ Evidence for Phase 3 Checkpoints B and C, Phase 4 Checkpoint B, and Phase 4C Ste
 | Unit and integration tests (Vitest) | `checkpoint-b-red-green.txt`, `checkpoint-c-red-green.txt`, `phase-4-checkpoint-b-red-green.txt`, `phase-4c-step-2-red-green.txt`, `phase-4c-step-4-red-green.txt` | In-memory repositories from `tests/mocks/`, mocked `fetch` and router for components, or the Mongoose models' `validate()` with no connection | Yes |
 | Test server isolation (Vitest, `npm run test:db`) | `phase-4c-step-3-red-green.txt` | None: no auth code runs. Temporary `mongod` on `127.0.0.1` | No, separate command |
 | User repository on real MongoDB (Vitest, `npm run test:db`) | `phase-4c-step-5-red-green.txt` | `MongoUserRepository` on a temporary `mongod`. Sessions are in memory where `AuthService` is used | No, separate command |
+| Session repository on real MongoDB (Vitest, `npm run test:db`) | `phase-4c-step-6-red-green.txt` | `MongoSessionRepository` and `MongoUserRepository` on a temporary `mongod` | No, separate command |
 | Real build smoke test (curl against `next start`) | Reported in the checkpoint summaries | None: the real fail-closed factory, so login returns 503 | No, run by hand |
 | Browser flows (headless Chrome) | `checkpoint-b-browser-flows.txt`, `checkpoint-c-browser-flows.txt` | **In-memory stub** | No, one-off script |
 | Keyboard checks (headless Chrome) | `checkpoint-c-keyboard.txt` | **In-memory stub** | No, one-off script |
@@ -38,6 +39,9 @@ The browser checks needed a working sign-in, which production code can't provide
 | `npm test`, end of Phase 4C Step 5 | 618 tests in 42 files pass |
 | `npm run test:db`, end of Phase 4C Step 5 | 86 tests in 4 files pass, including all 28 user contract tests |
 | Repository safeguards removed one at a time, Phase 4C Step 5 | 17 of 18 caught; the other doesn't change behaviour for string IDs |
+| `npm test`, end of Phase 4C Step 6 | 618 tests in 42 files pass |
+| `npm run test:db`, end of Phase 4C Step 6 | 155 tests in 6 files pass, including all 16 session contract tests |
+| Session safeguards removed one at a time, Phase 4C Step 6 | 7 of 7 caught |
 | Browser flows, Phase 3 (not rerun in Phase 4) | 28 of 28 pass |
 | Keyboard checks | 17 of 17 pass |
 | axe-core, before Checkpoint C | Violations in 13 of 16 states, including one critical (`button-name`) |
@@ -59,10 +63,11 @@ Each log has labelled sections, such as `FIX 2 - RED` followed by `FIX 2 - GREEN
 - `phase-4c-step-2-red-green.txt` has one red and one green section. The new contract test for a null password hash passed on its first run, so it isn't in the red section.
 - `phase-4c-step-4-red-green.txt` has one red and one green section. The other 6 new tests passed on their first run, because they record behaviour that already worked.
 - `phase-4c-step-5-red-green.txt` has a red section where the repository doesn't exist, so the test file can't load and no individual test ran. The removed-safeguard runs are the evidence that each test can fail. The two connection tests were added after the red commit, when a review found that removing `connectToDatabase()` wouldn't fail anything.
+- `phase-4c-step-6-red-green.txt` has two red sections. The second ran the tests against a deliberately naive adapter, never committed, so individual tests fail for their own reasons.
 
 ## What only real database integration can verify
 
-- Sign-in with sessions stored in MongoDB, and on Atlas.
+- Sign-in on Atlas.
 - Sessions surviving a server restart, and revocation and expiry across server instances.
 - How real database failures reach users.
 - Isolation of wardrobe and outfit data between users, which also needs those routes to exist.
