@@ -45,8 +45,13 @@ function enumParser<T extends string>(allowed: readonly T[]) {
     allowed.find((option) => option.toLowerCase() === text.toLowerCase()) ?? null;
 }
 
-/** Rejects rather than truncates, so a cut-off guess is never shown as a suggestion. */
-function parseStyle(text: string): string | null {
+/**
+ * Validates style text: trimmed, at most STYLE_MAX_LENGTH characters, no control characters.
+ * Returns null if the text isn't allowed. Rejects rather than truncates, so a cut-off guess is
+ * never shown as a suggestion. Shared with the review form so both apply the same rule.
+ */
+export function normalizeStyle(value: string): string | null {
+  const text = value.trim();
   if (text.length > STYLE_MAX_LENGTH || CONTROL_CHARACTERS.test(text)) return null;
   return text;
 }
@@ -64,7 +69,7 @@ export function normalizeClassification(raw: unknown): ClassificationResult {
   const suggestions: ClassificationSuggestions = {
     category: normalizeField(raw.category, enumParser(CATEGORIES)),
     color: normalizeField(raw.color, enumParser(COLORS)),
-    style: normalizeField(raw.style, parseStyle),
+    style: normalizeField(raw.style, normalizeStyle),
     season: normalizeField(raw.season, enumParser(SEASONS)),
     formality: normalizeField(raw.formality, enumParser(FORMALITIES)),
   };
