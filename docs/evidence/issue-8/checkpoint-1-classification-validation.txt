@@ -1,0 +1,23 @@
+Issue #8 (US3) Checkpoint 1: classification types and validation
+
+Scope: pure types and validation only. No AI provider, route, upload, database write, or UI.
+Files: src/types/classification.ts, src/services/classification/normalizeClassification.ts,
+src/services/classification/normalizeClassification.test.ts
+
+=== RED: normalizeClassification was a stub that threw "Not implemented" ===
+ Test Files  1 failed (1)
+      Tests  17 failed | 1 passed (18)
+All 17 behavior tests failed with "Error: Not implemented". The one that passed checks that
+STYLE_MAX_LENGTH equals the WardrobeItem model's style maxlength; it guards against drift and
+needs no implementation.
+
+=== GREEN ===
+Focused: 18 of 18 pass.
+npm test:         128 tests in 9 files pass
+npx tsc --noEmit: exit 0
+npm run lint:     exit 0
+npm run build:    exit 0
+git diff --check: exit 0
+
+=== REFACTOR ===
+Removed an eslint-disable comment that lint reported as unused. Tests still pass 18 of 18.
