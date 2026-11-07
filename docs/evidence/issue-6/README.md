@@ -1,0 +1,120 @@
+# Issue #6 (Account and Sign-In): test evidence
+
+Evidence for Phase 3 Checkpoints B and C, Phase 4 Checkpoint B, and Phase 4C Steps 2 to 10A and Phase 5 Checkpoints 1 to 5 of User Story 1. **Every automated check here uses temporary databases and fake credentials, never Atlas or real Google.** The only real Google and Atlas results are Pranav's manual checks, reported in `phase-5-checkpoint-5-final-verification.txt`. Step 3 tests the test infrastructure, Steps 5 to 8 test the repositories, and Steps 9 and 10A test the connected app, all on a temporary local MongoDB server. Nothing has run on Vercel.
+
+## What was tested, and how
+
+| Evidence | Files | Auth backend | Runs in CI-style `npm test`? |
+|---|---|---|---|
+| Unit and integration tests (Vitest) | `checkpoint-b-red-green.txt`, `checkpoint-c-red-green.txt`, `phase-4-checkpoint-b-red-green.txt`, `phase-4c-step-2-red-green.txt`, `phase-4c-step-4-red-green.txt` | In-memory repositories from `tests/mocks/`, mocked `fetch` and router for components, or the Mongoose models' `validate()` with no connection | Yes |
+| Test server isolation (Vitest, `npm run test:db`) | `phase-4c-step-3-red-green.txt` | None: no auth code runs. Temporary `mongod` on `127.0.0.1` | No, separate command |
+| User repository on real MongoDB (Vitest, `npm run test:db`) | `phase-4c-step-5-red-green.txt` | `MongoUserRepository` on a temporary `mongod`. Sessions are in memory where `AuthService` is used | No, separate command |
+| Session repository on real MongoDB (Vitest, `npm run test:db`) | `phase-4c-step-6-red-green.txt` | `MongoSessionRepository` and `MongoUserRepository` on a temporary `mongod` | No, separate command |
+| Index initialization (Vitest, `npm run test:db`) | `phase-4c-step-8-red-green.txt` | Both repositories on a temporary `mongod`, starting with no indexes | No, separate command |
+| Repository failures (Vitest, both commands) | `phase-4c-step-7-red-green.txt` | Both repositories on a temporary `mongod`, with driver failures simulated, then the server shut down | Mapping rules only; the rest is a separate command |
+| Full auth flow (Vitest, `npm run test:db`) | `phase-4c-step-9-red-green.txt` | The real production factory on a temporary `mongod` | No, separate command |
+| Production build smoke test (`npm run test:smoke`) | `phase-4c-step-9-red-green.txt` | `next start` on a temporary `mongod` | No, separate command |
+| Earlier smoke test (curl against `next start`, before Step 9) | Reported in the checkpoint summaries | None: the fail-closed factory, so login returned 503 | No, run by hand |
+| Browser flows on real MongoDB (headless Chrome, production build) | `phase-4c-step-10a-browser-flows.txt` | `next start` on a temporary `mongod` | No, one-off script |
+| Google account data layer (Vitest, both commands) | `phase-5-checkpoint-1-red-green.txt` | Memory and `MongoAccountRepository` on a temporary `mongod`. No Google code exists yet | Contract on memory only; the rest is a separate command |
+| Google sign-in service (Vitest, both commands) | `phase-5-checkpoint-2-red-green.txt` | Memory and MongoDB repositories, with claims supplied by the tests. No Google request or token verification exists yet | Service rules only; the rest is a separate command |
+| Google OIDC routes (Vitest, `npm run test:db` and `npm run test:smoke`) | `phase-5-checkpoint-3-red-green.txt` | The real `openid-client` against a local fake with Google's hostnames, generated keys, and a temporary `mongod`. The smoke test uses the real `next start` build | No, separate commands |
+| Google sign-in in a browser (headless Chrome, production build) | `phase-5-checkpoint-4-browser-flows.txt`, `screenshots/google-*.png` | `next start` on a temporary `mongod`, with the real `openid-client` and a local fake Google | No, one-off script |
+| Final review and gates, with Pranav's manual results kept separate | `phase-5-checkpoint-5-final-verification.txt` | Automated: temporary `mongod` and fake Google. Manual: real Google and a development Atlas cluster | Unit tests yes; the rest is separate |
+| Earlier browser flows (headless Chrome) | `checkpoint-b-browser-flows.txt`, `checkpoint-c-browser-flows.txt` | **In-memory stub** | No, one-off script |
+| Keyboard checks (headless Chrome) | `checkpoint-c-keyboard.txt` | **In-memory stub** | No, one-off script |
+| Accessibility and layout audit (axe-core 4.10.3, four viewports) | `checkpoint-c-ui-audit-before.txt`, `checkpoint-c-ui-audit-after.txt` | **In-memory stub** | No, one-off script |
+| Screenshots | `screenshots/` | **In-memory stub** | No |
+
+### The in-memory stub
+
+The browser and audit checks from Phase 3 needed a working sign-in, which production code couldn't provide then. They ran against a throwaway copy of the app outside the repository. In that copy only, `getProductionAuthService()` was replaced with the real `AuthService` over `tests/mocks/` repositories, plus switches to simulate an outage, a failed session revocation, and a failed session creation.
+
+**None of this is in the repository's `src/`.** The scripts were one-off and aren't kept here. The keyboard checks and accessibility audit haven't been rerun on real MongoDB. All of these flows should become Playwright tests.
+
+## Results
+
+| Check | Result |
+|---|---|
+| `npm test`, end of Phase 3 | 340 tests in 23 files pass |
+| `npm test`, end of Phase 4 Checkpoint B | 431 tests in 29 files pass |
+| `npm test`, after merging `main` (Phase 4C Step 1) | 543 tests in 38 files pass |
+| `npm test`, end of Phase 4C Step 2 | 562 tests in 39 files pass |
+| `npm test`, end of Phase 4C Step 3 | 608 tests in 41 files pass |
+| `npm run test:db`, end of Phase 4C Step 3 | 13 tests in 2 files pass |
+| Test server safeguards removed one at a time, Phase 4C Step 3 | 11 of 11 caught by the tests |
+| `npm test`, end of Phase 4C Step 4 | 618 tests in 42 files pass |
+| `npm run test:db`, end of Phase 4C Step 4 | 13 tests in 2 files pass |
+| Password hash safeguards removed one at a time, Phase 4C Step 4 | 9 of 9 caught, 8 by the tests and 1 by `tsc` |
+| `npm test`, end of Phase 4C Step 5 | 618 tests in 42 files pass |
+| `npm run test:db`, end of Phase 4C Step 5 | 86 tests in 4 files pass, including all 28 user contract tests |
+| Repository safeguards removed one at a time, Phase 4C Step 5 | 17 of 18 caught; the other doesn't change behaviour for string IDs |
+| `npm test`, end of Phase 4C Step 6 | 618 tests in 42 files pass |
+| `npm run test:db`, end of Phase 4C Step 6 | 155 tests in 6 files pass, including all 16 session contract tests |
+| Session safeguards removed one at a time, Phase 4C Step 6 | 7 of 7 caught |
+| `npm test`, end of Phase 4C Step 7 | 663 tests in 43 files pass |
+| `npm run test:db`, end of Phase 4C Step 7 | 190 tests in 7 files pass |
+| Error mapping and logging safeguards removed one at a time, Phase 4C Step 7 | 9 of 9 caught |
+| `npm test`, end of Phase 4C Step 8 | 664 tests in 43 files pass |
+| `npm run test:db`, end of Phase 4C Step 8 | 206 tests in 8 files pass |
+| Index safeguards removed one at a time, Phase 4C Step 8 | 6 of 6 caught |
+| `npm test`, end of Phase 4C Step 9 | 674 tests in 44 files pass |
+| `npm run test:db`, end of Phase 4C Step 9 | 230 tests in 9 files pass |
+| `npm run test:smoke`, end of Phase 4C Step 9 | 19 tests in 1 file pass |
+| Factory safeguards removed one at a time, Phase 4C Step 9 | 3 of 3 caught |
+| `npm test`, end of Phase 4C Step 10A | 687 tests in 45 files pass |
+| `npm run test:db`, end of Phase 4C Step 10A | 230 tests in 9 files pass |
+| `npm run test:smoke`, end of Phase 4C Step 10A | 19 tests in 1 file pass |
+| Browser flows on real MongoDB, Phase 4C Step 10A | 29 of 29 pass |
+| `npm test`, end of Phase 5 Checkpoint 1 | 736 tests in 45 files pass |
+| `npm run test:db`, end of Phase 5 Checkpoint 1 | 311 tests in 11 files pass, leaving no temporary folders or `mongod` processes |
+| `npm run test:smoke`, end of Phase 5 Checkpoint 1 | 19 tests in 1 file pass |
+| Data layer safeguards removed one at a time, Phase 5 Checkpoint 1 | 8 of 8 caught |
+| `npm test`, end of Phase 5 Checkpoint 2 | 771 tests in 46 files pass |
+| `npm run test:db`, end of Phase 5 Checkpoint 2 | 317 tests in 11 files pass, leaving no temporary folders or `mongod` processes |
+| `npm run test:smoke`, end of Phase 5 Checkpoint 2 | 19 tests in 1 file pass |
+| Sign-in rules removed one at a time, Phase 5 Checkpoint 2 | 11 of 11 caught, 2 after adding tests |
+| `npm test`, end of Phase 5 Checkpoint 3 | 800 tests in 47 files pass |
+| `npm run test:db`, end of Phase 5 Checkpoint 3 | 370 tests in 12 files pass, leaving no temporary folders or `mongod` processes |
+| `npm run test:smoke`, end of Phase 5 Checkpoint 3 | 29 tests in 2 files pass |
+| OIDC safeguards removed one at a time, Phase 5 Checkpoint 3 | 8 of 8 caught |
+| `npm test`, end of Phase 5 Checkpoint 4 | 835 tests in 48 files pass |
+| `npm run test:db`, end of Phase 5 Checkpoint 4 | 370 tests in 12 files pass, leaving no temporary folders or `mongod` processes |
+| `npm run test:smoke`, end of Phase 5 Checkpoint 4 | 34 tests in 2 files pass |
+| Google browser flows, Phase 5 Checkpoint 4 | 65 of 65 pass, including 20 layout checks |
+| axe-core on Google sign-in states, Phase 5 Checkpoint 4 | No violations in 20 of 20 state and width combinations |
+| `npm test`, end of Phase 5 Checkpoint 5 | 825 tests in 48 files pass |
+| `npm run test:db`, end of Phase 5 Checkpoint 5 | 346 tests in 12 files pass, leaving no temporary folders or `mongod` processes |
+| `npm run test:smoke`, end of Phase 5 Checkpoint 5 | 34 tests in 2 files pass |
+| Browser flows, Phase 3 (not rerun in Phase 4) | 28 of 28 pass |
+| Keyboard checks | 17 of 17 pass |
+| axe-core, before Checkpoint C | Violations in 13 of 16 states, including one critical (`button-name`) |
+| axe-core, after Checkpoint C | No violations in 19 of 19 states, none with horizontal overflow |
+
+axe-core finds only part of what makes a page accessible. No screen reader was used, and no real phone or tablet was tested; viewports were emulated at 320, 375, 768, and 1280 px.
+
+## Reading the red-green logs
+
+Each log has labelled sections, such as `FIX 2 - RED` followed by `FIX 2 - GREEN`. They were filtered to failures and totals, so passing test names don't appear.
+
+- `FIX 1` has two red runs. In the first, the matcher tests failed because of a wrong helper name in the test: Next 16.4.5 exports `unstable_doesMiddlewareMatch`, while its docs say `unstable_doesProxyMatch`. The second run shows the real failures.
+- `FIX 7` was found by the browser check, not planned in advance.
+- The Checkpoint C audit's "before" file records `home tab order` as stuck on `BODY`. That came from the audit's unfocused headless window, not the app; `checkpoint-c-keyboard.txt` is the valid keyboard result.
+- In `phase-4-checkpoint-b-red-green.txt`, the labels are `TASK 1` to `TASK 5`.
+  - The `TASK 2 - GREEN (types)` run shows 2 errors. Both came from Task 3 test files importing a module that didn't exist yet, and a later run labelled as the correction shows 0.
+  - `TASK 3a` has two green runs. The first still failed, because the first draft of `RepositoryError` accepted a message that could have carried driver text.
+  - The page outage tests passed on their first run, so they have no red run. They record behaviour that already worked.
+- `phase-4c-step-2-red-green.txt` has one red and one green section. The new contract test for a null password hash passed on its first run, so it isn't in the red section.
+- `phase-4c-step-4-red-green.txt` has one red and one green section. The other 6 new tests passed on their first run, because they record behaviour that already worked.
+- `phase-4c-step-5-red-green.txt` has a red section where the repository doesn't exist, so the test file can't load and no individual test ran. The removed-safeguard runs are the evidence that each test can fail. The two connection tests were added after the red commit, when a review found that removing `connectToDatabase()` wouldn't fail anything.
+- `phase-4c-step-6-red-green.txt` has two red sections. The second ran the tests against a deliberately naive adapter, never committed, so individual tests fail for their own reasons.
+
+## What hasn't been verified
+
+- By anyone other than Pranav: real Google and Atlas. Those results are reported, with no automated run behind them. In the browser checks, Chrome's request to `accounts.google.com` was answered locally.
+- On real Google: cancelling at the consent screen, and being refused for an email that already has an account. Both pass against the fake.
+- Anything on Vercel, and Atlas failover. Failover errors are only simulated.
+- Node 20.19, the minimum version. All tests ran on Node 24.
+- Rate limits across several server instances. They are known not to work across instances; see §6 of `docs/issue-6-team-review.md`.
+- Isolation of wardrobe and outfit data between users, which needs those routes to exist.
+- Visitors with JavaScript turned off. With a forged cookie, Chrome stayed on the blank `/` shell without redirecting. No private content was sent.

@@ -1,0 +1,52 @@
+Phase 4C Step 3: isolated MongoDB test infrastructure
+Filtered to failures and totals. Real-database runs used only a temporary mongod on 127.0.0.1.
+
+=== RED (commit 63a68e0): tests with no helper or config; npm test also picks up tests/db ===
+      Tests  4 failed | 562 passed (566)
+ FAIL  tests/db/mongoTestServer.test.ts [ tests/db/mongoTestServer.test.ts ]
+ FAIL  tests/db/mongoTestServerFailure.test.ts > cleaning up after failures > never uses or prints a URI from the shell when a run ends with crash
+ FAIL  tests/db/mongoTestServerFailure.test.ts > cleaning up after failures > never uses or prints a URI from the shell when a run ends with fail
+ FAIL  tests/db/mongoTestServerFailure.test.ts > cleaning up after failures > stops the server when a test fails
+ FAIL  tests/db/mongoTestServerFailure.test.ts > cleaning up after failures > stops the server when the test process crashes
+ FAIL  tests/unit/mongoTestServer.test.ts [ tests/unit/mongoTestServer.test.ts ]
+ FAIL  tests/unit/testConfig.test.ts [ tests/unit/testConfig.test.ts ]
+ Test Files  4 failed | 39 passed (43)
+Error: Cannot find module '../../vitest.db.config' imported from 'tests/unit/testConfig.test.ts'
+Error: Cannot find module '../helpers/mongoTestServer' imported from 'tests/db/mongoTestServer.test.ts'
+Error: Cannot find module '../helpers/mongoTestServer' imported from 'tests/unit/mongoTestServer.test.ts'
+
+=== GREEN: npm test ===
+ Test Files  41 passed (41)
+      Tests  608 passed (608)
+
+=== GREEN: npm run test:db ===
+ ✓ tests/db/mongoTestServerFailure.test.ts (4 tests) 10863ms
+ ✓ tests/db/mongoTestServer.test.ts (9 tests) 3082ms
+ Test Files  2 passed (2)
+      Tests  13 passed (13)
+
+=== SAFEGUARDS REMOVED ONE AT A TIME (throwaway clone; each should fail) ===
+Only the named safeguard was removed for each run.
+
+Standard suite files (46 tests):
+naive host check, startsWith('mongodb://127.0.0.1')   20 failed
+any database name allowed                              1 failed
+shell URI kept on start                                1 failed
+URI kept after stop                                    2 failed
+start error text passed through                        1 failed
+refused server not stopped                             3 failed
+tests/db not excluded from npm test                    1 failed
+
+Temporary server file (9 tests):
+clearing allowed on any database                       1 failed
+db.ts connection cache not reset                       2 failed
+server bound to all interfaces                         1 failed
+no MONGODB_URI guard in db config, URI in shell        1 failed
+
+=== OTHER SCENARIOS (throwaway clone, unmodified code, made-up URIs) ===
+test:db with an Atlas-shaped URI in the shell          13 passed; the URI was not used
+tests/db/mongoTestServer.test.ts, .env.local present    9 passed; the URI was not used
+mongod cannot start                                    exit 1; 3 failed, 6 skipped;
+                                                       "The temporary MongoDB test server could not start";
+                                                       no URI in the output
+mongod processes left after all of the above           0

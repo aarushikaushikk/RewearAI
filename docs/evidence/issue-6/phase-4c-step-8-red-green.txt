@@ -1,0 +1,41 @@
+Phase 4C Step 8: safe MongoDB index initialization
+Filtered to failures and totals. Nothing here ran against Atlas, and the repositories
+aren't connected to the app until Step 9.
+
+=== RED (commit d5886a4): no index initialization yet ===
+tests/db/mongoIndexes.test.ts, starting from a database with no indexes:
+ FAIL  before any index exists > builds the required indexes with the correct definitions
+ FAIL  before any index exists > stores one account when 25 concurrent writes use one email
+ FAIL  before any index exists > stores one account when concurrent registrations go through AuthService
+ FAIL  before any index exists > stores one session when concurrent writes use one token hash
+ FAIL  coordination > runs one build for many concurrent operations of every kind
+ FAIL  coordination > shares one failed attempt among concurrent operations, and the next one retries
+ FAIL  when the build fails > sends no write, logs the failure, and recovers on retry
+ FAIL  when the build fails > reports an outage during the build as unavailable, and recovers on retry
+ FAIL  when the build fails > also refuses reads, so nothing runs on a database in an unknown state
+ FAIL  when the build fails > because stored data breaks a unique index > does not report it as a taken email, and blocks every operation
+ FAIL  when the build fails > because stored data breaks a unique index > recovers once the data is fixed
+ FAIL  when the build fails > because an existing index has the wrong definition > refuses to write without the unique index, and recovers once it is removed
+ FAIL  across connections > keeps enforcing uniqueness after a disconnect and reconnect
+ FAIL  across connections > builds the indexes again when the database changes
+ Test Files  1 failed (1)
+      Tests  14 failed | 2 passed (16)
+
+Concurrent writes with no index: 25 of 25 succeeded for one email, and 25 of 25 for one
+token hash. The repository tests still passed at this commit, 170 of 170, even with their
+own index builds removed, because Mongoose's background build won the race in those runs.
+
+=== GREEN ===
+npm test:          43 files passed, 664 tests passed (663 from Step 7 + 1 new)
+npm run test:db:   8 files passed, 206 tests passed (190 from Step 7 + 16 new)
+npx tsc --noEmit:  exit 0
+
+=== SAFEGUARDS REMOVED ONE AT A TIME (throwaway clone; each should be caught) ===
+tests/db/mongoIndexes.test.ts only (16 tests, all pass unmodified).
+
+build-failure-ignored                    7 failed | 9 passed (16)
+index-step-removed                       14 failed | 2 passed (16)
+failed-attempt-remembered                5 failed | 11 passed (16)
+attempt-not-shared                       3 failed | 13 passed (16)
+cache-ignores-database                   1 failed | 15 passed (16)
+index-duplicate-looks-like-taken-email   3 failed | 13 passed (16)

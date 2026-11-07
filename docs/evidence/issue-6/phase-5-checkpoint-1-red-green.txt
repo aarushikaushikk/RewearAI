@@ -1,0 +1,64 @@
+Phase 5 Checkpoint 1: Google account data layer
+Filtered to totals. Every database run used a temporary mongod on 127.0.0.1. No Google code,
+OAuth library, or Google account was involved.
+
+=== RED (commit 4def4b2): the account repository and passwordless creation don't exist ===
+tests/unit/repositories:
+ Test Files  2 failed | 3 passed (5)
+      Tests  3 failed | 82 passed (85)
+
+tests/db (the two new files couldn't load; existing suites failed on the new methods):
+ Test Files  4 failed (4)
+      Tests  8 failed | 72 passed (80)
+
+npx tsc --noEmit: exit 2, 52 errors
+
+=== GREEN ===
+npm test:          45 files passed, 736 tests passed (687 from Step 10A + 49 new)
+npm run test:db:   11 files passed, 311 tests passed (230 from Step 10A + 81 new)
+npm run test:smoke: 1 file passed, 19 tests passed
+npx tsc --noEmit:  exit 0
+
+Race tests in tests/db/googleAccountRecovery.test.ts passed on every repeated run: 16 of 16 on
+6 runs, and 19 of 19 on 5 runs after the two tests below were added.
+
+=== SAFEGUARDS REMOVED ONE AT A TIME (throwaway clone; each should be caught) ===
+mongoAccountRepository, googleAccountRecovery and mongoIndexes (85 tests):
+
+identity-check-removed                   11 failed | 74 passed (85)
+delete-ignores-owner                     1 failed | 84 passed (85)
+account-indexes-not-built                4 failed | 81 passed (85)
+repeated-id-not-recognized               2 failed | 83 passed (85)
+identity-duplicate-not-recognized        5 failed | 80 passed (85)
+any-field-counts-as-email-duplicate      85 passed (85)
+passwordless-accepts-a-hash              2 failed | 83 passed (85)
+passwordless-id-not-used                 9 failed | 76 passed (85)
+
+any-field-counts-as-email-duplicate isn't covered by those three files. Rerun against
+mongoErrorMapping and mongoUserRepository, it was caught: mapping: 2 failed | 50 passed (52); repository: 1 failed | 79 passed (80)
+
+=== TEMPORARY FOLDER LEAK ===
+Full database runs failed once with the disk full, 236 tests logging index_init. Those results
+were discarded. The cause was on the machine and in the tests: 36 folders of about 200 MB each.
+
+Folders left by one run of each database test file, measured with free disk space:
+  mongoTestServerFailure.test.ts   2 (its test process is killed on purpose, so it can't clean up)
+  every other file, and the smoke suite   0
+
+RED (commit f3b4614): removeCrashedServerFiles doesn't exist yet
+tests/unit/mongoTestServer.test.ts:
+ Test Files  1 failed (1)
+      Tests  7 failed | 38 passed (45)
+
+GREEN: 45 of 45 unit tests pass, and the crash tests leave 0 folders.
+After the final gates: 0 mongo-mem folders and 0 mongod processes.
+
+=== RACE BETWEEN A REFUSAL AND A REQUEST FINISHING THE SAME IDENTITY ===
+RED (never committed; the write order is kept in the test file until Checkpoint 2):
+  FAIL  googleAccountRecovery.test.ts > a refusal racing a request that finishes the same identity > restores the link if the User appears just as the refusal removes it
+  FAIL  googleAccountRecovery.test.ts > a refusal racing a request that finishes the same identity > restores the link if the refusal removes it just after the User is written
+AssertionError: expected { result: 'email-in-use' } to deeply equal { result: 'signed-in', …(1) }
+AssertionError: expected [ 'alex@example.com' ] to deeply equal []
+GREEN: each side checks after its own write and restores the link. Both orders pass.
+
+The removed-safeguard runs above predate these two fixes. Neither changed src/.
