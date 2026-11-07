@@ -63,7 +63,31 @@ export interface ClassificationSuggestions {
   formality: FieldSuggestion<Formality>;
 }
 
-export type ClassificationFailureReason = "invalid_output" | "not_clothing";
+/**
+ * - `invalid_output`: the classifier answered, but not in a usable shape.
+ * - `not_clothing`: the image doesn't appear to show clothing.
+ * - `unavailable`: no classifier could run (not loaded, unsupported browser, or it threw).
+ * Every failure leads to manual entry.
+ */
+export type ClassificationFailureReason = "invalid_output" | "not_clothing" | "unavailable";
+
+/** An image US2 hands to classification: a selected `File`/`Blob`, or an object or https URL. */
+export type ClassifiableImage = Blob | string;
+
+/** One candidate label and the model's score for it. */
+export interface LabelScore {
+  label: string;
+  score: number;
+}
+
+/**
+ * Zero-shot image classifier: scores an image against candidate text labels, with scores
+ * across all labels summing to about 1. The browser model adapter implements this.
+ */
+export type ZeroShotImageClassifier = (
+  image: ClassifiableImage,
+  candidateLabels: readonly string[],
+) => Promise<LabelScore[]>;
 
 export type ClassificationResult =
   | {
