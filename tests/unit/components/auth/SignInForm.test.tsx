@@ -6,6 +6,8 @@ import '@testing-library/jest-dom';
 import { SignInForm } from '@/components/auth/SignInForm';
 
 // Mock next/navigation
+// delay: null skips user-event's timer between simulated actions, which took most of each test's
+// time and left it exposed to machine pauses. Every keystroke and event still fires, in order.
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
 }));
@@ -31,7 +33,7 @@ describe('SignInForm', () => {
   });
 
   it('shows inline validation errors on empty submit', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     render(<SignInForm />);
     await user.click(screen.getByRole('button', { name: /sign in/i }));
     expect(await screen.findByText(/email is required/i)).toBeInTheDocument();
@@ -39,7 +41,7 @@ describe('SignInForm', () => {
   });
 
   it('shows generic error message on 401 response', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     mockFetch(401, { error: 'Invalid credentials' });
     render(<SignInForm />);
     await user.type(screen.getByLabelText(/email/i), 'user@example.com');
@@ -51,7 +53,7 @@ describe('SignInForm', () => {
   });
 
   it('shows service-unavailable message on 503 response', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     mockFetch(503, { error: 'Service unavailable' });
     render(<SignInForm />);
     await user.type(screen.getByLabelText(/email/i), 'user@example.com');
@@ -63,7 +65,7 @@ describe('SignInForm', () => {
   });
 
   it('shows rate-limit message on 429 response', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     mockFetch(429, { error: 'Too many requests' });
     render(<SignInForm />);
     await user.type(screen.getByLabelText(/email/i), 'user@example.com');
@@ -73,7 +75,7 @@ describe('SignInForm', () => {
   });
 
   it('preserves the email value after a failed login', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     mockFetch(401, { error: 'Invalid credentials' });
     render(<SignInForm />);
     await user.type(screen.getByLabelText(/email/i), 'user@example.com');
@@ -84,7 +86,7 @@ describe('SignInForm', () => {
   });
 
   it('calls POST /api/auth/login with the correct payload', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     global.fetch = vi.fn().mockResolvedValueOnce({
       ok: true,
       status: 200,
@@ -106,7 +108,7 @@ describe('SignInForm', () => {
   });
 
   it('shows a loading state during submission', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     // Never-resolving fetch to hold the loading state
     global.fetch = vi.fn().mockReturnValueOnce(new Promise(() => {}));
     render(<SignInForm />);
@@ -118,7 +120,7 @@ describe('SignInForm', () => {
 
   describe('error mapping', () => {
     async function submitWith(status: number, body: object = {}) {
-      const user = userEvent.setup();
+      const user = userEvent.setup({ delay: null });
       mockFetch(status, body);
       render(<SignInForm />);
       await user.type(screen.getByLabelText(/email/i), 'user@example.com');
@@ -150,7 +152,7 @@ describe('SignInForm', () => {
     });
 
     it('reports a network failure separately from a server response', async () => {
-      const user = userEvent.setup();
+      const user = userEvent.setup({ delay: null });
       global.fetch = vi.fn().mockRejectedValueOnce(new TypeError('Failed to fetch'));
       render(<SignInForm />);
       await user.type(screen.getByLabelText(/email/i), 'user@example.com');
