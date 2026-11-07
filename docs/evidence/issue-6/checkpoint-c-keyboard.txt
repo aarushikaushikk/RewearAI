@@ -1,0 +1,40 @@
+PASS  registered a stub user  [201]
+document.hasFocus: true  url: /
+desktop tab order:
+  A:Skip to main content
+  A:ReWear AI
+  A:Home
+  A:My Wardrobe
+  A:Create Outfit
+  A:Saved Outfits
+  A:Outfit History
+  BUTTON:Account menu for Key User
+  A:👕
+  A:✨
+PASS  Tab reaches the skip link first  [A:Skip to main content]
+PASS  every stop has a visible focus style
+PASS  Tab reaches the account menu button
+PASS  skip link moves focus to main content  [MAIN:Welcome back, Key User!]
+PASS  next Tab goes into the page content, past the header  [/wardrobe/new]
+PASS  Enter opens the account menu
+PASS  Tab moves into the account menu  [BUTTON:Sign Out]
+PASS  Escape closes the account menu
+PASS  Escape returns focus to the account button  [BUTTON:Account menu for Key User]
+PASS  Tab reaches the Menu button on mobile  [BUTTON:Menu]
+PASS  Enter opens the drawer
+mobile drawer tab order:
+  A:Home
+  A:My Wardrobe
+  A:Create Outfit
+  A:Saved Outfits
+  A:Outfit History
+  BUTTON:Sign Out
+PASS  drawer exposes links then sign out
+PASS  Escape closes the drawer
+PASS  Escape returns focus to Menu  [BUTTON:Menu]
+PASS  no horizontal scroll at 200% zoom equivalent
+PASS  menu still reachable at 200% zoom equivalent
+
+All keyboard checks passed
+script exit=0
+server log: new Date errors=0

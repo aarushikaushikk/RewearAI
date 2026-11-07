@@ -1,0 +1,114 @@
+
+## sign-in small
+ axe: none
+ overflowX=false font=Inter, "Inter Fallback", syste h1=26px
+ <44px: none
+
+## sign-up small
+ axe: none
+ overflowX=false font=Inter, "Inter Fallback", syste h1=26px
+ <44px: none
+
+## sign-in mobile
+ axe: none
+ overflowX=false font=Inter, "Inter Fallback", syste h1=26px
+ <44px: none
+
+## sign-up mobile
+ axe: none
+ overflowX=false font=Inter, "Inter Fallback", syste h1=26px
+ <44px: none
+
+## sign-in tablet
+ axe: none
+ overflowX=false font=Inter, "Inter Fallback", syste h1=30px
+ <44px: none
+
+## sign-up tablet
+ axe: none
+ overflowX=false font=Inter, "Inter Fallback", syste h1=30px
+ <44px: none
+
+## sign-in desktop
+ axe: none
+ overflowX=false font=Inter, "Inter Fallback", syste h1=30px
+ <44px: none
+
+## sign-up desktop
+ axe: none
+ overflowX=false font=Inter, "Inter Fallback", syste h1=30px
+ <44px: none
+
+sign-in tab order: INPUT:email > INPUT:password > BUTTON:Sign In > A:Create an account
+sign-up tab order: INPUT:name > INPUT:email > INPUT:password > BUTTON:Create Account > A:Sign in
+
+## sign-up validation state mobile
+ axe: none
+ overflowX=false font=Inter, "Inter Fallback", syste h1=26px
+ <44px: none
+ focus after failed validation: email
+ focus after server failure: DIV role=alert
+
+## sign-in server failure mobile
+ axe: none
+ overflowX=false font=Inter, "Inter Fallback", syste h1=26px
+ <44px: none
+
+after signup url: /
+
+## home small
+ axe: none
+ overflowX=false font=Inter, "Inter Fallback", syste h1=28px
+ <44px: Skip to main content 1x1
+
+## home mobile
+ axe: none
+ overflowX=false font=Inter, "Inter Fallback", syste h1=28px
+ <44px: Skip to main content 1x1
+
+## home tablet
+ axe: none
+ overflowX=false font=Inter, "Inter Fallback", syste h1=30px
+ <44px: Skip to main content 1x1
+
+## home desktop
+ axe: none
+ overflowX=false font=Inter, "Inter Fallback", syste h1=30px
+ <44px: Skip to main content 1x1 | Home 40x44
+
+home tab order: BODY:Skip to main content [NO FOCUS STYLE] > BODY:Skip to main content [NO FOCUS STYLE] > BODY:Skip to main content [NO FOCUS STYLE] > BODY:Skip to main content [NO FOCUS STYLE] > BODY:Skip to main content [NO FOCUS STYLE] > BODY:Skip to main content [NO FOCUS STYLE] > BODY:Skip to main content [NO FOCUS STYLE] > BODY:Skip to main content [NO FOCUS STYLE] > BODY:Skip to main content [NO FOCUS STYLE] > BODY:Skip to main content [NO FOCUS STYLE] > BODY:Skip to main content [NO FOCUS STYLE]
+aria-current count: 1
+
+## account menu open desktop
+ axe: none
+ overflowX=false font=Inter, "Inter Fallback", syste h1=30px
+ <44px: Skip to main content 1x1 | Home 40x44
+menu closed by Escape: false
+focus after Escape: Skip to main content
+
+mobile menu button found: true visible sign-out buttons: 1
+
+## mobile nav open
+ axe: none
+ overflowX=false font=Inter, "Inter Fallback", syste h1=28px
+ <44px: Skip to main content 1x1
+drawer closed by Escape: false focus: Skip to main content
+
+## tablet nav open
+ axe: none
+ overflowX=false font=Inter, "Inter Fallback", syste h1=30px
+ <44px: Skip to main content 1x1
+focus after sign-out failure: alert
+
+## sign-out failure desktop
+ axe: none
+ overflowX=false font=Inter, "Inter Fallback", syste h1=30px
+ <44px: Skip to main content 1x1 | Home 40x44
+
+## error boundary mobile
+ axe: none
+ overflowX=false font=Inter, "Inter Fallback", syste h1=26px
+ <44px: none
+client nav with cookie removed lands on: /sign-in
+script exit=0
+server log: new Date errors=0

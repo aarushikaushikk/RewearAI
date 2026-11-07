@@ -251,7 +251,7 @@ Every page must explain failures at the point where an action fails, using a cle
 
 | Screen / wireframe | Required versus optional fields | Example failure message and recovery |
 |---|---|---|
-| 01 — Sign In / Sign Up | If email/password authentication is selected, **Email (Required)** and **Password (Required)**. The authentication method is still a team decision. | “Enter a valid email address.” / “Sign-in failed. Check your details and try again.” Keep account-existence information private. |
+| 01 — Sign In / Sign Up | **Email (Required)** and **Password (Required)**, plus a **Continue with Google** link below the form, shown only when Google sign-in is configured. | “Enter a valid email address.” / “Sign-in failed. Check your details and try again.” Keep account-existence information private. The one exception: someone Google has verified as the email's owner is told it already has an account that isn't connected to Google. |
 | 02 — Home | No form fields required to view the page. | “We couldn't load your wardrobe summary. Try again.” **Retry**. |
 | 03 — My Wardrobe | **Search (Optional)**; **Category, Color, Season, Formality (Optional)** filters. | “We couldn't load your wardrobe. Try again.” **Retry**, preserving filters. A zero-match result is an empty state, not an error. |
 | 04 — Clothing Detail / Edit | Existing metadata fields: **Required/Optional — confirm with team** before enforcing validation. Availability is a reversible control, not a required text field. | “We couldn't save your changes. Try again.” **Retry**; keep edits. For deletion: “We couldn't delete this item. Try again.” |
@@ -390,7 +390,7 @@ Alternative paths: upload failure -> retry; classification uncertain -> edit man
 - [ ] **Saved outfit after source-item removal:** preserve historical record with missing-item label; clarify data behavior.
 - [ ] **Outfit feedback placement:** directly beneath recommendation explanation/actions.
 - [ ] **Screen mockups:** review the attached 13 wireframe sheets and approve or revise before production UI implementation.
-- [ ] **Authentication method:** confirm email/password vs OAuth and the provider, consistent with Auth.js.
+- [x] **Authentication method:** email/password and Google, with custom MongoDB-backed sessions rather than Auth.js (approved by both partners). Wireframe 01 predates this and doesn't show the Google link; the sign-in and sign-up pages are the reference until it's redrawn.
 - [ ] **Classification integration:** agree on provider/model, failure contract and what counts as an uncertain result.
 - [ ] **US2 to US3 handoff:** agree on uploaded image reference, provisional metadata and when the wardrobe record is created.
 - [ ] **Outfit algorithm:** define what constitutes a valid outfit for each occasion; no arbitrary items or invented categories.
