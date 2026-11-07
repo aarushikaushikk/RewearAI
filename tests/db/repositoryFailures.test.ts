@@ -53,7 +53,7 @@ const USER_ID = USER_IDS[0];
 const users = new MongoUserRepository();
 const sessions = new MongoSessionRepository();
 
-type DriverMethod = 'findOne' | 'insertOne' | 'updateOne' | 'updateMany' | 'deleteOne';
+type DriverMethod = 'findOne' | 'insertOne' | 'updateOne' | 'deleteOne';
 
 const OPERATIONS: [string, DriverMethod, () => Promise<unknown>][] = [
   ['user.findByEmail', 'findOne', () => users.findByEmail('person@example.com')],
@@ -76,7 +76,6 @@ const OPERATIONS: [string, DriverMethod, () => Promise<unknown>][] = [
   ],
   ['session.findActive', 'findOne', () => sessions.findActiveSessionByTokenHash(HASH)],
   ['session.revoke', 'updateOne', () => sessions.revokeSessionByTokenHash(HASH)],
-  ['session.revokeAll', 'updateMany', () => sessions.revokeAllSessionsForUser(USER_ID)],
 ];
 
 function postRequest(path: string, body?: unknown, cookie?: string): Request {

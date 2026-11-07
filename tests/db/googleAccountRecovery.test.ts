@@ -346,11 +346,17 @@ describe('the three-way race', () => {
   });
 
   it('never removes a link during any of this', async () => {
-    const deleteLink = vi.spyOn(accounts, 'deleteLink');
+    // Every delete on this collection goes through one of these, whichever code asks for it.
+    const deletes = (['deleteOne', 'deleteMany', 'findOneAndDelete'] as const).map((method) =>
+      vi.spyOn(Account.collection, method),
+    );
 
     await runRace('B');
 
-    expect(deleteLink).not.toHaveBeenCalled();
+    expect(await count.accounts()).toBeGreaterThan(0);
+    for (const remove of deletes) {
+      expect(remove).not.toHaveBeenCalled();
+    }
   });
 
   it('does not refuse a request whose own identity just won the email', async () => {

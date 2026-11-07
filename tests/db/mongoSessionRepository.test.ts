@@ -142,7 +142,6 @@ describe('MongoSessionRepository on a real database', () => {
       const first = await Session.collection.findOne({ tokenHash: HASH });
 
       await repo.revokeSessionByTokenHash(HASH);
-      await repo.revokeAllSessionsForUser(USER_A);
 
       const second = await Session.collection.findOne({ tokenHash: HASH });
       expect(second?.revokedAt).toEqual(first?.revokedAt);
@@ -161,17 +160,6 @@ describe('MongoSessionRepository on a real database', () => {
       expect(await repo.findActiveSessionByTokenHash(HASH)).toMatchObject({ revokedAt: null });
       expect(await repo.revokeSessionByTokenHash(HASH)).toBe(true);
       expect(await repo.findActiveSessionByTokenHash(HASH)).toBeNull();
-    });
-
-    it("revokes all of one user's sessions and none of another's", async () => {
-      await create(tokenHashFor('a1'), USER_A);
-      await create(tokenHashFor('a2'), USER_A);
-      await create(tokenHashFor('b1'), USER_B);
-
-      expect(await repo.revokeAllSessionsForUser(USER_A)).toBe(2);
-
-      expect(await Session.collection.countDocuments({ userId: new mongoose.Types.ObjectId(USER_B), revokedAt: null })).toBe(1);
-      expect(await Session.collection.countDocuments({ userId: new mongoose.Types.ObjectId(USER_A), revokedAt: null })).toBe(0);
     });
   });
 
@@ -222,7 +210,6 @@ describe('MongoSessionRepository on a real database', () => {
     it('records a query for valid input, so the checks below mean something', async () => {
       expect(await recordQueries(() => repo.findActiveSessionByTokenHash(HASH))).toHaveLength(1);
       expect(await recordQueries(() => repo.revokeSessionByTokenHash(HASH))).toHaveLength(1);
-      expect(await recordQueries(() => repo.revokeAllSessionsForUser(USER_A))).toHaveLength(1);
     });
 
     it.each(MALFORMED_HASHES)('find returns null with no query for %s', async (_name, hash) => {
@@ -246,19 +233,6 @@ describe('MongoSessionRepository on a real database', () => {
       });
 
       expect(result).toBe(false);
-      expect(queries).toHaveLength(0);
-      expect(await repo.findActiveSessionByTokenHash(HASH)).not.toBeNull();
-    });
-
-    it.each(MALFORMED_USER_IDS)('revoke-all returns 0 with no query for %s', async (_name, id) => {
-      await create();
-      let result: unknown;
-
-      const queries = await recordQueries(async () => {
-        result = await repo.revokeAllSessionsForUser(id as string);
-      });
-
-      expect(result).toBe(0);
       expect(queries).toHaveLength(0);
       expect(await repo.findActiveSessionByTokenHash(HASH)).not.toBeNull();
     });

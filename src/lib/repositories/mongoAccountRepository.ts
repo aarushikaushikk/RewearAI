@@ -56,22 +56,4 @@ export class MongoAccountRepository implements IAccountRepository {
       ),
     );
   }
-
-  async deleteLink(
-    provider: AuthProvider,
-    providerAccountId: string,
-    userId: string,
-  ): Promise<boolean> {
-    if (
-      !isAuthProvider(provider) ||
-      !isProviderAccountId(providerAccountId) ||
-      !isObjectIdString(userId)
-    ) {
-      return false;
-    }
-    return withDatabase('account.deleteLink', async () => {
-      const { deletedCount } = await Account.deleteOne({ provider, providerAccountId, userId });
-      return deletedCount === 1;
-    });
-  }
 }

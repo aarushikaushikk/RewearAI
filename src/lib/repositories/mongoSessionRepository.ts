@@ -77,17 +77,4 @@ export class MongoSessionRepository implements ISessionRepository {
       return modifiedCount === 1;
     });
   }
-
-  async revokeAllSessionsForUser(userId: string): Promise<number> {
-    if (!isObjectIdString(userId)) {
-      return 0;
-    }
-    return withDatabase('session.revokeAll', async () => {
-      const { modifiedCount } = await Session.updateMany(
-        { userId, revokedAt: null },
-        { $set: { revokedAt: new Date() } },
-      );
-      return modifiedCount;
-    });
-  }
 }

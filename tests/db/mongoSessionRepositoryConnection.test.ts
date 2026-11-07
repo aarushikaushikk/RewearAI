@@ -20,7 +20,6 @@ describe('MongoSessionRepository connection', () => {
     ['createSession', () => repo.createSession({ userId: USER_IDS[0], tokenHash: HASH, expiresAt: new Date() })],
     ['findActiveSessionByTokenHash', () => repo.findActiveSessionByTokenHash(HASH)],
     ['revokeSessionByTokenHash', () => repo.revokeSessionByTokenHash(HASH)],
-    ['revokeAllSessionsForUser', () => repo.revokeAllSessionsForUser(USER_IDS[0])],
   ])('%s fails with a fixed message when the database cannot be reached', async (_name, run) => {
     const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 

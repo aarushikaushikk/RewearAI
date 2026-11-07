@@ -45,22 +45,4 @@ export class MemoryAccountRepository implements IAccountRepository {
     this.accounts.push(account);
     return { ...account };
   }
-
-  async deleteLink(
-    provider: AuthProvider,
-    providerAccountId: string,
-    userId: string,
-  ): Promise<boolean> {
-    const index = this.accounts.findIndex(
-      (a) =>
-        a.provider === provider &&
-        a.providerAccountId === providerAccountId &&
-        a.userId === userId,
-    );
-    if (index === -1) {
-      return false;
-    }
-    this.accounts.splice(index, 1);
-    return true;
-  }
 }

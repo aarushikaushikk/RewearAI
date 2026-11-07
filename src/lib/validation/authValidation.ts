@@ -31,7 +31,8 @@ export function validateEmail(email: string): { isValid: boolean; error?: string
  * Validates password criteria (required, minimum length).
  */
 export function validatePassword(password: string): { isValid: boolean; error?: string } {
-  if (!password || password.length === 0) {
+  // hashPassword refuses a blank password, so catching it here gives a 400 rather than a 500.
+  if (!password || password.trim().length === 0) {
     return { isValid: false, error: 'Password is required' };
   }
 
