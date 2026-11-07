@@ -95,7 +95,6 @@ describe('MongoAccountRepository on a real database', () => {
   describe('malformed input never reaches a query', () => {
     it('records a query for valid input, so the checks below mean something', async () => {
       expect(await recordQueries(() => repo.findByProvider('google', SUB))).toHaveLength(1);
-      expect(await recordQueries(() => repo.deleteLink('google', SUB, USER_A))).toHaveLength(1);
     });
 
     it.each<[string, unknown]>([
@@ -107,7 +106,6 @@ describe('MongoAccountRepository on a real database', () => {
 
       const queries = await recordQueries(async () => {
         await repo.findByProvider('google', identity as string);
-        await repo.deleteLink('google', identity as string, USER_A);
       });
 
       expect(queries).toHaveLength(0);
@@ -120,15 +118,14 @@ describe('MongoAccountRepository on a real database', () => {
     ])('%s as a user ID', async (_name, userId) => {
       await repo.create({ userId: USER_A, provider: 'google', providerAccountId: SUB });
 
+      let err: unknown;
       const queries = await recordQueries(async () => {
-        const removed = await repo.deleteLink('google', SUB, userId as string);
-        expect(removed).toBe(false);
+        err = await errorFrom(() =>
+          repo.create({ userId: userId as string, provider: 'google', providerAccountId: 'other' }),
+        );
       });
 
       expect(queries).toHaveLength(0);
-      const err = await errorFrom(() =>
-        repo.create({ userId: userId as string, provider: 'google', providerAccountId: 'other' }),
-      );
       expect(err).toBeInstanceOf(RepositoryError);
     });
   });
@@ -137,10 +134,9 @@ describe('MongoAccountRepository on a real database', () => {
     const SENSITIVE = 'mongodb://user:s3cr3t-pass@cluster0 person@example.com 108000000000000000001';
     const LEAK = /s3cr3t|cluster0|person@|108000000000000000001|E11000|rewear_test_/;
 
-    it.each<[string, 'findOne' | 'insertOne' | 'deleteOne', () => Promise<unknown>]>([
+    it.each<[string, 'findOne' | 'insertOne', () => Promise<unknown>]>([
       ['account.findByProvider', 'findOne', () => repo.findByProvider('google', SUB)],
       ['account.create', 'insertOne', () => repo.create({ userId: USER_A, provider: 'google', providerAccountId: SUB })],
-      ['account.deleteLink', 'deleteOne', () => repo.deleteLink('google', SUB, USER_A)],
     ])('%s reports an outage safely', async (operation, method, run) => {
       await repo.findByProvider('google', SUB);
       const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);

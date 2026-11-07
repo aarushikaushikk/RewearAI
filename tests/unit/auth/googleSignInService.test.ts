@@ -177,14 +177,15 @@ describe('GoogleSignInService', () => {
     });
 
     it('never removes a link', async () => {
-      const deleteLink = vi.spyOn(accounts, 'deleteLink');
       await users.create({ email: 'taken@example.com', passwordHash: 'hash' });
 
       await service.signIn(ALEX);
+      const link = await accounts.findByProvider('google', ALEX.sub);
       await service.signIn(ALEX);
       await service.signIn({ ...ALEX, sub: '108000000000000000002', email: 'taken@example.com' });
 
-      expect(deleteLink).not.toHaveBeenCalled();
+      expect(link).not.toBeNull();
+      expect(await accounts.findByProvider('google', ALEX.sub)).toEqual(link);
     });
   });
 

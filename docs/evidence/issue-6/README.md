@@ -1,6 +1,6 @@
 # Issue #6 (Account and Sign-In): test evidence
 
-Evidence for Phase 3 Checkpoints B and C, Phase 4 Checkpoint B, and Phase 4C Steps 2 to 10A and Phase 5 Checkpoints 1 to 4 of User Story 1. **No check in this folder ran against Atlas or real Google.** Step 3 tests the test infrastructure, Steps 5 to 8 test the repositories, and Steps 9 and 10A test the connected app, all on a temporary local MongoDB server. Nothing has run on Vercel.
+Evidence for Phase 3 Checkpoints B and C, Phase 4 Checkpoint B, and Phase 4C Steps 2 to 10A and Phase 5 Checkpoints 1 to 5 of User Story 1. **Every automated check here uses temporary databases and fake credentials, never Atlas or real Google.** The only real Google and Atlas results are Pranav's manual checks, reported in `phase-5-checkpoint-5-final-verification.txt`. Step 3 tests the test infrastructure, Steps 5 to 8 test the repositories, and Steps 9 and 10A test the connected app, all on a temporary local MongoDB server. Nothing has run on Vercel.
 
 ## What was tested, and how
 
@@ -20,6 +20,7 @@ Evidence for Phase 3 Checkpoints B and C, Phase 4 Checkpoint B, and Phase 4C Ste
 | Google sign-in service (Vitest, both commands) | `phase-5-checkpoint-2-red-green.txt` | Memory and MongoDB repositories, with claims supplied by the tests. No Google request or token verification exists yet | Service rules only; the rest is a separate command |
 | Google OIDC routes (Vitest, `npm run test:db` and `npm run test:smoke`) | `phase-5-checkpoint-3-red-green.txt` | The real `openid-client` against a local fake with Google's hostnames, generated keys, and a temporary `mongod`. The smoke test uses the real `next start` build | No, separate commands |
 | Google sign-in in a browser (headless Chrome, production build) | `phase-5-checkpoint-4-browser-flows.txt`, `screenshots/google-*.png` | `next start` on a temporary `mongod`, with the real `openid-client` and a local fake Google | No, one-off script |
+| Final review and gates, with Pranav's manual results kept separate | `phase-5-checkpoint-5-final-verification.txt` | Automated: temporary `mongod` and fake Google. Manual: real Google and a development Atlas cluster | Unit tests yes; the rest is separate |
 | Earlier browser flows (headless Chrome) | `checkpoint-b-browser-flows.txt`, `checkpoint-c-browser-flows.txt` | **In-memory stub** | No, one-off script |
 | Keyboard checks (headless Chrome) | `checkpoint-c-keyboard.txt` | **In-memory stub** | No, one-off script |
 | Accessibility and layout audit (axe-core 4.10.3, four viewports) | `checkpoint-c-ui-audit-before.txt`, `checkpoint-c-ui-audit-after.txt` | **In-memory stub** | No, one-off script |
@@ -82,6 +83,9 @@ The browser and audit checks from Phase 3 needed a working sign-in, which produc
 | `npm run test:smoke`, end of Phase 5 Checkpoint 4 | 34 tests in 2 files pass |
 | Google browser flows, Phase 5 Checkpoint 4 | 65 of 65 pass, including 20 layout checks |
 | axe-core on Google sign-in states, Phase 5 Checkpoint 4 | No violations in 20 of 20 state and width combinations |
+| `npm test`, end of Phase 5 Checkpoint 5 | 825 tests in 48 files pass |
+| `npm run test:db`, end of Phase 5 Checkpoint 5 | 346 tests in 12 files pass, leaving no temporary folders or `mongod` processes |
+| `npm run test:smoke`, end of Phase 5 Checkpoint 5 | 34 tests in 2 files pass |
 | Browser flows, Phase 3 (not rerun in Phase 4) | 28 of 28 pass |
 | Keyboard checks | 17 of 17 pass |
 | axe-core, before Checkpoint C | Violations in 13 of 16 states, including one critical (`button-name`) |
@@ -107,8 +111,10 @@ Each log has labelled sections, such as `FIX 2 - RED` followed by `FIX 2 - GREEN
 
 ## What hasn't been verified
 
-- Google sign-in with real Google credentials. In the browser checks, Chrome's request to `accounts.google.com` was answered locally, so Google's own pages weren't involved.
-- Anything on Atlas or Vercel, including failover and index permissions. Failover errors are only simulated.
+- By anyone other than Pranav: real Google and Atlas. Those results are reported, with no automated run behind them. In the browser checks, Chrome's request to `accounts.google.com` was answered locally.
+- On real Google: cancelling at the consent screen, and being refused for an email that already has an account. Both pass against the fake.
+- Anything on Vercel, and Atlas failover. Failover errors are only simulated.
+- Node 20.19, the minimum version. All tests ran on Node 24.
 - Rate limits across several server instances. They are known not to work across instances; see §6 of `docs/issue-6-team-review.md`.
 - Isolation of wardrobe and outfit data between users, which needs those routes to exist.
 - Visitors with JavaScript turned off. With a forged cookie, Chrome stayed on the blank `/` shell without redirecting. No private content was sent.

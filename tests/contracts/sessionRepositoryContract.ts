@@ -129,38 +129,5 @@ export function describeSessionRepositoryContract(
         expect(await repo.findActiveSessionByTokenHash(tokenHashFor('hash-b'))).not.toBeNull();
       });
     });
-
-    describe('revokeAllSessionsForUser', () => {
-      it('revokes every active session for the user and returns the count', async () => {
-        await createFor(userA, tokenHashFor('phone'));
-        await createFor(userA, tokenHashFor('laptop'));
-
-        expect(await repo.revokeAllSessionsForUser(userA)).toBe(2);
-
-        expect(await repo.findActiveSessionByTokenHash(tokenHashFor('phone'))).toBeNull();
-        expect(await repo.findActiveSessionByTokenHash(tokenHashFor('laptop'))).toBeNull();
-      });
-
-      it('does not count sessions already revoked', async () => {
-        await createFor(userA, tokenHashFor('phone'));
-        await createFor(userA, tokenHashFor('laptop'));
-        await repo.revokeSessionByTokenHash(tokenHashFor('phone'));
-
-        expect(await repo.revokeAllSessionsForUser(userA)).toBe(1);
-      });
-
-      it("leaves another user's sessions active", async () => {
-        await createFor(userA, tokenHashFor('hash-a'));
-        await createFor(userB, tokenHashFor('hash-b'));
-
-        await repo.revokeAllSessionsForUser(userA);
-
-        expect(await repo.findActiveSessionByTokenHash(tokenHashFor('hash-b'))).not.toBeNull();
-      });
-
-      it('returns zero for a user with no sessions', async () => {
-        expect(await repo.revokeAllSessionsForUser(userB)).toBe(0);
-      });
-    });
   });
 }

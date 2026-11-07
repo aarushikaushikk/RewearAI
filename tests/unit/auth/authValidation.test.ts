@@ -106,6 +106,16 @@ describe('Auth Validation Utilities', () => {
       expect(res.error).toBe('Password must be at least 8 characters long');
     });
 
+    it.each(['        ', '								'])('rejects a password of only whitespace: %j', (password) => {
+      const res = validatePassword(password);
+      expect(res.isValid).toBe(false);
+      expect(res.error).toBe('Password is required');
+    });
+
+    it('keeps spaces in a password that has other characters', () => {
+      expect(validatePassword('  pass word  ').isValid).toBe(true);
+    });
+
     it('rejects empty password', () => {
       const res = validatePassword('');
       expect(res.isValid).toBe(false);

@@ -35,18 +35,6 @@ export class MemorySessionRepository implements ISessionRepository {
     return false;
   }
 
-  async revokeAllSessionsForUser(userId: string): Promise<number> {
-    const now = new Date();
-    let count = 0;
-    for (const session of this.sessions) {
-      if (session.userId === userId && !session.revokedAt) {
-        session.revokedAt = now;
-        count++;
-      }
-    }
-    return count;
-  }
-
   // Helper for test simulation of expiration
   expireSessionForTest(tokenHash: string): void {
     const session = this.sessions.find((s) => s.tokenHash === tokenHash);

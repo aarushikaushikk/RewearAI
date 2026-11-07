@@ -120,39 +120,5 @@ export function describeAccountRepositoryContract(name: string, setup: AccountCo
         await expect(repo.findByProvider('github' as AuthProvider, SUB)).resolves.toBeNull();
       });
     });
-
-    describe('deleteLink', () => {
-      it('removes a link when the identity and user both match', async () => {
-        await link();
-
-        expect(await repo.deleteLink(GOOGLE, SUB, userA)).toBe(true);
-        expect(await repo.findByProvider(GOOGLE, SUB)).toBeNull();
-      });
-
-      it("won't remove a link that belongs to another user", async () => {
-        const account = await link(userA);
-
-        expect(await repo.deleteLink(GOOGLE, SUB, userB)).toBe(false);
-        expect(await repo.findByProvider(GOOGLE, SUB)).toEqual(account);
-      });
-
-      it('returns false for an unknown identity', async () => {
-        expect(await repo.deleteLink(GOOGLE, SUB, userA)).toBe(false);
-      });
-
-      it.each(MALFORMED_IDENTITIES)('returns false and removes nothing for %s', async (_name, identity) => {
-        await link();
-
-        await expect(repo.deleteLink(GOOGLE, identity as string, userA)).resolves.toBe(false);
-        expect(await repo.findByProvider(GOOGLE, SUB)).not.toBeNull();
-      });
-
-      it('frees the identity for a later link', async () => {
-        await link(userA);
-        await repo.deleteLink(GOOGLE, SUB, userA);
-
-        await expect(link(userB)).resolves.toMatchObject({ userId: userB });
-      });
-    });
   });
 }

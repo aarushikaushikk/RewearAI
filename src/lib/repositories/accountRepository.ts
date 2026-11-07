@@ -21,10 +21,4 @@ export interface IAccountRepository {
   ): Promise<LinkedAccountRecord | null>;
   /** Throws DuplicateAccountError if the identity or the user's link for this provider exists. */
   create(data: CreateLinkedAccountDTO): Promise<LinkedAccountRecord>;
-  /**
-   * Removes a link only if it belongs to this user. Sign-in must not use this: another request
-   * may be about to write that user, which would be stranded with no link. It's for cleanup
-   * that runs well after any request could still be in progress.
-   */
-  deleteLink(provider: AuthProvider, providerAccountId: string, userId: string): Promise<boolean>;
 }

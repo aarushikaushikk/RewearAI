@@ -123,25 +123,5 @@ describe('Repository Contracts (In-Memory Reference Implementation)', () => {
       const active = await sessionRepo.findActiveSessionByTokenHash('token_to_revoke');
       expect(active).toBeNull();
     });
-
-    it('revokes all sessions for a user upon logout all', async () => {
-      const future = new Date(Date.now() + 1000 * 60 * 60);
-      await sessionRepo.createSession({
-        userId: 'user_multi',
-        tokenHash: 'hash1',
-        expiresAt: future,
-      });
-      await sessionRepo.createSession({
-        userId: 'user_multi',
-        tokenHash: 'hash2',
-        expiresAt: future,
-      });
-
-      const count = await sessionRepo.revokeAllSessionsForUser('user_multi');
-      expect(count).toBe(2);
-
-      expect(await sessionRepo.findActiveSessionByTokenHash('hash1')).toBeNull();
-      expect(await sessionRepo.findActiveSessionByTokenHash('hash2')).toBeNull();
-    });
   });
 });

@@ -86,6 +86,23 @@ describe('Auth API Routes Integration Tests', () => {
       expect(json.error).toContain('already exists');
     });
 
+    it('answers 400 for a password of only spaces, and creates no account', async () => {
+      const req = new Request('http://localhost:3000/api/auth/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          host: 'localhost:3000',
+          origin: 'http://localhost:3000',
+        },
+        body: JSON.stringify({ email: 'spaces@example.com', password: '        ' }),
+      });
+
+      const res = await handleRegister(req, { authService, rateLimiter });
+
+      expect(res.status).toBe(400);
+      expect(await userRepo.findByEmail('spaces@example.com')).toBeNull();
+    });
+
     it('rejects invalid inputs with 400 Bad Request', async () => {
       const req = new Request('http://localhost:3000/api/auth/register', {
         method: 'POST',

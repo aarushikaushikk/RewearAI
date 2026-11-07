@@ -1,6 +1,6 @@
 # Issue #6: decisions for team review before merging
 
-For Aarushi and Pranav. Email and password sign-in and Google sign-in both work in a production build, checked in real Chrome with a temporary local database and a local fake Google. **Neither has run on Atlas, Vercel, or real Google.** §8 lists what's left.
+For Aarushi and Pranav. Email and password sign-in and Google sign-in both work in a production build, checked by automated tests and in real Chrome with a temporary local database and a local fake Google. Pranav also reports completing both by hand with real Google and a development Atlas cluster; `docs/evidence/issue-6/phase-5-checkpoint-5-final-verification.txt` lists exactly what that covered. **Nothing has run on Vercel.** §8 lists what's left.
 
 ## 1. Google sign-in
 
@@ -27,10 +27,10 @@ A Google sign-in never links to an existing user because the email matches, incl
 
 Because the `Account` always gets a new ID, it can't point at an existing user. Writing the `User` first would be worse: a failed `Account` write would leave a passwordless user that blocks its email and can't sign in.
 
-**Links are never removed during sign-in.** A refused request can't know whether another request for the same identity is about to write the `User`, so removing the link could leave that user with no link, and it could then never sign in. Without removal, each identity has one `Account` and one user ID permanently, and the `Account` always exists first, so a user can't be stranded however many requests overlap. `tests/db/googleAccountRecovery.test.ts` scripts the sequence that stranded a user in the earlier design, in both orders, and adds randomized overlap with a registration that rolls back.
+**Links are never removed during sign-in**, and the repository has no method that could remove one. A refused request can't know whether another request for the same identity is about to write the `User`, so removing the link could leave that user with no link, and it could then never sign in. Without removal, each identity has one `Account` and one user ID permanently, and the `Account` always exists first, so a user can't be stranded however many requests overlap. `tests/db/googleAccountRecovery.test.ts` scripts the sequence that stranded a user in the earlier design, in both orders, and adds randomized overlap with a registration that rolls back.
 
 **Known limits:**
-- An `Account` with no `User` stays until the same person retries. It gives no access, reserves no email, holds no email or name, and there's at most one per Google identity. No cleanup job exists. One would need to wait long enough that no request could still be in progress, and the future linking flow must treat such a record as replaceable.
+- An `Account` with no `User` stays until the same person retries. It gives no access, reserves no email, holds no email or name, and there's at most one per Google identity. No cleanup job exists. One would need its own delete method and would have to wait long enough that no request could still be in progress, and the future linking flow must treat such a record as replaceable.
 - A later Google sign-in recreates a deleted `User` with the same ID if its `Account` remains, and any data left under that ID would reattach. A future account deletion feature should delete the user's data, then the `User`, then the `Account`, so an interruption at any point leaves nothing to reattach.
 
 ### The Google sign-in flow
@@ -45,7 +45,7 @@ Because the `Account` always gets a new ID, it can't point at an existing user. 
 - **Not configured:** both routes redirect to the sign-in page, and password sign-in keeps working.
 
 **Known limits:**
-- **Nothing here has run against real Google.** Everything uses a local fake with Google's hostnames. Google's page on OpenID Connect allows two forms of `iss`, and only describes PKCE through its metadata, so both need checking with real credentials. A mismatch would fail closed.
+- **Real Google:** Pranav reports that sign-in, refresh, sign-out, and signing in again all worked by hand. Automated tests still use a local fake with Google's hostnames. Google's page on OpenID Connect allows two forms of `iss`, and only the form Google actually sent was exercised; the other would fail closed. Cancelling at Google and a refused existing email haven't been reported on real Google, only tested against the fake.
 - **Replay:** there's no server-side record of used transactions. A replayed callback is refused because the cookie is cleared after use and Google's codes work once. Someone who copied the cookie and callback URL before first use would race the real browser for that single use.
 - **Rate limiting:** the Google routes have none. The start route does no database work, and the callback only contacts Google for a valid transaction. The shared limiter in §6 should cover them.
 - **Google key rotation** isn't tested: the fake uses one key.
@@ -66,6 +66,10 @@ Both partners have agreed to keep custom opaque-token sessions (random tokens, s
 Hiding it properly requires email verification, which is outside User Story 1. The 409 stays for now, and the rate limiter reduces how quickly someone could test emails.
 
 **Needed from the team:** accept this tradeoff, or add it to the backlog.
+
+### Passwords past 72 bytes
+
+bcrypt ignores everything after a password's first 72 bytes, so two long passwords that differ only after that point both work. A test confirmed this. Someone would need the first 72 bytes to benefit, so it doesn't block review. Limiting new passwords to 72 bytes would be the simple fix, but it's a new product rule, so it's left for the team to decide.
 
 ## 4. How the database is connected
 
@@ -102,6 +106,7 @@ No cleanup job exists, so an account left this way stays until someone signs in 
 `MemoryRateLimiter` keeps its counts in the memory of one server instance, so it doesn't protect a Vercel deployment:
 
 - **Limits are per instance.** Each instance counts separately, and counts are lost when an instance restarts, so real limits are far higher than the 5 attempts in 15 minutes they appear to be.
+- **Memory use isn't capped.** Each email tried adds an entry that is never removed, so someone trying many addresses grows the instance's memory.
 - **A successful sign-in resets the IP's count.** Someone can mix sign-ins to their own account into attempts on other people's emails, and never reach the IP limit. Each email is still limited separately, but that count has the per-instance problem above.
 - **Limits can lock out real users.** Without `TRUST_PROXY=true`, all visitors share one count, so 5 failed sign-ins by anyone block everyone. With it, people on one network, such as a campus, still share one.
 
@@ -116,7 +121,7 @@ No cleanup job exists, so an account left this way stays until someone signs in 
 | `TRUST_PROXY` | `true` | All users share one rate limit |
 | `MONGOMS_DISABLE_POSTINSTALL` | `1` | Every install also downloads `mongod` |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | From the Google Cloud Console, with `<APP_ORIGIN>/api/auth/google/callback` as an authorized redirect URI | Missing: Google sign-in is unavailable, and password sign-in keeps working |
-| Node.js version | 20.19 or later, as Mongoose requires | Install or runtime failures. `AGENTS.md` still says 20.9 |
+| Node.js version | 20.19 or later, as Mongoose and `mongodb-memory-server` require. `package.json` doesn't pin one, so set it in Vercel | Install or runtime failures. All tests ran on Node 24 |
 
 - **Dev dependencies:** the build type-checks `tests/`, so it needs them installed. Don't use `--omit=dev`.
 - **Preview deployments:** their URLs don't match `APP_ORIGIN`, so auth returns 403 on them unless they get their own value, and they must not share the production database.
@@ -125,7 +130,8 @@ No cleanup job exists, so an account left this way stays until someone signs in 
 
 ### MongoDB Atlas
 
-- Use a separate database, and a database user limited to it, for each environment.
+- Use a separate database, and a database user limited to it, for each environment. Pranav's manual checks used a separate development cluster.
+- Pranav's machine needed a local DNS workaround to reach Atlas. It isn't part of this repository, so it doesn't show that Vercel will connect, and a partner's machine may or may not need it.
 - That user needs `readWrite`, which includes creating indexes. Without it, every auth request fails.
 - `0.0.0.0/0` network access is usually needed from Vercel, so a strong password matters. Vercel's Atlas integration is the alternative.
 - Check that new server instances don't noticeably slow the first request, since each one confirms the indexes once.
@@ -147,12 +153,12 @@ No cleanup job exists, so an account left this way stays until someone signs in 
 
 | Item | Who | Blocks |
 |---|---|---|
-| Check with real Google credentials (§1) | Pranav | Merging |
 | Accept the sign-up 409 or add it to the backlog (§3) | Both | Closing #6 |
-| Check on a dedicated Atlas database | Both | Merging |
+| Decide on the 72-byte password limit (§3) | Both | Nothing; can follow later |
+| Agree that wardrobe and outfit stories will test isolation (below) | Both | Closing #6 |
 | Connection timeout (§5) | Both, in Aarushi's file | Deployment |
 | Shared rate limiter, including the Google routes (§6) | Both | Public deployment |
-| Vercel settings and a check on the deployed URL (§6) | #23 | Deployment |
+| Vercel settings, production Atlas and Google redirect URI, and a check on the deployed URL (§6) | #23 | Deployment |
 | Turn the browser checks into Playwright tests and add CI (§6) | #23 | Course quality gates |
 | Review and merge PR #33 | Aarushi | Closing #6 |
 

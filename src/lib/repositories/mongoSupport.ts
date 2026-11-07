@@ -25,11 +25,9 @@ export type RepositoryOperation =
   | 'user.createWithoutPassword'
   | 'account.findByProvider'
   | 'account.create'
-  | 'account.deleteLink'
   | 'session.create'
   | 'session.findActive'
-  | 'session.revoke'
-  | 'session.revokeAll';
+  | 'session.revoke';
 
 export type ErrorCategory =
   | 'connection'
