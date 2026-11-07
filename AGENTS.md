@@ -19,7 +19,7 @@ Do not edit product requirements or design decisions just to make generated code
 - Backend: Next.js Route Handlers (`app/api`); no separate Express server.
 - Database: MongoDB Atlas using Mongoose.
 - Image storage: Cloudinary; MongoDB stores the image URL/public ID and metadata.
-- Authentication: Auth.js / NextAuth, configured for the selected account flow.
+- Authentication: email/password (bcrypt) and Google sign-in (`openid-client` 6), both issuing custom opaque-token sessions stored hashed in MongoDB. Do not add Auth.js, NextAuth, or JWT application sessions.
 - Tests: Vitest (unit/integration) and Playwright (end-to-end).
 - Quality: ESLint, Prettier, and TypeScript type checking.
 - Hosting: Vercel for the app, MongoDB Atlas for data, Cloudinary for images.
@@ -35,7 +35,8 @@ Baseline versions, taken from the HW-3 prototype `package.json`:
 | TypeScript | 5.x |
 | Tailwind CSS | 4.x |
 | ESLint | 9.x |
-| Node.js | 20.9 or later (minimum for Next.js 16) |
+| openid-client | 6.x |
+| Node.js | 20.19 or later (minimum for Mongoose and `mongodb-memory-server`) |
 
 Use stable, mutually compatible versions verified during repository initialization.
 Follow versions recorded in the lockfile; do not automatically upgrade packages mid-task.
@@ -88,7 +89,7 @@ Feedback is user-controlled; do not claim that preferences are learned unless im
 ## 6. Database and Image Handling
 
 Use Mongoose models and a reusable MongoDB connection helper.
-Model core records such as User, WardrobeItem, Outfit, OutfitHistory, and Feedback.
+Model core records such as User, Session, Account, WardrobeItem, Outfit, OutfitHistory, and Feedback.
 Include ownership, timestamps, and stable IDs where needed.
 Validate required fields and allowed values before persisting records.
 Scope database queries to the authenticated user, not a user ID supplied by the client.
@@ -109,6 +110,12 @@ Do not log access tokens, passwords, secrets, or private user images.
 Return safe error messages; do not expose stack traces or internal database details.
 Treat uploaded content and request payloads as untrusted input.
 Keep public API documentation separate from private user data access.
+Store only the SHA-256 hash of a session token, and only Google's `sub`, email, and name. Discard Google's access and refresh tokens.
+Identify a Google user by `sub`, and require `email_verified` to be exactly `true`.
+Never link Google to an existing user because an email matches, including a passwordless user; a matching email only causes a refusal. Linking needs a future signed-in flow.
+Write the `Account` before its `User`, with a new user ID, and never remove a link during sign-in. A pending `Account` gives no access and reserves no email.
+Keep the Google issuer fixed in code, build the callback URL only from `APP_ORIGIN`, and redirect only to fixed paths.
+Call `await connection()` in every new `GET` route handler, or Next.js may prerender it at build. `/api` routes must show as `ƒ` in the build output.
 
 ## 8. UI, Mockups, and Accessibility
 
@@ -142,7 +149,8 @@ Implement the smallest change that makes the test pass; then refactor and rerun 
 Use Vitest for domain logic and API integration; Playwright for user journeys.
 Test success, empty, invalid, unauthorized, and failure cases where relevant.
 Prioritize auth isolation, uploads, wardrobe CRUD, filters, outfit eligibility, and history.
-Before PR review, run relevant tests, lint, format checks, and TypeScript checks.
+Before PR review, run relevant tests, lint, format checks, and TypeScript checks. For auth or route changes, also run `npm run test:db` and `npm run test:smoke`.
+Tests use a temporary MongoDB server and a local fake Google, never Atlas, real Google, or real credentials.
 
 ## 11. CI/CD, Documentation, and Deployment
 

@@ -1,0 +1,41 @@
+Phase 4C Step 10A: real browser flows on the production build
+Headless Chrome over the DevTools protocol, typing into the real forms. `next start` used a
+temporary mongod on 127.0.0.1; nothing ran on Atlas or Vercel. Forms and links were driven by
+script, so this doesn't cover visual layout or screen readers.
+
+PASS  private page with no cookie goes to sign-in  [/sign-in]
+PASS  sign-up form creates an account and lands on Home  [/]
+PASS  greeting shows the name
+PASS  cookie is HttpOnly, Secure, SameSite=Lax, and persistent  [sameSite=Lax]
+PASS  page script cannot read the session cookie
+PASS  account stored once, with a bcrypt hash
+PASS  raw token is not stored
+PASS  reload stays signed in
+PASS  signed-in visitor is sent from sign-in to Home  [/]
+PASS  still signed in after the server restarts
+PASS  sign-out through the UI goes to sign-in  [/sign-in]
+PASS  cookie is cleared
+PASS  session is revoked in the database
+PASS  private page after sign-out goes to sign-in  [/sign-in]
+PASS  replaying the old cookie is refused, with the session-ended message  [/sign-in?reason=session-ended]
+PASS  wrong password shows the generic message and stays on sign-in
+PASS  the form keeps the email after a failure
+PASS  unknown email shows the same message
+PASS  duplicate email shows the message, with no new account
+PASS  correct password signs in  [/]
+PASS  expired session goes to sign-in, with the session-ended message  [/sign-in?reason=session-ended]
+PASS  forged cookie goes to sign-in  [/sign-in?reason=session-ended]
+INFO  with JavaScript off and a forged cookie, the browser ends on: /
+PASS  JavaScript off: no private content is shown
+PASS  outage on a private page shows the error page, not sign-in  [/]
+PASS  outage page exposes no database details
+PASS  outage keeps the session cookie
+PASS  sign-in page stays reachable and says it is unavailable
+PASS  submitting sign-in during an outage shows an error, and no session
+PASS  server output has no password, email, token, or database address
+
+TOTAL 29 of 29 passed
+
+.env.example guard (tests/unit/envExample.test.ts)
+RED (commit a1dc2c9), with only MONGODB_URI in the file: 10 failed, 3 passed (13)
+GREEN, with every variable documented using placeholders: 13 passed (13)

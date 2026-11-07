@@ -1,0 +1,88 @@
+Phase 5 Checkpoint 4: Google sign-in UI and browser checks
+Real headless Chrome over the DevTools protocol, typing and tabbing into the real pages, on the
+real `next start` production build with a temporary mongod. The real openid-client talked to a
+local fake Google with generated keys. Chrome's request to accounts.google.com was answered
+locally, so it never reached Google, and Google's own pages weren't involved. No real credentials
+were used. An automated run doesn't cover screen readers or real phones and tablets.
+
+=== RED (commit 581e2fc): the link and messages don't exist yet ===
+tests/integration/pages/googleSignInUi.test.tsx:
+ FAIL  the sign-in page > when Google is configured > offers a plain link to start the flow
+ FAIL  the sign-up page > when Google is configured > offers a plain link to start the flow
+ FAIL  the Google link component > is rendered on the server, so its condition never reaches the browser
+ FAIL  Google failure messages on the sign-in page > explains google-cancelled
+ FAIL  Google failure messages on the sign-in page > explains google-failed
+ FAIL  Google failure messages on the sign-in page > explains google-unavailable
+ FAIL  Google failure messages on the sign-in page > explains google-email-in-use
+ FAIL  Google failure messages on the sign-in page > explains google-email-unverified
+ FAIL  Google failure messages on the sign-in page > directs an existing email to the way they signed in before
+ FAIL  Google failure messages on the sign-in page > still offers Google and the form after a failure, so they can try again
+ Test Files  1 failed (1)
+      Tests  10 failed | 25 passed (35)
+
+=== BROWSER FLOWS ===
+PASS  not configured: sign-in has no Google option, and keeps the form
+PASS  not configured: sign-up has no Google option, and keeps the form
+PASS  not configured: visiting the route shows a safe message on sign-in  [/sign-in?reason=google-unavailable]
+PASS  not configured: Chrome was never sent to Google
+PASS  not configured: password sign-up still works  [/]
+PASS  sign-in offers Continue with Google
+PASS  sign-up offers Continue with Google
+PASS  the page holds no client ID or secret
+PASS  loaded scripts hold no client ID, secret, or OIDC library
+PASS  keyboard: Tab reaches the Google link
+PASS  keyboard: the focused link shows a focus ring  [rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0]
+PASS  keyboard: Enter starts the flow, and it ends signed in on Home  [/]
+PASS  Chrome went to Google with PKCE S256 and the fixed callback
+PASS  the greeting shows the Google name
+PASS  session cookie is HttpOnly, Secure, and Lax
+PASS  the transaction cookie is gone
+PASS  page scripts cannot read either cookie
+PASS  a passwordless user and one link were stored
+PASS  no Google token is stored
+PASS  reload stays signed in
+PASS  a signed-in visitor goes from sign-in to Home  [/]
+PASS  sign-out through the UI works, and clears the cookie
+PASS  a private page after sign-out goes to sign-in  [/sign-in]
+PASS  replaying the old session is refused, with the session-ended message  [/sign-in?reason=session-ended]
+PASS  clicking on the sign-up page signs in to the same account, with no second user
+PASS  cancelling at Google: shows the message, with no session  [/sign-in?reason=google-cancelled]
+PASS  cancelling at Google: can try again from the same page
+PASS  an invalid token signature: shows the message, with no session  [/sign-in?reason=google-failed]
+PASS  an invalid token signature: can try again from the same page
+PASS  an unverified Google email: shows the message, with no session  [/sign-in?reason=google-email-unverified]
+PASS  an unverified Google email: can try again from the same page
+PASS  an email with a password account: shows the message, with no session  [/sign-in?reason=google-email-in-use]
+PASS  an email with a password account: can try again from the same page
+PASS  a refused email leaves its password account unlinked
+PASS  Google being down: shows the unavailable message  [/sign-in?reason=google-unavailable]
+PASS  a forged callback with no transaction: failure message, no session
+PASS  an unknown reason shows nothing
+PASS  password sign-up works with Google configured  [/]
+PASS  a wrong password shows the existing message
+PASS  password sign-in works with Google configured  [/]
+PASS  password sign-up refuses an email held by a Google user
+PASS  password sign-in fails for a Google user
+INFO  layout checked in 20 state and width combinations: no overflow, link at least 44px and on screen
+PASS  axe-core finds no violations in any state  [20 of 20 clean]
+PASS  no uncaught page exceptions
+PASS  server output has no secret, token, email, or Google subject
+
+TOTAL 65 of 65 passed
+
+The total includes 20 layout checks, one for each state at each width, which print only if they
+fail. An earlier run stopped partway on a timing bug in the script, which clicked a menu before the
+page had hydrated. The script now waits; the app didn't change.
+
+=== GREEN ===
+npm test:           835 tests in 48 files pass (800 from Checkpoint 3 + 35 new)
+npm run test:db:    370 tests in 12 files pass
+npm run test:smoke: 34 tests in 2 files pass (29 from Checkpoint 3 + 5 new)
+npx tsc --noEmit:   exit 0
+npm audit --omit=dev: 0 vulnerabilities
+Client bundles (.next/static): no Google settings, client secret, or OIDC library
+
+=== CRASH TEST FLAKE ===
+The first full run failed once: removing a crashed server's folder hit EPERM after 2 seconds of
+retries, because on Windows mongod can hold its files after its port has closed. It now retries
+for up to 30 seconds. The crash tests then passed 4 of 4 on each of 8 repeated runs, leaving no folders.

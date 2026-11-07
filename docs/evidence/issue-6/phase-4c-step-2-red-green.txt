@@ -1,0 +1,33 @@
+Phase 4C Step 2: repository contract fixtures against the real models
+Filtered to failures and totals. No database was used: the models' validate() runs in memory.
+
+=== RED (commit 2b9b538): fixtures with their original values ===
+      Tests  15 failed | 3 passed (18)
+ FAIL  tests/unit/repositories/contractFixtures.test.ts > repository contract fixtures against the real models > OTHER_PASSWORD_HASH is accepted by the User model
+ FAIL  tests/unit/repositories/contractFixtures.test.ts > repository contract fixtures against the real models > PASSWORD_HASH is accepted by the User model
+ FAIL  tests/unit/repositories/contractFixtures.test.ts > repository contract fixtures against the real models > email "  MixedCase@Example.COM " is accepted and normalized by the User model
+ FAIL  tests/unit/repositories/contractFixtures.test.ts > repository contract fixtures against the real models > email "A@EXAMPLE.COM" is accepted and normalized by the User model
+ FAIL  tests/unit/repositories/contractFixtures.test.ts > repository contract fixtures against the real models > email "a@example.com" is accepted and normalized by the User model
+ FAIL  tests/unit/repositories/contractFixtures.test.ts > repository contract fixtures against the real models > email "b@example.com" is accepted and normalized by the User model
+ FAIL  tests/unit/repositories/contractFixtures.test.ts > repository contract fixtures against the real models > email "race@example.com" is accepted and normalized by the User model
+ FAIL  tests/unit/repositories/contractFixtures.test.ts > repository contract fixtures against the real models > token hash for hash-1 is accepted by the Session model
+ FAIL  tests/unit/repositories/contractFixtures.test.ts > repository contract fixtures against the real models > token hash for hash-a is accepted by the Session model
+ FAIL  tests/unit/repositories/contractFixtures.test.ts > repository contract fixtures against the real models > token hash for hash-b is accepted by the Session model
+ FAIL  tests/unit/repositories/contractFixtures.test.ts > repository contract fixtures against the real models > token hash for laptop is accepted by the Session model
+ FAIL  tests/unit/repositories/contractFixtures.test.ts > repository contract fixtures against the real models > token hash for phone is accepted by the Session model
+ FAIL  tests/unit/repositories/contractFixtures.test.ts > repository contract fixtures against the real models > token hash for unknown is accepted by the Session model
+ FAIL  tests/unit/repositories/contractFixtures.test.ts > repository contract fixtures against the real models > user ID user_a is a 24-character ObjectId string
+ FAIL  tests/unit/repositories/contractFixtures.test.ts > repository contract fixtures against the real models > user ID user_b is a 24-character ObjectId string
+ Test Files  1 failed (1)
+AssertionError: expected 'user_a' to match /^[a-f0-9]{24}$/
+AssertionError: expected 'user_b' to match /^[a-f0-9]{24}$/
+AssertionError: promise rejected "ValidationError: Session validation faile… { …(2) }" instead of resolving
+AssertionError: promise rejected "ValidationError: User validation failed: … { …(2) }" instead of resolving
+Caused by: ValidationError: Session validation failed: userId: Cast to ObjectId failed for value "user_a" (type string) at path "userId" for model "Session", tokenHash: Token hash must be a SHA-256 hex digest.
+Caused by: ValidationError: User validation failed: passwordHash: Password hash must be a bcrypt hash.
+
+=== GREEN: corrected fixture values ===
+ ✓ tests/unit/repositories/repositoryContracts.test.ts (40 tests) 9ms
+ ✓ tests/unit/repositories/contractFixtures.test.ts (18 tests) 10ms
+ Test Files  2 passed (2)
+      Tests  58 passed (58)

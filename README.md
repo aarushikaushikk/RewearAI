@@ -9,9 +9,7 @@ ReWear AI is a digital wardrobe application that helps users organize clothing t
 
 ## Status
 
-Sprint 1 (HW-3) wraps up Fri Oct 30, 2026. Sprint 2 (first app features) starts Sat Oct 31.
-
-The code currently in this repo is a **HW-3 prototype only** (see [HW-3 Rules Experiment](#hw-3-rules-experiment)). The real application hasn't been started yet.
+The application is in `src/`. User Story 1 (accounts and sign-in) is under review in Draft PR #33 and hasn't been deployed; [docs/issue-6-team-review.md](docs/issue-6-team-review.md) lists what's left. The `baseline/` and `run-*` folders are separate prototypes from the [HW-3 Rules Experiment](#hw-3-rules-experiment).
 
 ## Core Features (planned)
 
@@ -62,6 +60,32 @@ The app stores its data in MongoDB Atlas through Mongoose. The connection helper
 6. Run `npm run dev`. Route Handlers call `connectToDatabase()`, which reuses one cached connection.
 
 `.env.local` is git-ignored; never commit real credentials. If the URI is missing or the connection fails, the helper logs only the error type on the server and throws a `DatabaseConnectionError` with a safe, generic message.
+
+## Authentication
+
+People sign in with an email and password or with Google. Both issue the same session: a random token in an `HttpOnly` cookie, with only its SHA-256 hash stored in MongoDB, so sessions can be revoked on the server.
+
+To turn on Google sign-in:
+
+1. In the [Google Cloud Console](https://console.cloud.google.com/apis/credentials), create an OAuth client of type **Web application**.
+2. Add this authorized redirect URI, exactly: `<APP_ORIGIN>/api/auth/google/callback`. Locally, that's `http://localhost:3000/api/auth/google/callback`.
+3. Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `APP_ORIGIN` in `.env.local`. Never commit them.
+
+Without these, the Google option doesn't appear and password sign-in keeps working.
+
+A Google sign-in never connects to an existing account because the email matches. It's refused, and that person signs in the way they did before. [AGENTS.md](AGENTS.md) §7 has the security rules.
+
+## Running Tests
+
+| Command | What it runs | Database |
+|---|---|---|
+| `npm test` | Unit, component, and integration tests | None; `MONGODB_URI` is blanked |
+| `npm run test:db` | Real-database tests in `tests/db/` | A temporary MongoDB server on `127.0.0.1` |
+| `npm run test:smoke` | Builds the app and tests `next start` with real requests | A temporary MongoDB server on `127.0.0.1` |
+
+`npm run test:db` and `npm run test:smoke` never use `MONGODB_URI` or Google settings from your shell or `.env.local`, and no test contacts Google: they use a local fake. [tests/helpers/mongoTestServer.ts](tests/helpers/mongoTestServer.ts) starts a new server for each test file, refuses any other database, and removes the server's files when it stops. If the server can't start, the tests fail rather than falling back to another database.
+
+`npm install` downloads the `mongod` binary these tests use. Set `MONGOMS_DISABLE_POSTINSTALL=1` to skip that download where the tests don't run; `npm run test:db` will then download it on first use.
 
 ## HW-3 Rules Experiment
 
@@ -120,7 +144,7 @@ node --test services/filterClothing.test.ts
 - **Scrum workflow:** branch naming, commit format, PR and review rules
 - **TDD, quality gates, CI/CD, and deployment**, plus how the agent should work
 
-## Planned Tech Stack
+## Tech Stack
 
 As defined in `AGENTS.md`. The HW-3 prototypes use only Next.js, React, and TypeScript.
 
@@ -130,7 +154,7 @@ As defined in `AGENTS.md`. The HW-3 prototypes use only Next.js, React, and Type
 | Backend | Next.js Route Handlers (`app/api`) |
 | Database | MongoDB Atlas with Mongoose |
 | Image storage | Cloudinary |
-| Authentication | Auth.js / NextAuth |
+| Authentication | Custom MongoDB-backed sessions; bcrypt for passwords; `openid-client` for Google |
 | Testing | Vitest (unit/integration), Playwright (end-to-end) |
 | Quality | ESLint, Prettier, TypeScript type checking |
 | Hosting | Vercel |
