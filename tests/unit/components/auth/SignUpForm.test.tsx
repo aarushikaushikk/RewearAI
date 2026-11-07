@@ -5,6 +5,8 @@ import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import { SignUpForm } from '@/components/auth/SignUpForm';
 
+// delay: null skips user-event's timer between simulated actions, which took most of each test's
+// time and left it exposed to machine pauses. Every keystroke and event still fires, in order.
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
 }));
@@ -32,7 +34,7 @@ describe('SignUpForm', () => {
   });
 
   it('shows validation error for invalid email format', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     render(<SignUpForm />);
     await user.type(screen.getByLabelText(/email/i), 'not-an-email');
     await user.type(screen.getByLabelText(/password/i), 'password123');
@@ -41,7 +43,7 @@ describe('SignUpForm', () => {
   });
 
   it('shows validation error for a password that is too short', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     render(<SignUpForm />);
     await user.type(screen.getByLabelText(/email/i), 'user@example.com');
     await user.type(screen.getByLabelText(/password/i), 'short');
@@ -52,7 +54,7 @@ describe('SignUpForm', () => {
   it('shows a field error for a name over 100 characters, without calling the API', async () => {
     const fetchSpy = vi.fn();
     global.fetch = fetchSpy;
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     render(<SignUpForm />);
     await user.click(screen.getByLabelText(/name/i));
     await user.paste('x'.repeat(101));
@@ -66,7 +68,7 @@ describe('SignUpForm', () => {
   });
 
   it('shows conflict message on 409 response', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     mockFetch(409, { error: 'Email already exists' });
     render(<SignUpForm />);
     await user.type(screen.getByLabelText(/email/i), 'existing@example.com');
@@ -78,7 +80,7 @@ describe('SignUpForm', () => {
   });
 
   it('shows service-unavailable message on 503 response', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     mockFetch(503, { error: 'Service unavailable' });
     render(<SignUpForm />);
     await user.type(screen.getByLabelText(/email/i), 'user@example.com');
@@ -88,7 +90,7 @@ describe('SignUpForm', () => {
   });
 
   it('preserves email and name values after a failed registration', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     mockFetch(503, { error: 'Service unavailable' });
     render(<SignUpForm />);
     await user.type(screen.getByLabelText(/name/i), 'Alice');
@@ -101,7 +103,7 @@ describe('SignUpForm', () => {
   });
 
   it('calls POST /api/auth/register with the correct payload', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     global.fetch = vi.fn().mockResolvedValueOnce({
       ok: true,
       status: 201,
@@ -128,7 +130,7 @@ describe('SignUpForm', () => {
   });
 
   it('shows a loading state during submission', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     global.fetch = vi.fn().mockReturnValueOnce(new Promise(() => {}));
     render(<SignUpForm />);
     await user.type(screen.getByLabelText(/email/i), 'user@example.com');
@@ -139,7 +141,7 @@ describe('SignUpForm', () => {
 
   describe('error mapping', () => {
     async function submit() {
-      const user = userEvent.setup();
+      const user = userEvent.setup({ delay: null });
       render(<SignUpForm />);
       await user.type(screen.getByLabelText(/email/i), 'user@example.com');
       await user.type(screen.getByLabelText(/password/i), 'password123');

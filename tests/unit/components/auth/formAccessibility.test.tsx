@@ -6,6 +6,8 @@ import '@testing-library/jest-dom';
 import { SignInForm } from '@/components/auth/SignInForm';
 import { SignUpForm } from '@/components/auth/SignUpForm';
 
+// delay: null skips user-event's timer between simulated actions, which took most of each test's
+// time and left it exposed to machine pauses. Every keystroke and event still fires, in order.
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }),
 }));
@@ -31,7 +33,7 @@ describe.each(FORMS)('$name accessibility', ({ Form, submit }) => {
   }
 
   it('moves focus to the first invalid field after failed validation', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     render(<Form />);
 
     await user.click(screen.getByRole('button', { name: submit }));
@@ -40,7 +42,7 @@ describe.each(FORMS)('$name accessibility', ({ Form, submit }) => {
   });
 
   it('moves focus to the password field when only the password is invalid', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     render(<Form />);
 
     await user.type(screen.getByLabelText(/email/i), 'user@example.com');
@@ -50,7 +52,7 @@ describe.each(FORMS)('$name accessibility', ({ Form, submit }) => {
   });
 
   it('associates each validation message with its field', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     render(<Form />);
 
     await user.click(screen.getByRole('button', { name: submit }));
@@ -61,7 +63,7 @@ describe.each(FORMS)('$name accessibility', ({ Form, submit }) => {
   });
 
   it('moves focus to the message after a server failure', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     mockResponse(503);
     render(<Form />);
 
@@ -71,7 +73,7 @@ describe.each(FORMS)('$name accessibility', ({ Form, submit }) => {
   });
 
   it('returns focus to the email field when the message is dismissed', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     mockResponse(503);
     render(<Form />);
     await fillAndSubmit(user);
@@ -83,7 +85,7 @@ describe.each(FORMS)('$name accessibility', ({ Form, submit }) => {
   });
 
   it('stays busy after success so the form cannot be submitted twice while leaving', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     mockResponse(200);
     render(<Form />);
 
@@ -95,7 +97,7 @@ describe.each(FORMS)('$name accessibility', ({ Form, submit }) => {
   });
 
   it('is usable again after a failure', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     mockResponse(503);
     render(<Form />);
     await fillAndSubmit(user);
