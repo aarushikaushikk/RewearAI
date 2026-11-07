@@ -41,3 +41,14 @@ export function isWorkerResponse(value: unknown): value is WorkerResponse {
   }
   return false;
 }
+
+/** Checked inside the worker, so it only ever runs the model on a well-formed request. */
+export function isClassifyRequest(value: unknown): value is ClassifyRequest {
+  if (!isRecord(value) || value.type !== "classify" || !Number.isInteger(value.id)) return false;
+  const imageOk = typeof value.image === "string" || value.image instanceof Blob;
+  const labelsOk =
+    Array.isArray(value.labels) &&
+    value.labels.length > 0 &&
+    value.labels.every((label) => typeof label === "string");
+  return imageOk && labelsOk;
+}

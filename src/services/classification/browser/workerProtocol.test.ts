@@ -1,5 +1,28 @@
 import { describe, expect, it } from "vitest";
-import { isWorkerResponse } from "./workerProtocol";
+import { isClassifyRequest, isWorkerResponse } from "./workerProtocol";
+
+describe("isClassifyRequest", () => {
+  const blob = new Blob(["x"], { type: "image/png" });
+
+  it.each([
+    ["a Blob image", { type: "classify", id: 1, image: blob, labels: ["a photo of a hat"] }],
+    ["a URL image", { type: "classify", id: 2, image: "blob:http://localhost/1", labels: ["x"] }],
+  ])("accepts %s", (_label, message) => {
+    expect(isClassifyRequest(message)).toBe(true);
+  });
+
+  it.each([
+    ["null", null],
+    ["another type", { type: "result", id: 1, image: blob, labels: ["x"] }],
+    ["a missing id", { type: "classify", image: blob, labels: ["x"] }],
+    ["a missing image", { type: "classify", id: 1, labels: ["x"] }],
+    ["an image that isn't a Blob or string", { type: "classify", id: 1, image: 42, labels: ["x"] }],
+    ["no labels", { type: "classify", id: 1, image: blob, labels: [] }],
+    ["non-string labels", { type: "classify", id: 1, image: blob, labels: [1] }],
+  ])("rejects %s", (_label, message) => {
+    expect(isClassifyRequest(message)).toBe(false);
+  });
+});
 
 describe("isWorkerResponse", () => {
   it.each([
