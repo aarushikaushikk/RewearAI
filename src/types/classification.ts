@@ -71,6 +71,15 @@ export interface ClassificationSuggestions {
  */
 export type ClassificationFailureReason = "invalid_output" | "not_clothing" | "unavailable";
 
+/** Attribute values the user has reviewed and confirmed; the only output of the review step. */
+export interface ConfirmedClothingAttributes {
+  category: Category;
+  color: Color;
+  style: string;
+  season: Season;
+  formality: Formality;
+}
+
 /** An image US2 hands to classification: a selected `File`/`Blob`, or an object or https URL. */
 export type ClassifiableImage = Blob | string;
 
