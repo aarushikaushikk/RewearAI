@@ -9,7 +9,8 @@ import { hashToken } from '@/lib/auth/sessionTokens';
 import { ConfigurationError, getProductionAuthService } from '@/lib/auth/getAuthService';
 import { SESSION_COOKIE_NAME } from '@/lib/auth/cookieConfig';
 import { proxy } from '@/proxy';
-import HomePage from '@/app/page';
+import RootPage from '@/app/page';
+import HomePage from '@/app/home/page';
 import SignInPage from '@/app/(auth)/sign-in/page';
 import SignUpPage from '@/app/(auth)/sign-up/page';
 import { MemoryUserRepository } from '../../mocks/memoryUserRepository';
@@ -85,6 +86,13 @@ describe('session-aware pages', () => {
       throw new ConfigurationError();
     });
   }
+
+  describe('Root (/)', () => {
+    it('forwards to Home at /home', async () => {
+      setCookie();
+      await expect(redirectTargetOf(async () => RootPage())).resolves.toBe('/home');
+    });
+  });
 
   describe('Home (private page)', () => {
     it('renders only the signed-in user for a valid session', async () => {

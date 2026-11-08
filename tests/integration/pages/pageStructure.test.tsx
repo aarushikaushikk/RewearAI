@@ -9,7 +9,7 @@ import { SESSION_COOKIE_NAME } from '@/lib/auth/cookieConfig';
 import AuthLayout from '@/app/(auth)/layout';
 import SignInPage from '@/app/(auth)/sign-in/page';
 import SignUpPage from '@/app/(auth)/sign-up/page';
-import HomePage from '@/app/page';
+import HomePage from '@/app/home/page';
 import { MemoryUserRepository } from '../../mocks/memoryUserRepository';
 import { MemorySessionRepository } from '../../mocks/memorySessionRepository';
 

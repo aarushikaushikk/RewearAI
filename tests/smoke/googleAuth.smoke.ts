@@ -203,7 +203,7 @@ describe('production build with Google settings and a fake Google', () => {
     const token = session.slice(SESSION_COOKIE.length + 1);
     expect(JSON.stringify(await database.collection('sessions').find({}).toArray())).not.toContain(token);
 
-    const page = await fetch(`${app.origin}/`, { redirect: 'manual', headers: { cookie: session } });
+    const page = await fetch(`${app.origin}/home`, { redirect: 'manual', headers: { cookie: session } });
     expect((await page.text()).replaceAll('<!-- -->', '')).toContain('Welcome back, Smoke Tester');
 
     const check = await fetch(`${app.origin}/api/auth/session`, { headers: { cookie: session } });
