@@ -7,6 +7,7 @@ import { FormField } from '@/components/ui/FormField';
 import { PrimaryButton } from '@/components/ui/PrimaryButton';
 import { Alert } from '@/components/ui/Alert';
 import { validateLoginInput } from '@/lib/validation/authValidation';
+import { HOME_PATH } from '@/lib/routes';
 import {
   focusFirstInvalidField,
   getSignInErrorMessage,
@@ -57,7 +58,7 @@ export function SignInForm() {
 
       if (response.ok) {
         // Stays busy until the page changes, so the form cannot be sent twice.
-        router.push('/');
+        router.push(HOME_PATH);
         return;
       }
 

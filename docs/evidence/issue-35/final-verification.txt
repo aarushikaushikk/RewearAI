@@ -1,0 +1,36 @@
+Commit: fbe1ca5 feat: lay out Home to match wireframe 02 (#35)
+Node v26.7.0, 2026-11-08 00:38 UTC
+
+=== npx eslint src tests ===
+exit 0
+
+=== npm run typecheck ===
+exit 0
+
+=== npm test ===
+ Test Files  48 passed (48)
+      Tests  832 passed (832)
+exit 0
+
+=== npm run test:db ===
+ Test Files  12 passed (12)
+      Tests  346 passed (346)
+exit 0
+
+=== npm run test:smoke ===
+ Test Files  2 passed (2)
+      Tests  35 passed (35)
+exit 0
+
+=== npm run build (route table; ƒ = rendered per request, ○ = static) ===
+┌ ○ /
+├ ○ /_not-found
+├ ƒ /api/auth/google
+├ ƒ /api/auth/google/callback
+├ ƒ /api/auth/login
+├ ƒ /api/auth/logout
+├ ƒ /api/auth/register
+├ ƒ /api/auth/session
+├ ƒ /home
+├ ƒ /sign-in
+└ ƒ /sign-up

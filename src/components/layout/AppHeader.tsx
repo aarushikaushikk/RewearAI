@@ -5,13 +5,14 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Alert } from '@/components/ui/Alert';
 import type { SafeUser } from '@/types/user';
+import { HOME_PATH } from '@/lib/routes';
 
 interface AppHeaderProps {
   user: SafeUser;
 }
 
 const NAV_LINKS = [
-  { href: '/', label: 'Home' },
+  { href: HOME_PATH, label: 'Home' },
   { href: '/wardrobe', label: 'My Wardrobe' },
   { href: '/outfits/create', label: 'Create Outfit' },
   { href: '/outfits/saved', label: 'Saved Outfits' },
@@ -19,7 +20,7 @@ const NAV_LINKS = [
 ];
 
 function isCurrentPage(pathname: string, href: string): boolean {
-  return href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(`${href}/`);
+  return pathname === href || pathname.startsWith(`${href}/`);
 }
 
 /**
@@ -122,7 +123,7 @@ export function AppHeader({ user }: AppHeaderProps) {
       <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between gap-4">
         {/* Wordmark */}
         <Link
-          href="/"
+          href={HOME_PATH}
           className="inline-flex min-h-11 items-center text-xl font-bold text-primary tracking-tight shrink-0 focus:outline-none focus:ring-2 focus:ring-primary rounded"
         >
           ReWear AI

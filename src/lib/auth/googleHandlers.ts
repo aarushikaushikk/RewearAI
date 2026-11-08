@@ -10,10 +10,10 @@ import {
   type GoogleTransaction,
 } from '@/lib/auth/googleTransaction';
 import { serializeCookie } from '@/lib/auth/routeUtils';
+import { HOME_PATH } from '@/lib/routes';
 import { RepositoryUnavailableError } from '@/lib/repositories/repositoryErrors';
 import type { GoogleSignInRefusal, GoogleSignInService } from '@/services/googleSignInService';
 
-const HOME_PATH = '/';
 const FAILED = '/sign-in?reason=google-failed';
 const UNAVAILABLE = '/sign-in?reason=google-unavailable';
 const CANCELLED = '/sign-in?reason=google-cancelled';

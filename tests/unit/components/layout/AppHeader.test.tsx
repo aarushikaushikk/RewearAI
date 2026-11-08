@@ -296,7 +296,7 @@ describe('AppHeader', () => {
     }
 
     it.each([
-      ['/', 'Home'],
+      ['/home', 'Home'],
       ['/wardrobe', 'My Wardrobe'],
       ['/wardrobe/new', 'My Wardrobe'],
       ['/outfits/create', 'Create Outfit'],
