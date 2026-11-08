@@ -1,0 +1,64 @@
+Phase 4C Step 6: MongoSessionRepository on a temporary MongoDB server
+Filtered to failures and totals. Nothing here ran against Atlas. Index creation is done
+by the tests until Step 8, and the repositories aren't connected to the app until Step 9.
+
+=== RED 1 (commit 0d07d0a): the repository doesn't exist yet ===
+ FAIL  tests/db/mongoSessionRepository.test.ts [ tests/db/mongoSessionRepository.test.ts ]
+Error: Cannot find module '@/lib/repositories/mongoSessionRepository' imported from 'tests/db/mongoSessionRepository.test.ts'.
+ FAIL  tests/db/mongoSessionRepositoryConnection.test.ts [ tests/db/mongoSessionRepositoryConnection.test.ts ]
+Error: Cannot find module '@/lib/repositories/mongoSessionRepository' imported from 'tests/db/mongoSessionRepositoryConnection.test.ts'.
+ Test Files  2 failed (2)
+      Tests  no tests
+
+=== RED 2 (never committed): a naive adapter with no filters or input checks ===
+ FAIL  tests/db/mongoSessionRepository.test.ts > ISessionRepository contract: MongoDB > findActiveSessionByTokenHash > returns null for an expired session
+ FAIL  tests/db/mongoSessionRepository.test.ts > ISessionRepository contract: MongoDB > findActiveSessionByTokenHash > returns null for a revoked session
+ FAIL  tests/db/mongoSessionRepository.test.ts > ISessionRepository contract: MongoDB > revokeSessionByTokenHash > returns false when the session is already revoked
+ FAIL  tests/db/mongoSessionRepository.test.ts > ISessionRepository contract: MongoDB > revokeAllSessionsForUser > revokes every active session for the user and returns the count
+ FAIL  tests/db/mongoSessionRepository.test.ts > MongoSessionRepository on a real database > expiry > treats a session as expired at its exact expiry time
+ FAIL  tests/db/mongoSessionRepository.test.ts > MongoSessionRepository on a real database > expiry > rejects an expired record that is still stored, without waiting for its deletion
+ FAIL  tests/db/mongoSessionRepository.test.ts > MongoSessionRepository on a real database > revocation > stores when a session was revoked and keeps it inactive
+ FAIL  tests/db/mongoSessionRepository.test.ts > MongoSessionRepository on a real database > revocation > keeps the first revocation time when revoked again
+ FAIL  tests/db/mongoSessionRepository.test.ts > MongoSessionRepository on a real database > revocation > treats a stored session with no revokedAt field as active and revocable
+ FAIL  tests/db/mongoSessionRepository.test.ts > MongoSessionRepository on a real database > malformed input > find returns null with no query for an operator object matching every session
+ FAIL  tests/db/mongoSessionRepository.test.ts > MongoSessionRepository on a real database > malformed input > find returns null with no query for an operator object matching by pattern
+ FAIL  tests/db/mongoSessionRepository.test.ts > MongoSessionRepository on a real database > malformed input > find returns null with no query for an operator object listing values
+ FAIL  tests/db/mongoSessionRepository.test.ts > MongoSessionRepository on a real database > malformed input > find returns null with no query for a valid hash wrapped in an array
+ FAIL  tests/db/mongoSessionRepository.test.ts > MongoSessionRepository on a real database > malformed input > find returns null with no query for an empty string
+ FAIL  tests/db/mongoSessionRepository.test.ts > MongoSessionRepository on a real database > malformed input > find returns null with no query for a raw token rather than a digest
+ FAIL  tests/db/mongoSessionRepository.test.ts > MongoSessionRepository on a real database > malformed input > find returns null with no query for a digest one character short
+ FAIL  tests/db/mongoSessionRepository.test.ts > MongoSessionRepository on a real database > malformed input > find returns null with no query for a digest in capitals
+ FAIL  tests/db/mongoSessionRepository.test.ts > MongoSessionRepository on a real database > malformed input > revoke returns false with no query for an operator object matching every session
+ FAIL  tests/db/mongoSessionRepository.test.ts > MongoSessionRepository on a real database > malformed input > revoke returns false with no query for an operator object matching by pattern
+ FAIL  tests/db/mongoSessionRepository.test.ts > MongoSessionRepository on a real database > malformed input > revoke returns false with no query for an operator object listing values
+ FAIL  tests/db/mongoSessionRepository.test.ts > MongoSessionRepository on a real database > malformed input > revoke returns false with no query for a valid hash wrapped in an array
+ FAIL  tests/db/mongoSessionRepository.test.ts > MongoSessionRepository on a real database > malformed input > revoke returns false with no query for an empty string
+ FAIL  tests/db/mongoSessionRepository.test.ts > MongoSessionRepository on a real database > malformed input > revoke returns false with no query for a raw token rather than a digest
+ FAIL  tests/db/mongoSessionRepository.test.ts > MongoSessionRepository on a real database > malformed input > revoke returns false with no query for a digest one character short
+ FAIL  tests/db/mongoSessionRepository.test.ts > MongoSessionRepository on a real database > malformed input > revoke returns false with no query for a digest in capitals
+ FAIL  tests/db/mongoSessionRepository.test.ts > MongoSessionRepository on a real database > malformed input > revoke-all returns 0 with no query for a prefixed ID
+ FAIL  tests/db/mongoSessionRepository.test.ts > MongoSessionRepository on a real database > malformed input > revoke-all returns 0 with no query for 12 characters
+ FAIL  tests/db/mongoSessionRepository.test.ts > MongoSessionRepository on a real database > malformed input > revoke-all returns 0 with no query for an empty string
+ FAIL  tests/db/mongoSessionRepository.test.ts > MongoSessionRepository on a real database > malformed input > revoke-all returns 0 with no query for an operator object
+ FAIL  tests/db/mongoSessionRepository.test.ts > MongoSessionRepository on a real database > malformed input > revoke-all returns 0 with no query for a valid ID wrapped in an array
+ FAIL  tests/db/mongoSessionRepository.test.ts > MongoSessionRepository on a real database > malformed input > create rejects a valid ID wrapped in an array and stores nothing
+ FAIL  tests/db/mongoSessionRepository.test.ts > MongoSessionRepository on a real database > with AuthService and real user storage > authenticates until logout, and not afterwards
+ Test Files  1 failed | 1 passed (2)
+      Tests  32 failed | 37 passed (69)
+
+=== GREEN ===
+npm test:          42 files passed, 618 tests passed
+npm run test:db:   6 files passed, 155 tests passed (86 from Step 5 + 69 new)
+                   The 69 include all 16 ISessionRepository contract tests on MongoDB.
+npx tsc --noEmit:  exit 0
+
+=== SESSION SAFEGUARDS REMOVED ONE AT A TIME (throwaway clone; each should be caught) ===
+tests/db/mongoSessionRepository.test.ts only (64 tests, all pass unmodified).
+
+expiry-not-checked             3 failed | 61 passed (64)
+expiry-boundary-gte            1 failed | 63 passed (64)
+revocation-not-checked         4 failed | 60 passed (64)
+hash-check-removed             16 failed | 48 passed (64)
+revoke-not-conditional         3 failed | 61 passed (64)
+revoke-all-any-user            2 failed | 62 passed (64)
+create-skips-user-id-check     1 failed | 63 passed (64)

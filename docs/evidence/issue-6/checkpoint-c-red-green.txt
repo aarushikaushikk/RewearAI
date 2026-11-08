@@ -1,0 +1,146 @@
+
+================================================================
+CHECKPOINT C (accessibility, navigation, page structure) - RED
+$ npx vitest run tests/unit/components/layout/AppHeader.test.tsx tests/unit/components/auth/formAccessibility.test.tsx tests/integration/pages/pageStructure.test.tsx tests/unit/components/ui
+================================================================
+ × tests/unit/components/ui/FormField.test.tsx > FormField > associates help text with the input 11ms
+   → expect(element).toHaveAccessibleDescription()
+ × tests/unit/components/ui/PrimaryButton.test.tsx > PrimaryButton > announces loading to assistive technology 14ms
+   → expect(element).toHaveAttribute("aria-busy", "true") // element.getAttribute("aria-busy") === "true"
+ × tests/unit/components/ui/Alert.test.tsx > Alert > takes focus when asked, for messages that follow a user action 11ms
+   → expect(element).toHaveFocus()
+ × tests/unit/components/layout/AppHeader.test.tsx > AppHeader > sign out > posts to the logout endpoint 199ms
+   → Unable to find an accessible element with the role "button" and name `/account menu/i`
+ × tests/unit/components/layout/AppHeader.test.tsx > AppHeader > sign out > leaves for sign-in and clears cached private pages after a successful logout 26ms
+ × tests/unit/components/layout/AppHeader.test.tsx > AppHeader > sign out > stays on the page and reports a 403 logout failure 22ms
+ × tests/unit/components/layout/AppHeader.test.tsx > AppHeader > sign out > stays on the page and reports a 500 logout failure 24ms
+ × tests/unit/components/auth/formAccessibility.test.tsx > 'SignInForm' accessibility > moves focus to the first invalid field after failed validation 240ms
+ × tests/unit/components/layout/AppHeader.test.tsx > AppHeader > sign out > stays on the page and reports a 503 logout failure 27ms
+ × tests/unit/components/layout/AppHeader.test.tsx > AppHeader > sign out > stays on the page and reports a network failure 23ms
+ × tests/unit/components/layout/AppHeader.test.tsx > AppHeader > sign out > does not show raw error details 23ms
+ × tests/unit/components/layout/AppHeader.test.tsx > AppHeader > sign out > moves focus to the failure message so keyboard users are not stranded 21ms
+ × tests/unit/components/layout/AppHeader.test.tsx > AppHeader > sign out > lets the user retry after a failure 22ms
+ × tests/unit/components/layout/AppHeader.test.tsx > AppHeader > sign out > shows progress and blocks a second request while signing out 28ms
+ × tests/unit/components/layout/AppHeader.test.tsx > AppHeader > account menu > has an accessible name that does not depend on visible text 19ms
+ × tests/unit/components/layout/AppHeader.test.tsx > AppHeader > account menu > falls back to the email address when the user has no name 19ms
+ × tests/unit/components/layout/AppHeader.test.tsx > AppHeader > account menu > reports its state and reveals the account email and sign out 20ms
+ × tests/unit/components/layout/AppHeader.test.tsx > AppHeader > account menu > does not open the navigation menu 15ms
+ × tests/unit/components/layout/AppHeader.test.tsx > AppHeader > account menu > closes on Escape and returns focus to its button 18ms
+ × tests/integration/pages/pageStructure.test.tsx > page structure > wraps authentication pages in a main landmark 147ms
+   → Unable to find an accessible element with the role "main"
+ × tests/integration/pages/pageStructure.test.tsx > page structure > gives Sign In one level-one heading naming the task 37ms
+   → expect(element).toHaveTextContent()
+ × tests/integration/pages/pageStructure.test.tsx > page structure > gives Sign Up one level-one heading naming the task 11ms
+ × tests/unit/components/layout/AppHeader.test.tsx > AppHeader > account menu > closes when clicking elsewhere 25ms
+ × tests/unit/components/layout/AppHeader.test.tsx > AppHeader > account menu > closes when keyboard focus leaves it 21ms
+ × tests/unit/components/layout/AppHeader.test.tsx > AppHeader > navigation menu > has a visible text label and identifies what it controls 20ms
+   → Unable to find an accessible element with the role "button" and name `/^menu$/i`
+ × tests/unit/components/layout/AppHeader.test.tsx > AppHeader > navigation menu > opens the drawer without opening the account menu 18ms
+ × tests/unit/components/layout/AppHeader.test.tsx > AppHeader > navigation menu > offers every destination, the account email, and exactly one sign out 14ms
+ × tests/unit/components/layout/AppHeader.test.tsx > AppHeader > navigation menu > closes on Escape and returns focus to its button 19ms
+ × tests/integration/pages/pageStructure.test.tsx > page structure > Home > exposes the skip-link target on its main landmark 92ms
+   → expect(element).toHaveAttribute("id", "main-content") // element.getAttribute("id") === "main-content"
+ × tests/integration/pages/pageStructure.test.tsx > page structure > Home > links Add Clothing to the route in the design specification 105ms
+   → expect(element).toHaveAttribute("href", "/wardrobe/new") // element.getAttribute("href") === "/wardrobe/new"
+ × tests/unit/components/layout/AppHeader.test.tsx > AppHeader > navigation menu > closes after choosing a destination 17ms
+ × tests/unit/components/layout/AppHeader.test.tsx > AppHeader > navigation menu > signs out from the drawer 12ms
+ × tests/unit/components/layout/AppHeader.test.tsx > AppHeader > current page > on / marks only Home 16ms
+   → expected [] to deeply equal [ 'Home' ]
+ × tests/unit/components/layout/AppHeader.test.tsx > AppHeader > current page > on /wardrobe marks only My Wardrobe 10ms
+   → expected [] to deeply equal [ 'My Wardrobe' ]
+ × tests/unit/components/layout/AppHeader.test.tsx > AppHeader > current page > on /wardrobe/new marks only My Wardrobe 9ms
+ × tests/unit/components/layout/AppHeader.test.tsx > AppHeader > current page > on /outfits/create marks only Create Outfit 8ms
+   → expected [] to deeply equal [ 'Create Outfit' ]
+ × tests/unit/components/layout/AppHeader.test.tsx > AppHeader > current page > on /outfits/saved marks only Saved Outfits 9ms
+   → expected [] to deeply equal [ 'Saved Outfits' ]
+ × tests/unit/components/layout/AppHeader.test.tsx > AppHeader > current page > on /outfits/history marks only Outfit History 8ms
+   → expected [] to deeply equal [ 'Outfit History' ]
+ × tests/unit/components/layout/AppHeader.test.tsx > AppHeader > starts with a skip link to the main content 13ms
+   → Unable to find an accessible element with the role "link" and name `/skip to main content/i`
+ × tests/unit/components/auth/formAccessibility.test.tsx > 'SignInForm' accessibility > moves focus to the password field when only the password is invalid 368ms
+ × tests/unit/components/auth/formAccessibility.test.tsx > 'SignInForm' accessibility > moves focus to the message after a server failure 584ms
+ × tests/unit/components/auth/formAccessibility.test.tsx > 'SignInForm' accessibility > returns focus to the email field when the message is dismissed 702ms
+ × tests/unit/components/auth/formAccessibility.test.tsx > 'SignInForm' accessibility > stays busy after success so the form cannot be submitted twice while leaving 1611ms
+   → Unable to find role="status"
+ × tests/unit/components/auth/formAccessibility.test.tsx > 'SignUpForm' accessibility > moves focus to the first invalid field after failed validation 62ms
+ × tests/unit/components/auth/formAccessibility.test.tsx > 'SignUpForm' accessibility > moves focus to the password field when only the password is invalid 410ms
+ × tests/unit/components/auth/formAccessibility.test.tsx > 'SignUpForm' accessibility > moves focus to the message after a server failure 605ms
+ × tests/unit/components/auth/formAccessibility.test.tsx > 'SignUpForm' accessibility > returns focus to the email field when the message is dismissed 763ms
+ × tests/unit/components/auth/formAccessibility.test.tsx > 'SignUpForm' accessibility > stays busy after success so the form cannot be submitted twice while leaving 1592ms
+ × tests/unit/components/auth/formAccessibility.test.tsx > SignUpForm password guidance > states the password rule before the user submits 8ms
+ FAIL  tests/integration/pages/pageStructure.test.tsx > page structure > wraps authentication pages in a main landmark
+ FAIL  tests/integration/pages/pageStructure.test.tsx > page structure > gives Sign In one level-one heading naming the task
+Error: expect(element).toHaveTextContent()
+ FAIL  tests/integration/pages/pageStructure.test.tsx > page structure > gives Sign Up one level-one heading naming the task
+ FAIL  tests/integration/pages/pageStructure.test.tsx > page structure > Home > exposes the skip-link target on its main landmark
+Error: expect(element).toHaveAttribute("id", "main-content") // element.getAttribute("id") === "main-content"
+ FAIL  tests/integration/pages/pageStructure.test.tsx > page structure > Home > links Add Clothing to the route in the design specification
+Error: expect(element).toHaveAttribute("href", "/wardrobe/new") // element.getAttribute("href") === "/wardrobe/new"
+ FAIL  tests/unit/components/layout/AppHeader.test.tsx > AppHeader > sign out > posts to the logout endpoint
+ FAIL  tests/unit/components/layout/AppHeader.test.tsx > AppHeader > sign out > leaves for sign-in and clears cached private pages after a successful logout
+ FAIL  tests/unit/components/layout/AppHeader.test.tsx > AppHeader > sign out > stays on the page and reports a 403 logout failure
+ FAIL  tests/unit/components/layout/AppHeader.test.tsx > AppHeader > sign out > stays on the page and reports a 500 logout failure
+ FAIL  tests/unit/components/layout/AppHeader.test.tsx > AppHeader > sign out > stays on the page and reports a 503 logout failure
+ FAIL  tests/unit/components/layout/AppHeader.test.tsx > AppHeader > sign out > stays on the page and reports a network failure
+ FAIL  tests/unit/components/layout/AppHeader.test.tsx > AppHeader > sign out > does not show raw error details
+ FAIL  tests/unit/components/layout/AppHeader.test.tsx > AppHeader > sign out > moves focus to the failure message so keyboard users are not stranded
+ FAIL  tests/unit/components/layout/AppHeader.test.tsx > AppHeader > sign out > lets the user retry after a failure
+ FAIL  tests/unit/components/layout/AppHeader.test.tsx > AppHeader > sign out > shows progress and blocks a second request while signing out
+ FAIL  tests/unit/components/layout/AppHeader.test.tsx > AppHeader > account menu > has an accessible name that does not depend on visible text
+ FAIL  tests/unit/components/layout/AppHeader.test.tsx > AppHeader > account menu > falls back to the email address when the user has no name
+ FAIL  tests/unit/components/layout/AppHeader.test.tsx > AppHeader > account menu > reports its state and reveals the account email and sign out
+ FAIL  tests/unit/components/layout/AppHeader.test.tsx > AppHeader > account menu > does not open the navigation menu
+ FAIL  tests/unit/components/layout/AppHeader.test.tsx > AppHeader > account menu > closes on Escape and returns focus to its button
+ FAIL  tests/unit/components/layout/AppHeader.test.tsx > AppHeader > account menu > closes when clicking elsewhere
+ FAIL  tests/unit/components/layout/AppHeader.test.tsx > AppHeader > account menu > closes when keyboard focus leaves it
+ FAIL  tests/unit/components/layout/AppHeader.test.tsx > AppHeader > navigation menu > has a visible text label and identifies what it controls
+ FAIL  tests/unit/components/layout/AppHeader.test.tsx > AppHeader > navigation menu > opens the drawer without opening the account menu
+ FAIL  tests/unit/components/layout/AppHeader.test.tsx > AppHeader > navigation menu > offers every destination, the account email, and exactly one sign out
+ FAIL  tests/unit/components/layout/AppHeader.test.tsx > AppHeader > navigation menu > closes on Escape and returns focus to its button
+ FAIL  tests/unit/components/layout/AppHeader.test.tsx > AppHeader > navigation menu > closes after choosing a destination
+ FAIL  tests/unit/components/layout/AppHeader.test.tsx > AppHeader > navigation menu > signs out from the drawer
+ FAIL  tests/unit/components/layout/AppHeader.test.tsx > AppHeader > current page > on / marks only Home
+AssertionError: expected [] to deeply equal [ 'Home' ]
+ FAIL  tests/unit/components/layout/AppHeader.test.tsx > AppHeader > current page > on /wardrobe marks only My Wardrobe
+ FAIL  tests/unit/components/layout/AppHeader.test.tsx > AppHeader > current page > on /wardrobe/new marks only My Wardrobe
+AssertionError: expected [] to deeply equal [ 'My Wardrobe' ]
+ FAIL  tests/unit/components/layout/AppHeader.test.tsx > AppHeader > current page > on /outfits/create marks only Create Outfit
+AssertionError: expected [] to deeply equal [ 'Create Outfit' ]
+ FAIL  tests/unit/components/layout/AppHeader.test.tsx > AppHeader > current page > on /outfits/saved marks only Saved Outfits
+AssertionError: expected [] to deeply equal [ 'Saved Outfits' ]
+ FAIL  tests/unit/components/layout/AppHeader.test.tsx > AppHeader > current page > on /outfits/history marks only Outfit History
+AssertionError: expected [] to deeply equal [ 'Outfit History' ]
+ FAIL  tests/unit/components/layout/AppHeader.test.tsx > AppHeader > starts with a skip link to the main content
+ FAIL  tests/unit/components/ui/Alert.test.tsx > Alert > takes focus when asked, for messages that follow a user action
+Error: expect(element).toHaveFocus()
+ FAIL  tests/unit/components/ui/FormField.test.tsx > FormField > associates help text with the input
+Error: expect(element).toHaveAccessibleDescription()
+ FAIL  tests/unit/components/ui/PrimaryButton.test.tsx > PrimaryButton > announces loading to assistive technology
+Error: expect(element).toHaveAttribute("aria-busy", "true") // element.getAttribute("aria-busy") === "true"
+ FAIL  tests/unit/components/auth/formAccessibility.test.tsx > 'SignInForm' accessibility > moves focus to the first invalid field after failed validation
+ FAIL  tests/unit/components/auth/formAccessibility.test.tsx > 'SignInForm' accessibility > moves focus to the password field when only the password is invalid
+ FAIL  tests/unit/components/auth/formAccessibility.test.tsx > 'SignInForm' accessibility > moves focus to the message after a server failure
+ FAIL  tests/unit/components/auth/formAccessibility.test.tsx > 'SignInForm' accessibility > returns focus to the email field when the message is dismissed
+ FAIL  tests/unit/components/auth/formAccessibility.test.tsx > 'SignInForm' accessibility > stays busy after success so the form cannot be submitted twice while leaving
+ FAIL  tests/unit/components/auth/formAccessibility.test.tsx > 'SignUpForm' accessibility > moves focus to the first invalid field after failed validation
+ FAIL  tests/unit/components/auth/formAccessibility.test.tsx > 'SignUpForm' accessibility > moves focus to the password field when only the password is invalid
+ FAIL  tests/unit/components/auth/formAccessibility.test.tsx > 'SignUpForm' accessibility > moves focus to the message after a server failure
+ FAIL  tests/unit/components/auth/formAccessibility.test.tsx > 'SignUpForm' accessibility > returns focus to the email field when the message is dismissed
+ FAIL  tests/unit/components/auth/formAccessibility.test.tsx > 'SignUpForm' accessibility > stays busy after success so the form cannot be submitted twice while leaving
+ FAIL  tests/unit/components/auth/formAccessibility.test.tsx > SignUpForm password guidance > states the password rule before the user submits
+ Test Files  6 failed (6)
+      Tests  49 failed | 30 passed (79)
+
+================================================================
+CHECKPOINT C - GREEN
+$ npx vitest run tests/unit/components tests/integration/pages tests/unit/app
+================================================================
+ Test Files  10 passed (10)
+      Tests  137 passed (137)
+
+================================================================
+CHECKPOINT C - FINAL FULL SUITE
+$ npx vitest run
+================================================================
+ Test Files  23 passed (23)
+      Tests  340 passed (340)

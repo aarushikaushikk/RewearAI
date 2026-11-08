@@ -1,0 +1,328 @@
+import { describe, it, expect, beforeEach } from 'vitest';
+import { IUserRepository } from '@/lib/repositories/userRepository';
+import { DuplicateEmailError, DuplicateUserIdError } from '@/lib/repositories/repositoryErrors';
+import { OTHER_PASSWORD_HASH, PASSWORD_HASH } from './fixtures';
+
+const HASH = PASSWORD_HASH;
+
+export interface UserContractSetup<R extends IUserRepository = IUserRepository> {
+  /** Returns an empty repository. */
+  newRepository(): Promise<R> | R;
+  /** An ID in this repository's format that belongs to no user. */
+  unknownId: string;
+  /** Stores an account with no password, which registration can't create. */
+  addPasswordlessUser(repo: R, email: string): Promise<unknown> | unknown;
+}
+
+/**
+ * Behaviour every IUserRepository must have. The MongoDB adapter will run this
+ * same suite, so it must not depend on how a repository stores its records.
+ */
+export function describeUserRepositoryContract<R extends IUserRepository>(
+  name: string,
+  setup: UserContractSetup<R>,
+): void {
+  describe(`IUserRepository contract: ${name}`, () => {
+    let repo: R;
+
+    beforeEach(async () => {
+      repo = await setup.newRepository();
+    });
+
+    describe('create', () => {
+      it('returns the stored record with a string ID and timestamps', async () => {
+        const user = await repo.create({ email: 'a@example.com', passwordHash: HASH, name: 'A' });
+
+        expect(typeof user.id).toBe('string');
+        expect(user.id.length).toBeGreaterThan(0);
+        expect(user).toMatchObject({ email: 'a@example.com', passwordHash: HASH, name: 'A' });
+        expect(user.createdAt).toBeInstanceOf(Date);
+        expect(user.updatedAt).toBeInstanceOf(Date);
+      });
+
+      it('normalizes the email', async () => {
+        const user = await repo.create({ email: '  MixedCase@Example.COM ', passwordHash: HASH });
+
+        expect(user.email).toBe('mixedcase@example.com');
+      });
+
+      it.each([undefined, null])('returns a null name when given %j', async (name) => {
+        const user = await repo.create({ email: 'a@example.com', passwordHash: HASH, name });
+
+        expect(user.name).toBeNull();
+      });
+
+      it('gives each user a different ID', async () => {
+        const first = await repo.create({ email: 'a@example.com', passwordHash: HASH });
+        const second = await repo.create({ email: 'b@example.com', passwordHash: HASH });
+
+        expect(first.id).not.toBe(second.id);
+      });
+
+      it.each(['a@example.com', 'A@EXAMPLE.COM'])(
+        'rejects a repeated email (%s) with DuplicateEmailError',
+        async (email) => {
+          await repo.create({ email: 'a@example.com', passwordHash: HASH });
+
+          await expect(repo.create({ email, passwordHash: OTHER_PASSWORD_HASH })).rejects.toBeInstanceOf(
+            DuplicateEmailError,
+          );
+        },
+      );
+
+      it('leaves the first account unchanged after a rejected duplicate', async () => {
+        const first = await repo.create({ email: 'a@example.com', passwordHash: HASH, name: 'A' });
+
+        await repo
+          .create({ email: 'a@example.com', passwordHash: OTHER_PASSWORD_HASH, name: 'B' })
+          .catch(() => undefined);
+
+        expect(await repo.findByEmail('a@example.com')).toMatchObject({
+          id: first.id,
+          passwordHash: HASH,
+          name: 'A',
+        });
+      });
+
+      it('lets exactly one of several concurrent registrations succeed', async () => {
+        const results = await Promise.allSettled(
+          Array.from({ length: 10 }, () =>
+            repo.create({ email: 'race@example.com', passwordHash: HASH }),
+          ),
+        );
+
+        const rejected = results.filter((r) => r.status === 'rejected');
+        expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+        for (const result of rejected) {
+          expect((result as PromiseRejectedResult).reason).toBeInstanceOf(DuplicateEmailError);
+        }
+      });
+    });
+
+    describe('findByEmail', () => {
+      it('finds a user regardless of email case', async () => {
+        const user = await repo.create({ email: 'a@example.com', passwordHash: HASH });
+
+        expect((await repo.findByEmail('A@Example.Com'))?.id).toBe(user.id);
+      });
+
+      it('includes the password hash, which sign-in needs', async () => {
+        await repo.create({ email: 'a@example.com', passwordHash: HASH });
+
+        expect((await repo.findByEmail('a@example.com'))?.passwordHash).toBe(HASH);
+      });
+
+      it('returns a null hash, not a missing one, for an account with no password', async () => {
+        await setup.addPasswordlessUser(repo, 'a@example.com');
+
+        const user = await repo.findByEmail('a@example.com');
+
+        expect(user).not.toBeNull();
+        expect(user?.passwordHash).toBeNull();
+      });
+
+      it('returns null for an unknown email', async () => {
+        expect(await repo.findByEmail('nobody@example.com')).toBeNull();
+      });
+    });
+
+    describe('findById', () => {
+      it('returns the matching user only', async () => {
+        const first = await repo.create({ email: 'a@example.com', passwordHash: HASH });
+        await repo.create({ email: 'b@example.com', passwordHash: HASH });
+
+        expect(await repo.findById(first.id)).toMatchObject({
+          id: first.id,
+          email: 'a@example.com',
+        });
+      });
+
+      it('returns null for an unknown ID', async () => {
+        expect(await repo.findById(setup.unknownId)).toBeNull();
+      });
+
+      it.each(['user_1', 'not-an-id', '', '123456789012'])(
+        'returns null rather than throwing for the malformed ID %j',
+        async (id) => {
+          await expect(repo.findById(id)).resolves.toBeNull();
+        },
+      );
+
+      it('returns the account details without the password hash', async () => {
+        const user = await repo.create({ email: 'a@example.com', passwordHash: HASH, name: 'A' });
+
+        const found = await repo.findById(user.id);
+
+        expect(found).toMatchObject({ id: user.id, email: 'a@example.com', name: 'A' });
+        expect(found?.createdAt).toBeInstanceOf(Date);
+        expect(found?.updatedAt).toBeInstanceOf(Date);
+        // Fails for a key set to undefined too, which a careless mapping could produce.
+        expect(found).not.toHaveProperty('passwordHash');
+        expect(JSON.stringify(found)).not.toContain(HASH);
+      });
+
+      it('leaves the field out for an account with no password, rather than returning null', async () => {
+        await setup.addPasswordlessUser(repo, 'a@example.com');
+        const account = await repo.findByEmail('a@example.com');
+
+        const found = await repo.findById(account!.id);
+
+        expect(found?.email).toBe('a@example.com');
+        expect(found).not.toHaveProperty('passwordHash');
+      });
+
+      it('has no password hash in its return type, so it cannot be read by mistake', async () => {
+        const user = await repo.create({ email: 'a@example.com', passwordHash: HASH });
+
+        const found = await repo.findById(user.id);
+
+        // @ts-expect-error findById's result has no passwordHash. Checked by tsc.
+        expect(found?.passwordHash).toBeUndefined();
+      });
+
+      it('does not change what findByEmail returns afterwards', async () => {
+        const withPassword = await repo.create({ email: 'a@example.com', passwordHash: HASH });
+        await setup.addPasswordlessUser(repo, 'b@example.com');
+        const withoutPassword = await repo.findByEmail('b@example.com');
+
+        await repo.findById(withPassword.id);
+        await repo.findById(withoutPassword!.id);
+
+        expect((await repo.findByEmail('a@example.com'))?.passwordHash).toBe(HASH);
+        expect((await repo.findByEmail('b@example.com'))?.passwordHash).toBeNull();
+      });
+    });
+
+    describe('createWithoutPassword', () => {
+      it('stores the given ID and a normalized email, and returns no hash', async () => {
+        const id = repo.newId();
+
+        const user = await repo.createWithoutPassword({
+          id,
+          email: '  MixedCase@Example.COM ',
+          name: 'A',
+        });
+
+        expect(user).toMatchObject({ id, email: 'mixedcase@example.com', name: 'A' });
+        expect(user.createdAt).toBeInstanceOf(Date);
+        expect(user.updatedAt).toBeInstanceOf(Date);
+        expect(user).not.toHaveProperty('passwordHash');
+      });
+
+      it('is found with a null hash by email, and no hash key by ID', async () => {
+        const id = repo.newId();
+        await repo.createWithoutPassword({ id, email: 'a@example.com' });
+
+        const byEmail = await repo.findByEmail('a@example.com');
+        const byId = await repo.findById(id);
+
+        expect(byEmail?.id).toBe(id);
+        expect(byEmail?.passwordHash).toBeNull();
+        expect(byEmail?.name).toBeNull();
+        expect(byId?.email).toBe('a@example.com');
+        expect(byId).not.toHaveProperty('passwordHash');
+      });
+
+      it('rejects a repeated email, whichever kind of account holds it', async () => {
+        await repo.create({ email: 'a@example.com', passwordHash: HASH });
+        await repo.createWithoutPassword({ id: repo.newId(), email: 'b@example.com' });
+
+        await expect(
+          repo.createWithoutPassword({ id: repo.newId(), email: 'A@example.com' }),
+        ).rejects.toBeInstanceOf(DuplicateEmailError);
+        await expect(
+          repo.createWithoutPassword({ id: repo.newId(), email: 'b@example.com' }),
+        ).rejects.toBeInstanceOf(DuplicateEmailError);
+        expect((await repo.findByEmail('a@example.com'))?.passwordHash).toBe(HASH);
+      });
+
+      it('makes password registration reject the same email', async () => {
+        await repo.createWithoutPassword({ id: repo.newId(), email: 'a@example.com' });
+
+        await expect(
+          repo.create({ email: 'a@example.com', passwordHash: HASH }),
+        ).rejects.toBeInstanceOf(DuplicateEmailError);
+        expect((await repo.findByEmail('a@example.com'))?.passwordHash).toBeNull();
+      });
+
+      it('rejects a repeated ID', async () => {
+        const id = repo.newId();
+        await repo.createWithoutPassword({ id, email: 'a@example.com' });
+
+        await expect(
+          repo.createWithoutPassword({ id, email: 'b@example.com' }),
+        ).rejects.toBeInstanceOf(DuplicateUserIdError);
+        expect(await repo.findByEmail('b@example.com')).toBeNull();
+      });
+
+      it('takes no password and can be deleted like any other user', async () => {
+        const id = repo.newId();
+        await repo.createWithoutPassword({
+          id,
+          email: 'a@example.com',
+          // @ts-expect-error This method has no way to set a password. Checked by tsc.
+          passwordHash: HASH,
+        });
+
+        expect((await repo.findByEmail('a@example.com'))?.passwordHash).toBeNull();
+        expect(await repo.deleteById?.(id)).toBe(true);
+      });
+
+      it('still requires a hash for password registration. Checked by tsc', async () => {
+        // @ts-expect-error Password registration can't omit the hash.
+        const create = () => repo.create({ email: 'a@example.com' });
+
+        expect(typeof create).toBe('function');
+      });
+    });
+
+    describe('newId', () => {
+      it('returns a different string each time', () => {
+        const ids = new Set(Array.from({ length: 5 }, () => repo.newId()));
+
+        expect(ids.size).toBe(5);
+        for (const id of ids) {
+          expect(typeof id).toBe('string');
+        }
+      });
+
+      it('never returns an ID already in use', async () => {
+        const stored = await repo.create({ email: 'a@example.com', passwordHash: HASH });
+
+        expect(repo.newId()).not.toBe(stored.id);
+        expect(await repo.findById(repo.newId())).toBeNull();
+      });
+    });
+
+    describe('deleteById', () => {
+      it('is implemented, because registration rollback needs it', () => {
+        expect(typeof repo.deleteById).toBe('function');
+      });
+
+      it('removes only the given user', async () => {
+        const first = await repo.create({ email: 'a@example.com', passwordHash: HASH });
+        const second = await repo.create({ email: 'b@example.com', passwordHash: HASH });
+
+        expect(await repo.deleteById?.(first.id)).toBe(true);
+
+        expect(await repo.findById(first.id)).toBeNull();
+        expect((await repo.findById(second.id))?.id).toBe(second.id);
+      });
+
+      it('frees the email for a later registration', async () => {
+        const user = await repo.create({ email: 'a@example.com', passwordHash: HASH });
+        await repo.deleteById?.(user.id);
+
+        await expect(
+          repo.create({ email: 'a@example.com', passwordHash: HASH }),
+        ).resolves.toBeDefined();
+      });
+
+      it.each(['unknown', 'malformed'])('returns false for a %s ID', async (kind) => {
+        const id = kind === 'unknown' ? setup.unknownId : 'user_1';
+
+        await expect(repo.deleteById?.(id)).resolves.toBe(false);
+      });
+    });
+  });
+}

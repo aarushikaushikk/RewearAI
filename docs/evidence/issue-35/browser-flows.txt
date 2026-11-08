@@ -1,0 +1,52 @@
+Issue #35: signed-in Home at /home, browser checks
+Run 2026-11-08 00:38 UTC. Real headless Chrome over the DevTools protocol, on the real
+`next start` production build with a temporary in-memory MongoDB. Throwaway account only;
+no Atlas, no real Google, no real credentials. Viewports were emulated, not real devices.
+
+--- Signed out ---
+PASS  / sends a signed-out visitor to sign-in  [/sign-in]
+PASS  /home sends a signed-out visitor to sign-in  [/sign-in]
+--- Password sign-up ---
+PASS  sign-up lands on /home  [/home]
+--- Home at 1280 px (wireframe 02) ---
+PASS  the previous page left in the DOM is hidden  [[{"text":"Create your account","visible":false,"hiddenBy":"main display:none"}]]
+PASS  screen readers get one h1, the greeting  [Welcome back, Evidence Tester]
+PASS  page title  [Home — ReWear AI]
+PASS  one visible h1 greets the signed-in user  [Welcome back, Evidence Tester]
+PASS  wireframe subtitle  [Your wardrobe, your outfits, all in one place.]
+PASS  three cards in wireframe order  [My Wardrobe, Create Outfit, Saved Outfits]
+PASS  card descriptions match the wireframe
+PASS  Open links have distinct names  [Open My Wardrobe, Open Create Outfit, Open Saved Outfits]
+PASS  Open links go to the design routes  [/wardrobe, /outfits/create, /outfits/saved]
+PASS  only the first Open is primary (filled green)  [rgb(36, 91, 69) / rgb(255, 255, 255) / rgb(255, 255, 255)]
+PASS  cards sit in one row  [221, 221, 221]
+PASS  Open links are at least 44 px tall  [44, 44, 44]
+PASS  Add Clothing goes to /wardrobe/new and is at least 44 px  [{"href":"/wardrobe/new","height":44}]
+PASS  panel uses the soft primary colour  [rgb(232, 241, 235)]
+PASS  header marks Home as the current page  [[["Home","/home"]]]
+PASS  wordmark links to /home  [/home]
+PASS  shows the user name but not the email or password
+--- Keyboard at 1280 px ---
+PASS  focused Open link shows a focus indicator  [solid rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px]
+PASS  Tab reaches the skip link first  [Skip to main content]
+PASS  Tab reaches the Open links and Add Clothing in reading order  [Skip to main content > ReWear AI > Home > My Wardrobe > Create Outfit > Saved Outfits > Outfit History > Account menu for Evidence Tester > Open My Wardrobe > Open Create Outfit > Open Saved Outfits > Add Clothing]
+--- Redirects while signed in ---
+PASS  / forwards a signed-in user to /home  [/home]
+PASS  /sign-in sends a signed-in user to /home  [/home]
+PASS  /sign-up sends a signed-in user to /home  [/home]
+--- Password sign-in ---
+PASS  sign-out succeeds  [200]
+PASS  after sign-out /home goes to sign-in  [/sign-in]
+PASS  sign-in lands on /home  [/home]
+--- Responsive layout ---
+PASS  768 px: no horizontal scroll  [overflow 0]
+PASS  768 px: three cards in one row  [221, 221, 221]
+PASS  375 px: no horizontal scroll  [overflow 0]
+PASS  375 px: cards stack in one column  [293, 503, 713]
+PASS  375 px: Open buttons fill the card  [293, 293, 293 of 293, 293, 293 px]
+PASS  320 px: no horizontal scroll  [overflow 0]
+PASS  320 px: cards stack in one column  [293, 527, 737]
+PASS  320 px: Open buttons fill the card  [238, 238, 238 of 238, 238, 238 px]
+PASS  375 px: menu lists Home first and marks it current  [["Home","page"]]
+
+38 of 38 pass

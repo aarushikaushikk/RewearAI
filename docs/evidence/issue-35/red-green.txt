@@ -1,0 +1,81 @@
+Issue #35: red → green at every commit
+Run in a scratch git worktree with scripts/red-green.sh, filtered to failures and totals. The database
+test used a temporary mongod on 127.0.0.1 and a local fake Google.
+
+=== c0f6eab test: expect Home at /home with / forwarding to it (#35) ===
+npx vitest run (unit + integration):
+   FAIL  tests/integration/pages/pageStructure.test.tsx [ tests/integration/pages/pageStructure.test.tsx ]
+  Error: Failed to resolve import "@/app/home/page" from "tests/integration/pages/pageStructure.test.tsx". Does the file exist?
+   FAIL  tests/integration/pages/sessionPages.test.tsx [ tests/integration/pages/sessionPages.test.tsx ]
+  Error: Failed to resolve import "@/app/home/page" from "tests/integration/pages/sessionPages.test.tsx". Does the file exist?
+   Test Files  2 failed | 46 passed (48)
+        Tests  802 passed (802)
+npx vitest run --config vitest.db.config.ts tests/db/googleAuthRoutes.test.ts:
+   Test Files  1 passed (1)
+        Tests  53 passed (53)
+
+=== 3ba470e feat: move Home to /home and forward / to it (#35) ===
+npx vitest run (unit + integration):
+   Test Files  48 passed (48)
+        Tests  829 passed (829)
+npx vitest run --config vitest.db.config.ts tests/db/googleAuthRoutes.test.ts:
+   Test Files  1 passed (1)
+        Tests  53 passed (53)
+
+=== 9b87de2 test: expect sign-in redirects to land on /home (#35) ===
+npx vitest run (unit + integration):
+   FAIL  tests/integration/pages/sessionPages.test.tsx > session-aware pages > Sign In (public page) > redirects a valid session to Home
+   FAIL  tests/integration/pages/sessionPages.test.tsx > session-aware pages > Sign Up (public page) > redirects a valid session to Home
+   FAIL  tests/unit/auth/pageSession.test.ts > pageSession > redirectIfAuthenticated > redirects a valid session to Home
+   Test Files  2 failed | 46 passed (48)
+        Tests  3 failed | 826 passed (829)
+npx vitest run --config vitest.db.config.ts tests/db/googleAuthRoutes.test.ts:
+   FAIL  tests/db/googleAuthRoutes.test.ts > a successful sign-in > creates the user and issues the same session cookie as password sign-in
+   FAIL  tests/db/googleAuthRoutes.test.ts > a successful sign-in > ignores any redirect target in the request
+   Test Files  1 failed (1)
+        Tests  2 failed | 51 passed (53)
+
+=== ff01548 feat: send signed-in users to /home after sign-in (#35) ===
+npx vitest run (unit + integration):
+   Test Files  48 passed (48)
+        Tests  829 passed (829)
+npx vitest run --config vitest.db.config.ts tests/db/googleAuthRoutes.test.ts:
+   Test Files  1 passed (1)
+        Tests  53 passed (53)
+
+=== 6fb553e test: expect the header to mark Home current on /home (#35) ===
+npx vitest run (unit + integration):
+   FAIL  tests/unit/components/layout/AppHeader.test.tsx > AppHeader > current page > on /home marks only Home
+   Test Files  1 failed | 47 passed (48)
+        Tests  1 failed | 828 passed (829)
+npx vitest run --config vitest.db.config.ts tests/db/googleAuthRoutes.test.ts:
+   Test Files  1 passed (1)
+        Tests  53 passed (53)
+
+=== c3e9958 feat: point the header Home link and wordmark to /home (#35) ===
+npx vitest run (unit + integration):
+   Test Files  48 passed (48)
+        Tests  829 passed (829)
+npx vitest run --config vitest.db.config.ts tests/db/googleAuthRoutes.test.ts:
+   Test Files  1 passed (1)
+        Tests  53 passed (53)
+
+=== 47c0f21 test: expect Home to follow wireframe 02 (#35) ===
+npx vitest run (unit + integration):
+   FAIL  tests/integration/pages/pageStructure.test.tsx > page structure > Home > greets the user and repeats the wireframe subtitle
+   FAIL  tests/integration/pages/pageStructure.test.tsx > page structure > Home > shows the three wireframe cards in order, each with an Open link
+   FAIL  tests/integration/pages/pageStructure.test.tsx > page structure > Home > gives each Open link a distinct accessible name
+   Test Files  1 failed | 47 passed (48)
+        Tests  3 failed | 829 passed (832)
+npx vitest run --config vitest.db.config.ts tests/db/googleAuthRoutes.test.ts:
+   Test Files  1 passed (1)
+        Tests  53 passed (53)
+
+=== fbe1ca5 feat: lay out Home to match wireframe 02 (#35) ===
+npx vitest run (unit + integration):
+   Test Files  48 passed (48)
+        Tests  832 passed (832)
+npx vitest run --config vitest.db.config.ts tests/db/googleAuthRoutes.test.ts:
+   Test Files  1 passed (1)
+        Tests  53 passed (53)
+

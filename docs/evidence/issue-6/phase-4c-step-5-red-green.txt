@@ -1,0 +1,52 @@
+Phase 4C Step 5: MongoUserRepository on a temporary MongoDB server
+Filtered to failures and totals. Nothing here ran against Atlas. Index creation is done
+by the tests until Step 8, and the repository isn't connected to the app until Step 9.
+
+=== RED (commit a611f98): the repository doesn't exist yet ===
+npm run test:db (exit 1):
+ FAIL  tests/db/mongoUserRepository.test.ts [ tests/db/mongoUserRepository.test.ts ]
+Error: Cannot find module '@/lib/repositories/mongoUserRepository' imported from 'tests/db/mongoUserRepository.test.ts'.
+ Test Files  1 failed | 2 passed (3)
+      Tests  13 passed (13)
+
+npx tsc --noEmit (exit 2):
+tests/db/mongoUserRepository.test.ts(5,37): error TS2307: Cannot find module '@/lib/repositories/mongoUserRepository' or its corresponding type declarations.
+
+npm test (exit 0, because tests/db is excluded):
+ Test Files  42 passed (42)
+      Tests  618 passed (618)
+
+=== GREEN ===
+npm test:          42 files passed, 618 tests passed
+npm run test:db:   4 files passed, 86 tests passed (13 from Step 3 + 73 new)
+                   The 73 include all 28 IUserRepository contract tests on MongoDB.
+npx tsc --noEmit:  exit 0
+
+=== SAFEGUARDS REMOVED ONE AT A TIME (throwaway clone; each should be caught) ===
+Only the named safeguard was removed for each run. Tests run: the two new database test
+files (73 tests, all pass unmodified). tsc reports 0 errors unmodified.
+
+findById-selects-hash-not-mapped     vitest: 1 failed | 72 passed (73)      tsc errors: 0
+findById-default-projection          vitest: 1 failed | 72 passed (73)      tsc errors: 0
+findById-spreads-loaded-doc          vitest: 5 failed | 68 passed (73)      tsc errors: 0
+findById-hash-key-undefined          vitest: 3 failed | 70 passed (73)      tsc errors: 0
+findByEmail-no-select                vitest: 5 failed | 68 passed (73)      tsc errors: 0
+findByEmail-null-not-preserved       vitest: 1 failed | 72 passed (73)      tsc errors: 0
+findByEmail-empty-string-for-null    vitest: 4 failed | 69 passed (73)      tsc errors: 0
+findByEmail-no-normalize             vitest: 1 failed | 72 passed (73)      tsc errors: 0
+id-check-uses-isValidObjectId        vitest: 73 passed (73)                 tsc errors: 0
+id-check-no-typeof                   vitest: 2 failed | 71 passed (73)      tsc errors: 0
+any-11000-is-duplicate-email         vitest: 1 failed | 72 passed (73)      tsc errors: 0
+no-duplicate-translation             vitest: 6 failed | 67 passed (73)      tsc errors: 0
+driver-errors-passed-through         vitest: 5 failed | 68 passed (73)      tsc errors: 0
+no-connect                           vitest: 1 failed | 72 passed (73)      tsc errors: 0
+delete-always-true                   vitest: 2 failed | 71 passed (73)      tsc errors: 0
+delete-ignores-id                    vitest: 1 failed | 72 passed (73)      tsc errors: 0
+create-drops-name                    vitest: 3 failed | 70 passed (73)      tsc errors: 0
+string-id-not-converted              vitest: 4 failed | 69 passed (73)      tsc errors: 0
+
+id-check-uses-isValidObjectId was not caught, and doesn't change behaviour for string IDs:
+Mongoose 9.12's isValidObjectId gave the same answer as the repository's check for every
+string tried, including 12-character ones. They differ only for ObjectId and byte inputs,
+which findById doesn't take. No removed safeguard above was caught by tsc, because every
+one still has valid types; the database tests are what catch them.

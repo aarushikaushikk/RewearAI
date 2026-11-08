@@ -1,0 +1,41 @@
+Phase 4C Step 7: shared repository error mapping and safe logging
+Filtered to totals and a sample of failures. Nothing here ran against Atlas. Index creation
+is done by the tests until Step 8, and the repositories aren't connected until Step 9.
+
+=== RED (commit 464b410): outages still reported as plain RepositoryError ===
+tests/unit/repositories/mongoErrorMapping.test.ts (the mapping functions don't exist yet):
+ Test Files  1 failed (1)
+      Tests  45 failed (45)
+
+tests/db/repositoryFailures.test.ts and both repository connection tests:
+ Test Files  3 failed (3)
+      Tests  38 failed | 4 passed (42)
+
+Most common assertion failures:
+  7 x AssertionError: expected 500 to be 503 // Object.is equality
+  4 x AssertionError: expected RepositoryError: The data operation failed to be an instance of RepositoryU
+  3 x AssertionError: expected [] to deeply equal [ [ …(2) ] ]
+
+=== GREEN ===
+npm test:          43 files passed, 663 tests passed (618 from Step 6 + 45 new)
+npm run test:db:   7 files passed, 190 tests passed (155 from Step 6 + 35 new)
+npx tsc --noEmit:  exit 0
+
+The two connection tests from Steps 5 and 6 now require RepositoryUnavailableError in place
+of the interim generic error, so their assertions changed on purpose.
+
+The expired-session test (commit 2afc120) no longer races MongoDB's cleanup. The record expires
+in the future for mongod and in the past for the repository; its assertions are unchanged.
+
+=== SAFEGUARDS REMOVED ONE AT A TIME (throwaway clone; each should be caught) ===
+Tests run: mongoErrorMapping (45), repositoryFailures and mongoSessionRepository (99).
+
+log-includes-driver-message    unit: 45 passed (45) | db: 27 failed | 72 passed (99)
+thrown-error-keeps-cause       unit: 45 passed (45) | db: 19 failed | 80 passed (99)
+outage-not-unavailable         unit: 12 failed | 33 passed (45) | db: 23 failed | 76 passed (99)
+failover-not-unavailable       unit: 11 failed | 34 passed (45) | db: 99 passed (99)
+failover-code-on-any-error     unit: 1 failed | 44 passed (45) | db: 99 passed (99)
+any-11000-is-duplicate-email   unit: 5 failed | 40 passed (45) | db: 2 failed | 97 passed (99)
+compound-index-is-email        unit: 1 failed | 44 passed (45) | db: 99 passed (99)
+duplicate-email-logged         unit: 45 passed (45) | db: 1 failed | 98 passed (99)
+expiry-not-checked             unit: 45 passed (45) | db: 3 failed | 96 passed (99)

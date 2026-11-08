@@ -1,0 +1,87 @@
+Phase 5 Checkpoint 5: final review of User Story 1
+
+This file keeps two kinds of result apart. Part 1 was reported by Pranav and wasn't independently
+run. Part 2 was run by the implementing agent, with fake credentials and temporary databases only.
+The agent didn't read .env.local and didn't connect to Atlas or real Google.
+
+=== PART 1: MANUAL CHECKS, REPORTED BY PRANAV ===
+Real Google OAuth, a separate development Atlas cluster, in Chrome:
+- Google consent and sign-in succeeded, and redirected to the signed-in Home page.
+- The Google session survived a refresh.
+- Signing out returned to the sign-in page.
+- Signing back in with the same Google account succeeded.
+- Email and password registration worked against Atlas.
+- Email and password sign-in and sign-out worked against Atlas.
+
+Not reported, so not claimed here:
+- Cancelling at Google's consent screen, or a Google account whose email already has an account.
+- Whether these ran under next dev or next start. Secure and __Host- cookies apply only in
+  production mode.
+- The stored records in Atlas. Automated tests check that no Google token or raw session token is
+  stored, but on a temporary database.
+
+DNS workaround: the Atlas SRV lookup failed in Node.js on Pranav's machine. Pranav resolved it by
+pointing Node.js's DNS resolver at Cloudflare, with a temporary local .cjs preload file kept outside
+the repository:
+
+  require("node:dns").setServers(["1.1.1.1"]);
+
+It was loaded with NODE_OPTIONS=--require=<path to that file> when starting Next.js. No application
+code or Windows DNS settings were changed: nothing in src, tests, or next.config sets DNS, and no
+credentials are recorded here. It isn't known whether a partner's machine needs it, and it says
+nothing about Vercel.
+
+=== PART 2: AUTOMATED RESULTS ===
+Node 24.13.0. Settings were blank or fake, which stops Next.js loading .env.local.
+
+npm test:             825 tests in 48 files pass
+npm run test:db:      346 tests in 12 files pass, leaving no temporary folders or mongod processes
+npm run test:smoke:   34 tests in 2 files pass, including its production build
+npx tsc --noEmit:     exit 0
+npm run lint:         exit 0
+git diff --check:     exit 0
+npm audit --omit=dev: 0 vulnerabilities
+Routes:               all /api/auth/* routes, /, /sign-in, and /sign-up are dynamic
+
+The totals are lower than Checkpoint 4 (835 and 370) because tests of the two removed methods went
+with them. 4 tests were added to npm test.
+
+Reliability: commit 1047152 passed 25 runs of the three form test files and 30 runs of the full
+suite, at 835 tests. Those runs preceded this checkpoint's changes and weren't repeated. The
+worst machine pause during them was 412 ms, so they didn't face the pauses that caused the failures.
+The evidence for that fix is the comparison under injected stalls: 8 timeouts before, 0 after.
+
+Build with fake values: 0 database connection attempts, and no fake value in .next or build output.
+Client bundles: no OIDC library, client secret, or Google or MongoDB setting names.
+Secret scan of the tree and branch history: no Google client secret or real-format client ID.
+.env.local was never committed. mongodb+srv matches are fake test values such as cluster0.abcde.
+
+=== FIX: A PASSWORD OF ONLY WHITESPACE ===
+Registering with eight spaces returned 500, because the validator accepted it and hashPassword then
+refused it. No account was created. It now answers 400 with "Password is required".
+RED:
+FAIL  tests/integration/api/authRoutes.test.ts > Auth API Routes Integration Tests > POST /api/auth/register > answers 400 for a password o
+AssertionError: expected 500 to be 400 // Object.is equality
+ FAIL  tests/unit/auth/authValidation.test.ts > Auth Validation Utilities > validatePassword > rejects a password of only whitespace: "     
+ FAIL  tests/unit/auth/authValidation.test.ts > Auth Validation Utilities > validatePassword > rejects a password of only whitespace: "\t\t\
+AssertionError: expected true to be false // Object.is equality
+ Test Files  2 failed (2)
+      Tests  3 failed | 97 passed (100)
+GREEN: the same tests pass; see the totals above.
+
+=== REMOVED: deleteLink AND revokeAllSessionsForUser ===
+Neither had a caller outside tests. No user story in docs/PRD.md covers unlinking, account deletion,
+password change, or signing out everywhere. deleteLink also contradicted the rule against removing
+links. Models and data are unchanged. Single-session revocation on logout stays.
+
+The two "never removes a link" guards spied on deleteLink, so they were rewritten. The database
+guard now watches every delete on the Account collection. To check it can fail, sign-in was
+temporarily changed to delete a link on a refused email, then restored:
+FAIL  partial failures > when the User write fails after the Account write > l
+ FAIL  the three-way race > leaves no stranded user when B finishes first
+ FAIL  the three-way race > leaves no stranded user when C finishes first
+ FAIL  the three-way race > lets that person sign in afterwards when B finishes
+ FAIL  the three-way race > lets that person sign in afterwards when C finishes
+ FAIL  the three-way race > never removes a link during any of this
+ FAIL  overlapping requests > with randomized timing > holds the guarantees whe
+      Tests  7 failed | 18 passed (25)
