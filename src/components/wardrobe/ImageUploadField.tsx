@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import Image from 'next/image';
 import { Alert } from '@/components/ui/Alert';
 import { ACCEPTED_IMAGE_LABEL, ACCEPTED_IMAGE_TYPES, MAX_IMAGE_LABEL } from '@/types/upload';
@@ -20,7 +20,7 @@ export interface ImageUploadFieldProps {
   onRetry?: () => void;
 }
 
-/** Choose, preview, replace, and retry a clothing photo (DESIGN §4 ImageUploadField). */
+/** Choose or drop, preview, replace, and retry a clothing photo (DESIGN §4 ImageUploadField). */
 export function ImageUploadField({
   id,
   status,
@@ -33,6 +33,24 @@ export function ImageUploadField({
 }: ImageUploadFieldProps) {
   const hintId = `${id}-hint`;
   const errorId = `${id}-error`;
+  const [isDragOver, setIsDragOver] = useState(false);
+
+  // Dropping is a shortcut for pointer users; the file input stays the keyboard path.
+  function handleDragOver(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    if (!disabled) {
+      setIsDragOver(true);
+    }
+  }
+
+  function handleDrop(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    setIsDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file && !disabled) {
+      onSelect(file);
+    }
+  }
 
   return (
     <div className="flex flex-col gap-3">
@@ -41,7 +59,14 @@ export function ImageUploadField({
         <span className="text-sm text-text-muted font-normal">(Required)</span>
       </label>
 
-      <div className="relative aspect-[4/5] w-full overflow-hidden rounded-xl border border-border bg-surface">
+      <div
+        onDragOver={handleDragOver}
+        onDragLeave={() => setIsDragOver(false)}
+        onDrop={handleDrop}
+        className={`relative aspect-[4/5] w-full overflow-hidden rounded-xl border bg-surface ${
+          isDragOver ? 'border-2 border-dashed border-primary bg-primary-soft' : 'border-border'
+        }`}
+      >
         {previewUrl ? (
           <Image
             src={previewUrl}
@@ -52,7 +77,7 @@ export function ImageUploadField({
           />
         ) : (
           <p className="flex h-full items-center justify-center p-6 text-center text-text-muted">
-            No image chosen yet
+            Drag a photo here, or choose one below.
           </p>
         )}
         {status === 'uploading' && (
