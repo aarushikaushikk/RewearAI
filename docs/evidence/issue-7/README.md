@@ -16,6 +16,7 @@ Evidence for reworking User Story 2 onto the conventions merged with #6 (PR #33)
 | Signed-out access in a browser | Below | `next dev` | No, one-off check |
 | Each commit red or green on its own | `commit-history-and-real-run.txt` §1 | Every commit checked out separately | Yes, at each commit |
 | Dropping a photo on the image area | `commit-history-and-real-run.txt` §2 (red, then green) | jsdom | Yes |
+| Add Clothing matching wireframes 05 and 06 | `commit-history-and-real-run.txt` §4 (red, then green), [screenshots/](screenshots) | jsdom, then `next start` at 1280 px and 375 px | Tests yes; browser check no |
 | Signed-in drop, upload, save, and cleanup route | `commit-history-and-real-run.txt` §3, [screenshots/](screenshots) | `next start`, real Cloudinary, temporary MongoDB | No, one-off check |
 
 The red run covers every new test file except `SelectField.test.tsx`, the `DuplicateImageError` case in `mongoErrorMapping.test.ts`, and `tests/db/mongoWardrobeItemRepository.test.ts`, which were written alongside their code.
@@ -24,7 +25,7 @@ The red run covers every new test file except `SelectField.test.tsx`, the `Dupli
 
 | Check | Result |
 |---|---|
-| `npm test` | 926 tests in 55 files pass |
+| `npm test` | 928 tests in 55 files pass |
 | `npm run test:db` | 361 tests in 13 files pass (346 from #6, 15 new) |
 | `npm run test:smoke` | 35 tests in 2 files pass (34 from #6 and #35's update); every `/api` route and `/wardrobe/new` build as `ƒ` |
 | `tsc --noEmit`, `eslint src tests` | No errors |
@@ -36,4 +37,5 @@ The red run covers every new test file except `SelectField.test.tsx`, the `Dupli
 - Saving to Atlas: the real run used a temporary database, so nothing was written to the team's data.
 - The daily cron job on Vercel, and an abandoned image over 24 hours old actually being deleted by the route. The route's listing call did reach Cloudinary.
 - Choosing a file with the picker and real mouse dragging in the signed-in browser run: the drop was a scripted `DragEvent`, and the picker path is covered by component tests.
+- Style is still a free-text field; it becomes a dropdown once the team agrees its values.
 - Phone photos (HEIC, very large JPEGs) going through the browser's resize step, which jsdom can't run.

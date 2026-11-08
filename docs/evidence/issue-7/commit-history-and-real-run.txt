@@ -66,3 +66,30 @@ A test account was created on that temporary database through /sign-up.
    This confirms the Cloudinary Admin API listing by tag works with the configured keys.
 5. Cleanup: the test image was deleted from Cloudinary afterwards, because its database record lived only
    in the temporary database.
+
+== 4. Matching wireframes 05 and 06 ==
+Reference pages: screenshots/wireframe-05-reference.png and screenshots/wireframe-06-reference.png
+(pages 6 and 7 of docs/Wireframes.pdf).
+
+Red: f01e8c3 checked against the previous form (implementation stashed):
+$ npx vitest run tests/unit/components/wardrobe/AddClothingForm.test.tsx
+      Tests  12 failed (12)
+Every test fails on the old single-page form: the upload card heading, "Choose image or drag a file
+here", Choose photo, the details heading, and Confirm and save don't exist yet.
+
+Green: 9e19d22
+      Tests  12 passed (12)
+
+Browser check (rewear-dev-memdb config, real Cloudinary, temporary database):
+- Upload step at 1280 px: screenshots/wireframe-05-upload-step-1280.png
+- Unsupported file: says which formats are allowed, button reads "Choose another", no Retry:
+  screenshots/wireframe-05-invalid-file-1280.png
+- Details step at 1280 px, focus on "Describe this item": screenshots/wireframe-06-details-step-1280.png
+- At 375 px the photo is capped in height and the page doesn't scroll sideways.
+The two test images this check uploaded were deleted from Cloudinary afterwards.
+
+Differences that remain on purpose:
+- Style is a text field until the team agrees the dropdown values.
+- The header comes from #6/#35 ("My Wardrobe", account menu), not this issue.
+- The wireframe's "Upload states" panel is an annotation, not part of the page.
+- Heading text is "Describe this item" rather than suggesting values, since classification is #8.
