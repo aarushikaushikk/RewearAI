@@ -35,3 +35,9 @@ export class DuplicateEmailError extends RepositoryError {
   override name = 'DuplicateEmailError';
   override message = 'User with this email already exists';
 }
+
+/** The image already belongs to a wardrobe item, which is expected when a save is retried. */
+export class DuplicateImageError extends RepositoryError {
+  override name = 'DuplicateImageError';
+  override message = 'This image is already used by a wardrobe item';
+}
