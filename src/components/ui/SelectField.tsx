@@ -9,6 +9,8 @@ export interface SelectFieldProps {
   required?: boolean;
   optional?: boolean;
   error?: string;
+  /** Help text beneath the select; an error replaces it, as in FormField. */
+  hint?: string;
   disabled?: boolean;
   /** Shown while no value is chosen. */
   placeholder?: string;
@@ -27,10 +29,13 @@ export function SelectField({
   required,
   optional,
   error,
+  hint,
   disabled,
   placeholder = 'Choose…',
 }: SelectFieldProps) {
   const errorId = `${id}-error`;
+  const hintId = `${id}-hint`;
+  const describedBy = error ? errorId : hint ? hintId : undefined;
 
   return (
     <div className="flex flex-col gap-1">
@@ -47,7 +52,7 @@ export function SelectField({
         required={required}
         disabled={disabled}
         aria-invalid={error ? 'true' : undefined}
-        aria-describedby={error ? errorId : undefined}
+        aria-describedby={describedBy}
         className={[
           'w-full min-h-11 rounded-xl border px-3 py-2 text-base',
           'bg-surface text-text',
@@ -65,10 +70,16 @@ export function SelectField({
         ))}
       </select>
 
-      {error && (
+      {error ? (
         <p id={errorId} role="alert" className="text-sm text-danger mt-0.5">
           {error}
         </p>
+      ) : (
+        hint && (
+          <p id={hintId} className="text-sm text-text-muted mt-0.5">
+            {hint}
+          </p>
+        )
       )}
     </div>
   );

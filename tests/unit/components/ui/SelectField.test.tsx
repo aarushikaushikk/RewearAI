@@ -49,4 +49,14 @@ describe('SelectField', () => {
     expect(select).toHaveAttribute('aria-invalid', 'true');
     expect(select).toHaveAccessibleDescription('Choose a season.');
   });
+
+  it('describes the select with a hint, which an error replaces', () => {
+    const props = { id: 'season', label: 'Season', value: '', options: SEASONS, onChange: () => {} };
+    const { rerender } = render(<SelectField {...props} hint="Suggested from your photo." />);
+    expect(screen.getByLabelText('Season')).toHaveAccessibleDescription('Suggested from your photo.');
+
+    rerender(<SelectField {...props} hint="Suggested from your photo." error="Choose a season." />);
+    expect(screen.getByLabelText('Season')).toHaveAccessibleDescription('Choose a season.');
+    expect(screen.queryByText('Suggested from your photo.')).not.toBeInTheDocument();
+  });
 });
