@@ -4,6 +4,8 @@ import { describeUserRepositoryContract } from '../../contracts/userRepositoryCo
 import { describeSessionRepositoryContract } from '../../contracts/sessionRepositoryContract';
 import { describeAccountRepositoryContract } from '../../contracts/accountRepositoryContract';
 import { MemoryAccountRepository } from '../../mocks/memoryAccountRepository';
+import { describeWardrobeItemRepositoryContract } from '../../contracts/wardrobeItemRepositoryContract';
+import { MemoryWardrobeItemRepository } from '../../mocks/memoryWardrobeItemRepository';
 import { USER_IDS } from '../../contracts/fixtures';
 
 describeUserRepositoryContract('in-memory', {
@@ -19,5 +21,10 @@ describeAccountRepositoryContract('in-memory', {
 
 describeSessionRepositoryContract('in-memory', {
   newRepository: () => new MemorySessionRepository(),
+  userIds: USER_IDS,
+});
+
+describeWardrobeItemRepositoryContract('in-memory', {
+  newRepository: () => new MemoryWardrobeItemRepository(),
   userIds: USER_IDS,
 });
