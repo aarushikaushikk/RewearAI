@@ -168,7 +168,7 @@ describe('production build on a temporary MongoDB server', () => {
   it('sends a signed-in user from the sign-in page to the app', async () => {
     const res = await api.page('/sign-in', cookie);
 
-    await expectStreamedRedirect(res, '/');
+    await expectStreamedRedirect(res, '/home');
   });
 
   it('forwards a signed-in user from / to Home at /home', async () => {

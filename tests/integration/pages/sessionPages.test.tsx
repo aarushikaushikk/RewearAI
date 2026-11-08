@@ -215,7 +215,7 @@ describe('session-aware pages', () => {
       });
       setCookie(sessionToken);
 
-      await expect(redirectTargetOf(() => signInPage())).resolves.toBe('/');
+      await expect(redirectTargetOf(() => signInPage())).resolves.toBe('/home');
     });
 
     it('keeps the form reachable and reports an outage when a cookie cannot be checked', async () => {
@@ -261,7 +261,7 @@ describe('session-aware pages', () => {
       });
       setCookie(sessionToken);
 
-      await expect(redirectTargetOf(() => SignUpPage())).resolves.toBe('/');
+      await expect(redirectTargetOf(() => SignUpPage())).resolves.toBe('/home');
     });
 
     it('keeps the form reachable and reports an outage when a cookie cannot be checked', async () => {
