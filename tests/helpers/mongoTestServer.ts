@@ -201,10 +201,10 @@ export async function resetTestDatabase(
   const db = requireTemporaryDatabase(server, connection);
 
   await db.dropDatabase();
-  const { authIndexInitialization } = globalThis as typeof globalThis & {
-    authIndexInitialization?: Map<string, unknown>;
+  const { requiredIndexInitialization } = globalThis as typeof globalThis & {
+    requiredIndexInitialization?: Map<string, unknown>;
   };
-  authIndexInitialization?.clear();
+  requiredIndexInitialization?.clear();
 }
 
 /** Closes the client but not the server, so the next operation has to reconnect. */

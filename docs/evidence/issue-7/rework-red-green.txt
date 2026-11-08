@@ -1,0 +1,61 @@
+Issue #7 (Clothing Upload): rework onto the #6 conventions
+Command: npx vitest run <the new and changed test files>
+
+=== RED: before any implementation ===
+ FAIL  tests/integration/api/wardrobeRoutes.test.ts [ tests/integration/api/wardrobeRoutes.test.ts ]
+Error: Cannot find module '@/lib/wardrobe/wardrobeHandlers' imported from 'tests/integration/api/wardrobeRoutes.test.ts'.
+ FAIL  tests/unit/images/resizeImage.test.ts [ tests/unit/images/resizeImage.test.ts ]
+Error: Cannot find module '@/lib/images/resizeImage' imported from 'tests/unit/images/resizeImage.test.ts'.
+ FAIL  tests/unit/validation/imageValidation.test.ts [ tests/unit/validation/imageValidation.test.ts ]
+Error: Cannot find module '@/lib/validation/imageValidation' imported from 'tests/unit/validation/imageValidation.test.ts'.
+ FAIL  tests/unit/validation/wardrobeValidation.test.ts [ tests/unit/validation/wardrobeValidation.test.ts ]
+Error: Cannot find module '@/lib/validation/wardrobeValidation' imported from 'tests/unit/validation/wardrobeValidation.test.ts'.
+ FAIL  tests/unit/wardrobe/wardrobeItemService.test.ts [ tests/unit/wardrobe/wardrobeItemService.test.ts ]
+Error: Cannot find module '@/services/wardrobeItemService' imported from 'tests/unit/wardrobe/wardrobeItemService.test.ts'.
+ FAIL  tests/unit/components/wardrobe/AddClothingForm.test.tsx [ tests/unit/components/wardrobe/AddClothingForm.test.tsx ]
+Error: Failed to resolve import "@/components/wardrobe/AddClothingForm" from "tests/unit/components/wardrobe/AddClothingForm.test.tsx". Does the file exist?
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/unit/repositories/repositoryContracts.test.ts > IWardrobeItemRepository contract: in-memory > create > throws DuplicateImageError for an image already used, whoever owns it
+AssertionError: The instanceof assertion needs a constructor but undefined was given.
+ Test Files  7 failed | 1 passed (8)
+      Tests  1 failed | 94 passed (95)
+
+=== GREEN: after implementation (npm test) ===
+ ✓ tests/unit/wardrobe/wardrobeItemService.test.ts (14 tests)
+ ✓ tests/unit/repositories/repositoryContracts.test.ts (75 tests)
+ ✓ tests/unit/validation/imageValidation.test.ts (10 tests)
+ ✓ tests/unit/validation/wardrobeValidation.test.ts (16 tests)
+ ✓ tests/unit/repositories/contractFixtures.test.ts (18 tests)
+ ✓ tests/unit/repositories/memoryRepositories.test.ts (9 tests)
+ ✓ tests/unit/repositories/mongoErrorMapping.test.ts (53 tests)
+ ✓ tests/unit/images/resizeImage.test.ts (4 tests)
+ ✓ tests/unit/repositories/repositoryErrors.test.ts (5 tests)
+ ✓ tests/unit/envExample.test.ts (20 tests)
+ ✓ tests/unit/components/wardrobe/AddClothingForm.test.tsx (7 tests)
+ ✓ tests/unit/components/ui/SelectField.test.tsx (4 tests)
+ ✓ tests/integration/api/wardrobeRoutes.test.ts (25 tests)
+ Test Files  55 passed (55)
+      Tests  916 passed (916)
+
+=== GREEN: npm run test:db ===
+ ✓ tests/db/mongoWardrobeItemRepository.test.ts (15 tests)
+ Test Files  13 passed (13)
+      Tests  361 passed (361)
+
+=== GREEN: npm run test:smoke (build routes, then tests) ===
+┌ ƒ /
+├ ○ /_not-found
+├ ƒ /api/auth/google
+├ ƒ /api/auth/google/callback
+├ ƒ /api/auth/login
+├ ƒ /api/auth/logout
+├ ƒ /api/auth/register
+├ ƒ /api/auth/session
+├ ƒ /api/cron/cleanup-uploads
+├ ƒ /api/uploads
+├ ƒ /api/wardrobe
+├ ƒ /sign-in
+├ ƒ /sign-up
+└ ƒ /wardrobe/new
+ Test Files  2 passed (2)
+      Tests  34 passed (34)
