@@ -1,0 +1,95 @@
+Issue #7: per-commit red/green check, drag-and-drop red run, and a real Cloudinary run
+Recorded 2026-11-08. Paths are relative to the repository root.
+
+== 1. Every commit, checked out and tested on its own ==
+Each commit was checked out in a separate worktree and run with `npx vitest run` and `npx tsc --noEmit`.
+Test commits must fail (a test file that can't import its missing module counts as a failed file).
+Feature commits must pass both.
+
+commit  | test files                  | tests                  | tsc  | message
+ac03fe8 | 2 failed, 48 passed         | 832 passed             | FAIL | test: expect clothing images and item details to be validated (#7)
+66de37d | 50 passed                   | 858 passed             | ok   | feat: validate clothing images and item details (#7)
+31328db | 2 failed, 48 passed         | 2 failed, 865 passed   | FAIL | test: define the wardrobe item repository contract (#7)
+bd2eafc | 50 passed                   | 867 passed             | ok   | feat: store wardrobe items in MongoDB without duplicate images (#7)
+5efc6b9 | 1 failed, 50 passed         | 867 passed             | FAIL | test: expect the wardrobe service to upload, save, and clean up images (#7)
+33b1712 | 51 passed                   | 881 passed             | ok   | feat: add the wardrobe item service and Cloudinary image store (#7)
+1cc1dac | 2 failed, 50 passed         | 2 failed, 881 passed   | FAIL | test: expect upload, save, and cleanup routes to check sign-in and origin (#7)
+ff6419b | 52 passed                   | 908 passed             | ok   | feat: add upload, save, and daily cleanup routes (#7)
+6f863d6 | 3 failed, 52 passed         | 908 passed             | FAIL | test: expect the Add Clothing form to preview, retry, and save (#7)
+71915fb | 55 passed                   | 924 passed             | ok   | feat: add the Add Clothing page (#7)
+e3fff55 | 1 failed, 54 passed         | 2 failed, 924 passed   | ok   | test: expect a photo dropped on the image area to upload (#7)
+09b3eb6 | 55 passed                   | 926 passed             | ok   | feat: accept photos dragged onto the image area (#7)
+e3a5aa0 | 55 passed                   | 926 passed             | ok   | docs: document Cloudinary setup and record issue 7 evidence (#7)
+
+The database test (tests/db/mongoWardrobeItemRepository.test.ts) is in npm run test:db, not npm test, so
+it isn't counted above. It arrives with the service tests (5efc6b9) because it also exercises the service.
+
+On the final commit:
+  npm run test:db     Test Files 13 passed (13), Tests 361 passed (361)
+  npm run test:smoke  Test Files 2 passed (2),  Tests 35 passed (35);
+                      /api/uploads, /api/wardrobe, /api/cron/cleanup-uploads and /wardrobe/new build as ƒ
+  eslint src tests    no errors
+
+== 2. Drag-and-drop red run (before ImageUploadField accepted drops) ==
+$ npx vitest run tests/unit/components/wardrobe/AddClothingForm.test.tsx
+   ✓ AddClothingForm > labels each field Required or Optional and shows the accepted files
+   ✓ AddClothingForm > sends Cancel straight to Home
+   ✓ AddClothingForm > shows field errors and sends nothing when saved empty
+   ✓ AddClothingForm > rejects an unsupported file type without uploading it
+   × AddClothingForm > uploads a photo dropped on the image area
+     → Unable to find an element with the text: /drag a photo here/i.
+   × AddClothingForm > rejects a dropped file of an unsupported type without uploading it
+     → Unable to find an element with the text: /drag a photo here/i.
+   ✓ AddClothingForm > shows a preview, and offers Retry when the upload fails
+   ✓ AddClothingForm > uses its own message for each status, never the server text
+   ✓ AddClothingForm > saves the item and shows it with its stored photo
+   ✓ AddClothingForm > keeps every entered detail when the save fails
+      Tests  2 failed | 8 passed (10)
+After the change: Tests 10 passed (10).
+
+== 3. Real run: real Cloudinary, throwaway database ==
+Setup: `next start` on http://localhost:3002 (the rewear-dev-memdb launch config), MONGODB_URI pointed at a
+temporary in-memory MongoDB on 127.0.0.1:27999. Cloudinary keys and CRON_SECRET came from .env.local.
+A test account was created on that temporary database through /sign-up.
+
+1. /wardrobe/new shows "Drag a photo here, or choose one below." and marks My Wardrobe current.
+   Screenshot: screenshots/add-clothing-drop-zone.png
+2. A browser DragEvent with a 400x500 JPEG made on a canvas:
+   dragover -> the area gets the dashed highlight
+   drop     -> preview shown; POST /api/uploads -> 201 Created; "Image uploaded." announced
+3. Filled Category Top, Color Green, Season All-season, Formality Casual, Style Crew-neck tee; saved.
+   POST /api/wardrobe -> 201 Created; success card shows "Green Crew-neck tee", Top · All-season · Casual, Available.
+   The card's image is served from https://res.cloudinary.com/<cloud>/image/upload/v…/rewear/users/<id>/<file>.jpg
+   Screenshot: screenshots/saved-item-from-cloudinary.png
+4. GET /api/cron/cleanup-uploads with `Authorization: Bearer $CRON_SECRET` -> {"success":true,"data":{"deleted":0,"confirmed":0}}
+   (the new image is under 24 hours old, so it isn't considered yet). Without the header -> 401.
+   This confirms the Cloudinary Admin API listing by tag works with the configured keys.
+5. Cleanup: the test image was deleted from Cloudinary afterwards, because its database record lived only
+   in the temporary database.
+
+== 4. Matching wireframes 05 and 06 ==
+Reference pages: screenshots/wireframe-05-reference.png and screenshots/wireframe-06-reference.png
+(pages 6 and 7 of docs/Wireframes.pdf).
+
+Red: f01e8c3 checked against the previous form (implementation stashed):
+$ npx vitest run tests/unit/components/wardrobe/AddClothingForm.test.tsx
+      Tests  12 failed (12)
+Every test fails on the old single-page form: the upload card heading, "Choose image or drag a file
+here", Choose photo, the details heading, and Confirm and save don't exist yet.
+
+Green: 9e19d22
+      Tests  12 passed (12)
+
+Browser check (rewear-dev-memdb config, real Cloudinary, temporary database):
+- Upload step at 1280 px: screenshots/wireframe-05-upload-step-1280.png
+- Unsupported file: says which formats are allowed, button reads "Choose another", no Retry:
+  screenshots/wireframe-05-invalid-file-1280.png
+- Details step at 1280 px, focus on "Describe this item": screenshots/wireframe-06-details-step-1280.png
+- At 375 px the photo is capped in height and the page doesn't scroll sideways.
+The two test images this check uploaded were deleted from Cloudinary afterwards.
+
+Differences that remain on purpose:
+- Style is a text field until the team agrees the dropdown values.
+- The header comes from #6/#35 ("My Wardrobe", account menu), not this issue.
+- The wireframe's "Upload states" panel is an annotation, not part of the page.
+- Heading text is "Describe this item" rather than suggesting values, since classification is #8.

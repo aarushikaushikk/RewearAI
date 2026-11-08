@@ -65,3 +65,35 @@ export interface WardrobeItemDto {
   createdAt: string;
   updatedAt: string;
 }
+
+/** A stored wardrobe item, as repositories return it. */
+export interface WardrobeItemRecord {
+  id: string;
+  ownerId: string;
+  image: WardrobeImage;
+  name: string | null;
+  category: Category;
+  color: Color;
+  style: string;
+  season: Season;
+  formality: Formality;
+  isAvailable: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** Validated details for a new item, before ownership and the stored image are attached. */
+export interface NewWardrobeItem {
+  publicId: string;
+  name: string | null;
+  category: Category;
+  color: Color;
+  style: string;
+  season: Season;
+  formality: Formality;
+}
+
+export interface CreateWardrobeItemDTO extends Omit<NewWardrobeItem, "publicId"> {
+  ownerId: string;
+  image: WardrobeImage;
+}

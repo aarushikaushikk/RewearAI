@@ -1,0 +1,38 @@
+Phase 4C Step 4: findById leaves out the password hash (Decision A)
+Filtered to failures and totals. Only the in-memory repository exists so far;
+the MongoDB adapter will run the same contract suite in Step 5.
+
+=== RED (commit 1f1a188, clean checkout): findById still returns the hash ===
+npm test:
+ FAIL  tests/unit/auth/passwordSafeUser.test.ts > Password hash handling across the auth flow > validates a session using a user loaded without the hash
+ FAIL  tests/unit/repositories/repositoryContracts.test.ts > IUserRepository contract: in-memory > findById > returns the account details without the password hash
+ FAIL  tests/unit/repositories/repositoryContracts.test.ts > IUserRepository contract: in-memory > findById > leaves the field out for an account with no password, rather than returning null
+ FAIL  tests/unit/repositories/repositoryContracts.test.ts > IUserRepository contract: in-memory > findById > has no password hash in its return type, so it cannot be read by mistake
+ Test Files  2 failed | 40 passed (42)
+      Tests  4 failed | 614 passed (618)
+
+npx tsc --noEmit (exit 2):
+tests/contracts/userRepositoryContract.ts(179,9): error TS2578: Unused '@ts-expect-error' directive.
+
+=== GREEN ===
+npm test:          42 files passed, 618 tests passed (608 from Step 3 + 10 new)
+npm run test:db:   2 files passed, 13 tests passed
+npx tsc --noEmit:  exit 0
+
+=== SAFEGUARDS REMOVED ONE AT A TIME (throwaway clone; each should be caught) ===
+Only the named safeguard was removed for each run. Tests run: repository contracts,
+tests/unit/auth, and the auth route integration tests (238 tests, all pass unmodified).
+tsc reports 0 errors unmodified.
+
+findById-returns-full-copy       vitest: 4 failed | 234 passed (238)    tsc errors: 0
+findById-hash-key-undefined      vitest: 3 failed | 235 passed (238)    tsc errors: 0
+findById-hash-key-null           vitest: 4 failed | 234 passed (238)    tsc errors: 0
+findById-deletes-from-store      vitest: 2 failed | 236 passed (238)    tsc errors: 0
+findByEmail-drops-hash           vitest: 9 failed | 229 passed (238)    tsc errors: 0
+findByEmail-null-to-undefined    vitest: 2 failed | 236 passed (238)    tsc errors: 0
+findByEmail-null-to-empty        vitest: 3 failed | 235 passed (238)    tsc errors: 0
+toSafeUser-spreads-record        vitest: 5 failed | 233 passed (238)    tsc errors: 0
+interface-type-widened           vitest: 238 passed (238)               tsc errors: 15
+
+tsc reported 0 errors for findById-returns-full-copy: the type alone doesn't remove
+the hash at runtime, so the contract tests are what catch it.

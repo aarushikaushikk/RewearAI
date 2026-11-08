@@ -1,0 +1,40 @@
+Phase 4C Step 9: production authentication connected to MongoDB
+Filtered to totals and a sample of failures. Every run used a temporary mongod on
+127.0.0.1. Nothing here ran against Atlas.
+
+=== RED (commit 3b6db8c): the factory still refuses every request ===
+tests/unit/auth/productionAuthService.test.ts: 3 failed, 4 passed (the fail-closed cases already held)
+
+tests/db/productionAuth.test.ts:
+ Test Files  1 failed (1)
+      Tests  19 failed | 1 passed | 4 skipped (24)
+  9 x AssertionError: expected '' to contain 'rewear_session='
+  3 x AssertionError: expected 503 to be 401 // Object.is equality
+  1 x AssertionError: expected 503 to be 201 // Object.is equality
+  1 x AssertionError: expected 503 to be 409 // Object.is equality
+
+tests/smoke/productionAuth.smoke.ts, on the real build:
+ Test Files  1 failed (1)
+      Tests  14 failed | 5 passed (19)
+  2 x AssertionError: expected [ 303, 307 ] to include 200
+  1 x AssertionError: expected 503 to be 201 // Object.is equality
+  1 x AssertionError: expected 503 to be 409 // Object.is equality
+  1 x AssertionError: expected 503 to be 401 // Object.is equality
+
+=== GREEN ===
+npm test:          44 files passed, 674 tests passed (664 from Step 8 + 10 new)
+npm run test:db:   9 files passed, 230 tests passed (206 from Step 8 + 24 new)
+test:smoke tests:  1 file passed, 19 tests passed, against next start
+npx tsc --noEmit:  exit 0
+
+Two corrections to the tests after the red commit, both bugs in the tests:
+- A log test read from the database after mocking the read, so it threw by itself.
+- Page tests expected an HTTP redirect. With Cache Components, a redirect after the session
+  check is streamed in a 200 response. They now require the exact target and no private content.
+
+=== FACTORY SAFEGUARDS REMOVED ONE AT A TIME (throwaway clone; each should be caught) ===
+tests/unit/auth/productionAuthService.test.ts only (7 tests).
+
+uri-check-removed                4 failed | 3 passed (7)
+spaces-count-as-configured       1 failed | 6 passed (7)
+service-instance-cached          1 failed | 6 passed (7)
