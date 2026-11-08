@@ -11,6 +11,7 @@ export const metadata: Metadata = {
 // Depends on the request's session cookie, so it cannot be prerendered.
 export const instant = false;
 
+// Each step of the form supplies the page's h1, as titled in wireframes 05 and 06.
 export default async function AddClothingPage() {
   const auth = await requirePageSession();
 
@@ -19,11 +20,6 @@ export default async function AddClothingPage() {
       <AppHeader user={auth.user} />
 
       <main id="main-content" tabIndex={-1} className="flex-1 max-w-6xl w-full mx-auto px-4 py-10">
-        <section className="mb-8">
-          <h1 className="text-[1.75rem] md:text-3xl font-bold text-text">Add Clothing</h1>
-          <p className="mt-1 text-text-muted">Add a photo of something you own and describe it.</p>
-        </section>
-
         <AddClothingForm />
       </main>
     </>

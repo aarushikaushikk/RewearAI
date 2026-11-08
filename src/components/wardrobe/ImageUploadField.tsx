@@ -1,8 +1,11 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { Alert } from '@/components/ui/Alert';
+import { PrimaryButton } from '@/components/ui/PrimaryButton';
+import { HOME_PATH } from '@/lib/routes';
 import { ACCEPTED_IMAGE_LABEL, ACCEPTED_IMAGE_TYPES, MAX_IMAGE_LABEL } from '@/types/upload';
 
 export type UploadStatus = 'idle' | 'uploading' | 'uploaded' | 'failed';
@@ -11,34 +14,34 @@ export interface ImageUploadFieldProps {
   id: string;
   status: UploadStatus;
   previewUrl?: string;
-  /** A failed upload, shown with Retry when `onRetry` is given. */
+  /** Why the last choice or upload failed. */
   uploadError?: string;
-  /** A validation error from submitting the form. */
-  error?: string;
-  disabled?: boolean;
   onSelect: (file: File) => void;
+  /** Given only when sending the same photo again could succeed. */
   onRetry?: () => void;
 }
 
-/** Choose or drop, preview, replace, and retry a clothing photo (DESIGN §4 ImageUploadField). */
+/**
+ * Upload step of Add Clothing (wireframe 05): a card with a drop zone that
+ * becomes the preview, the format and size rules, Choose photo, and Cancel.
+ */
 export function ImageUploadField({
   id,
   status,
   previewUrl,
   uploadError,
-  error,
-  disabled,
   onSelect,
   onRetry,
 }: ImageUploadFieldProps) {
-  const hintId = `${id}-hint`;
-  const errorId = `${id}-error`;
+  const inputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
+  const isUploading = status === 'uploading';
+  const hintId = `${id}-hint`;
 
-  // Dropping is a shortcut for pointer users; the file input stays the keyboard path.
+  // Dropping is a shortcut for pointer users; Choose photo is the keyboard path.
   function handleDragOver(e: React.DragEvent<HTMLDivElement>) {
     e.preventDefault();
-    if (!disabled) {
+    if (!isUploading) {
       setIsDragOver(true);
     }
   }
@@ -47,24 +50,33 @@ export function ImageUploadField({
     e.preventDefault();
     setIsDragOver(false);
     const file = e.dataTransfer.files?.[0];
-    if (file && !disabled) {
+    if (file && !isUploading) {
       onSelect(file);
     }
   }
 
+  const rules = (
+    <p id={hintId} className="text-sm text-text-muted">
+      {ACCEPTED_IMAGE_LABEL}, up to {MAX_IMAGE_LABEL}.
+    </p>
+  );
+
   return (
-    <div className="flex flex-col gap-3">
-      <label htmlFor={id} className="flex gap-1 items-baseline text-sm font-medium text-text">
-        Clothing image
-        <span className="text-sm text-text-muted font-normal">(Required)</span>
-      </label>
+    <section
+      aria-labelledby={`${id}-heading`}
+      className="w-full max-w-xl rounded-2xl border border-border bg-surface p-5 sm:p-6"
+    >
+      <h1 id={`${id}-heading`} className="text-[1.75rem] md:text-3xl font-bold text-text">
+        Upload a clothing photo
+      </h1>
+      <p className="mt-1 text-text-muted">Only photos of clothing you own</p>
 
       <div
         onDragOver={handleDragOver}
         onDragLeave={() => setIsDragOver(false)}
         onDrop={handleDrop}
-        className={`relative aspect-[4/5] w-full overflow-hidden rounded-xl border bg-surface ${
-          isDragOver ? 'border-2 border-dashed border-primary bg-primary-soft' : 'border-border'
+        className={`relative mt-4 flex h-64 sm:h-72 flex-col items-center justify-center gap-3 overflow-hidden rounded-xl border-2 p-6 text-center ${
+          isDragOver ? 'border-dashed border-primary bg-primary-soft' : 'border-border bg-background'
         }`}
       >
         {previewUrl ? (
@@ -76,24 +88,30 @@ export function ImageUploadField({
             className="object-contain"
           />
         ) : (
-          <p className="flex h-full items-center justify-center p-6 text-center text-text-muted">
-            Drag a photo here, or choose one below.
-          </p>
+          <>
+            <p className="text-text">Choose image or drag a file here</p>
+            {rules}
+          </>
         )}
-        {status === 'uploading' && (
-          <p aria-hidden="true" className="absolute inset-x-0 bottom-0 bg-surface/90 p-2 text-center text-sm">
+        {isUploading && (
+          <p aria-hidden="true" className="absolute inset-x-0 bottom-0 bg-surface/90 p-2 text-sm">
             Uploading…
           </p>
         )}
       </div>
+      {previewUrl && <div className="mt-2">{rules}</div>}
 
+      <label htmlFor={id} className="sr-only">
+        Clothing image
+      </label>
       <input
+        ref={inputRef}
         id={id}
         type="file"
         accept={ACCEPTED_IMAGE_TYPES.join(',')}
-        disabled={disabled}
-        aria-invalid={error ? 'true' : undefined}
-        aria-describedby={error ? `${hintId} ${errorId}` : hintId}
+        disabled={isUploading}
+        tabIndex={-1}
+        aria-describedby={hintId}
         onChange={(e) => {
           const file = e.target.files?.[0];
           if (file) {
@@ -102,25 +120,15 @@ export function ImageUploadField({
           // Lets the same file be chosen again after an error.
           e.target.value = '';
         }}
-        className="text-sm text-text file:mr-3 file:min-h-11 file:cursor-pointer file:rounded-xl file:border file:border-text-muted file:bg-surface file:px-4 file:font-medium"
+        className="sr-only"
       />
-      <p id={hintId} className="text-sm text-text-muted">
-        {ACCEPTED_IMAGE_LABEL}, up to {MAX_IMAGE_LABEL}.
-      </p>
 
       <p aria-live="polite" className="sr-only">
-        {status === 'uploading' && 'Uploading image.'}
-        {status === 'uploaded' && 'Image uploaded.'}
+        {isUploading && 'Uploading image.'}
       </p>
 
-      {error && (
-        <p id={errorId} role="alert" className="text-sm text-danger">
-          {error}
-        </p>
-      )}
-
       {uploadError && (
-        <div className="flex flex-col gap-2">
+        <div className="mt-4 flex flex-col gap-2">
           <Alert variant="error" message={uploadError} />
           {onRetry && (
             <button
@@ -133,6 +141,18 @@ export function ImageUploadField({
           )}
         </div>
       )}
-    </div>
+
+      <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <PrimaryButton type="button" onClick={() => inputRef.current?.click()} disabled={isUploading}>
+          {uploadError ? 'Choose another' : 'Choose photo'}
+        </PrimaryButton>
+        <Link
+          href={HOME_PATH}
+          className="inline-flex min-h-11 items-center justify-center rounded-xl border border-text-muted bg-surface px-4 font-medium text-text hover:bg-background"
+        >
+          Cancel
+        </Link>
+      </div>
+    </section>
   );
 }
