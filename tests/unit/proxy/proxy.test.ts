@@ -30,7 +30,7 @@ function expectPassThrough(response: Response) {
 
 describe('proxy', () => {
   describe('default-deny for private pages without a session cookie', () => {
-    it.each(['/', '/wardrobe', '/wardrobe/new', '/outfits/create', '/settings', '/not-yet-built'])(
+    it.each(['/', '/home', '/wardrobe', '/wardrobe/new', '/outfits/create', '/settings', '/not-yet-built'])(
       'redirects %s to /sign-in, including routes nobody has listed',
       (pathname) => {
         expectRedirect(proxy(makeRequest(pathname)), '/sign-in');
@@ -54,7 +54,7 @@ describe('proxy', () => {
   });
 
   describe('private pages with a session cookie', () => {
-    it.each(['/', '/wardrobe', '/settings'])(
+    it.each(['/', '/home', '/wardrobe', '/settings'])(
       'passes %s through to server-side validation',
       (pathname) => {
         expectPassThrough(proxy(withCookie(pathname)));
@@ -86,7 +86,7 @@ describe('proxy', () => {
       return unstable_doesMiddlewareMatch({ config, url });
     }
 
-    it.each(['/', '/sign-in', '/sign-up', '/wardrobe', '/outfits/saved', '/settings/profile'])(
+    it.each(['/', '/home', '/sign-in', '/sign-up', '/wardrobe', '/outfits/saved', '/settings/profile'])(
       'runs on page route %s',
       (url) => {
         expect(runsFor(url)).toBe(true);

@@ -157,7 +157,7 @@ describe('production build on a temporary MongoDB server', () => {
   });
 
   it('shows the signed-in user on a private page, in a separate bundle from the routes', async () => {
-    const res = await api.page('/', cookie);
+    const res = await api.page('/home', cookie);
 
     expect(res.status).toBe(200);
     const body = (await res.text()).replaceAll('<!-- -->', '');
@@ -171,9 +171,16 @@ describe('production build on a temporary MongoDB server', () => {
     await expectStreamedRedirect(res, '/');
   });
 
+  it('forwards a signed-in user from / to Home at /home', async () => {
+    const res = await api.page('/', cookie);
+
+    expect(res.status).toBe(307);
+    expect(res.headers.get('location')).toBe('/home');
+  });
+
   it('redirects from a private page for a missing or forged cookie', async () => {
-    const missing = await api.page('/');
-    const forged = await api.page('/', `${COOKIE_NAME}=${'f'.repeat(64)}`);
+    const missing = await api.page('/home');
+    const forged = await api.page('/home', `${COOKIE_NAME}=${'f'.repeat(64)}`);
 
     expect(missing.status).toBe(307);
     expect(missing.headers.get('location')).toContain('/sign-in');
@@ -186,7 +193,7 @@ describe('production build on a temporary MongoDB server', () => {
     api = client(app);
 
     expect((await api.session(cookie)).status).toBe(200);
-    expect((await api.page('/', cookie)).status).toBe(200);
+    expect((await api.page('/home', cookie)).status).toBe(200);
     expect((await api.post('login', ALEX)).status).toBe(200);
   });
 
@@ -199,7 +206,7 @@ describe('production build on a temporary MongoDB server', () => {
     expect(res.status).toBe(200);
     expect(revoked).toBe(1);
     expect((await api.session(cookie)).status).toBe(401);
-    await expectStreamedRedirect(await api.page('/', cookie), SESSION_ENDED);
+    await expectStreamedRedirect(await api.page('/home', cookie), SESSION_ENDED);
   });
 
   it('answers 429 after repeated failed sign-ins', async () => {
@@ -238,7 +245,7 @@ describe('production build on a temporary MongoDB server', () => {
     });
 
     it('does not sign the user out of a private page, or expose details', async () => {
-      const res = await api.page('/', validCookie);
+      const res = await api.page('/home', validCookie);
       const body = await res.text();
 
       expect(res.headers.get('location') ?? '').not.toContain('/sign-in');
