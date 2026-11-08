@@ -33,12 +33,17 @@ export function getUploadErrorMessage(status: number): string {
   return UPLOAD_STATUS_MESSAGES[status] ?? UPLOAD_FAILED_MESSAGE;
 }
 
+/** Wrong type or too large: sending the same photo again cannot succeed. */
+export function isRetryableUploadStatus(status: number): boolean {
+  return status !== 400 && status !== 413 && status !== 415;
+}
+
 export function getSaveErrorMessage(status: number): string {
   return SAVE_STATUS_MESSAGES[status] ?? SAVE_FAILED_MESSAGE;
 }
 
 /** Field ids match the error keys, in the order the fields appear on screen. */
-const FIELD_ORDER = ['image', 'name', 'category', 'color', 'season', 'formality', 'style'];
+const FIELD_ORDER = ['category', 'color', 'style', 'season', 'formality'];
 
 export function focusFirstInvalidField(errors: Record<string, string>): void {
   const firstInvalid = FIELD_ORDER.find((field) => errors[field]);

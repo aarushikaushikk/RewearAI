@@ -2,7 +2,6 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
-import Link from 'next/link';
 import { Alert } from '@/components/ui/Alert';
 import { FormField } from '@/components/ui/FormField';
 import { PrimaryButton } from '@/components/ui/PrimaryButton';
@@ -12,12 +11,12 @@ import {
   focusFirstInvalidField,
   getSaveErrorMessage,
   getUploadErrorMessage,
+  isRetryableUploadStatus,
   NETWORK_ERROR_MESSAGE,
   TOO_LARGE_MESSAGE,
   UNSUPPORTED_TYPE_MESSAGE,
 } from '@/components/wardrobe/wardrobeFormErrors';
 import { resizeImageForUpload } from '@/lib/images/resizeImage';
-import { HOME_PATH } from '@/lib/routes';
 import { validateNewItemInput } from '@/lib/validation/wardrobeValidation';
 import { ACCEPTED_IMAGE_TYPES, MAX_IMAGE_BYTES } from '@/types/upload';
 import {
@@ -36,10 +35,11 @@ interface UploadState {
   blob?: Blob;
   image?: WardrobeImage;
   error?: string;
+  /** False when sending the same photo again cannot succeed (wrong type, too large). */
+  retryable?: boolean;
 }
 
 interface Details {
-  name: string;
   category: string;
   color: string;
   style: string;
@@ -48,7 +48,6 @@ interface Details {
 }
 
 const EMPTY_DETAILS: Details = {
-  name: '',
   category: '',
   color: '',
   style: '',
@@ -56,9 +55,14 @@ const EMPTY_DETAILS: Details = {
   formality: '',
 };
 
-type FieldErrors = Partial<Record<keyof Details | 'image', string>>;
+type FieldErrors = Partial<Record<keyof Details, string>>;
 
-/** Add Clothing flow (DESIGN §5.4): choose and preview a photo, describe it, save. */
+/**
+ * Add Clothing (DESIGN §5.4). Step 1 is wireframe 05: choose or drop a photo,
+ * which uploads straight away. Step 2 follows wireframe 06's layout: the photo
+ * beside the five details, then Confirm and save. Until classification (#8)
+ * exists, the details start empty and nothing is called a suggestion.
+ */
 export function AddClothingForm() {
   const [upload, setUpload] = useState<UploadState>({ status: 'idle' });
   const [details, setDetails] = useState<Details>(EMPTY_DETAILS);
@@ -68,6 +72,8 @@ export function AddClothingForm() {
   const [savedItem, setSavedItem] = useState<WardrobeItemDto | null>(null);
   // Ignores the response for a photo the user has since replaced.
   const uploadAttempt = useRef(0);
+  const detailsHeading = useRef<HTMLHeadingElement>(null);
+  const isDetailsStep = upload.status === 'uploaded';
 
   const previewUrl = upload.previewUrl;
   useEffect(() => {
@@ -78,6 +84,13 @@ export function AddClothingForm() {
     };
   }, [previewUrl]);
 
+  // Moves keyboard and screen reader users to the new step.
+  useEffect(() => {
+    if (isDetailsStep) {
+      detailsHeading.current?.focus();
+    }
+  }, [isDetailsStep]);
+
   function setDetail(field: keyof Details, value: string) {
     setDetails((current) => ({ ...current, [field]: value }));
   }
@@ -85,11 +98,6 @@ export function AddClothingForm() {
   async function sendUpload(blob: Blob, preview: string) {
     const attempt = ++uploadAttempt.current;
     setUpload({ status: 'uploading', previewUrl: preview, blob });
-    setFieldErrors((current) => {
-      const rest = { ...current };
-      delete rest.image;
-      return rest;
-    });
 
     let next: UploadState;
     try {
@@ -104,10 +112,16 @@ export function AddClothingForm() {
         const { data } = (await response.json()) as { data: WardrobeImage };
         next = { status: 'uploaded', previewUrl: preview, blob, image: data };
       } else {
-        next = { status: 'failed', previewUrl: preview, blob, error: getUploadErrorMessage(response.status) };
+        next = {
+          status: 'failed',
+          previewUrl: preview,
+          blob,
+          error: getUploadErrorMessage(response.status),
+          retryable: isRetryableUploadStatus(response.status),
+        };
       }
     } catch {
-      next = { status: 'failed', previewUrl: preview, blob, error: NETWORK_ERROR_MESSAGE };
+      next = { status: 'failed', previewUrl: preview, blob, error: NETWORK_ERROR_MESSAGE, retryable: true };
     }
     if (attempt === uploadAttempt.current) {
       setUpload(next);
@@ -135,10 +149,6 @@ export function AddClothingForm() {
 
     const input = { ...details, publicId: upload.image?.publicId ?? '' };
     const validation = validateNewItemInput(input);
-    if (upload.status === 'uploading') {
-      validation.errors = { image: 'Wait for the image to finish uploading.', ...validation.errors };
-      validation.isValid = false;
-    }
     if (!validation.isValid) {
       setFieldErrors(validation.errors);
       focusFirstInvalidField(validation.errors);
@@ -200,28 +210,53 @@ export function AddClothingForm() {
     );
   }
 
-  return (
-    <form
-      onSubmit={handleSubmit}
-      noValidate
-      className="grid gap-8 md:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]"
-    >
+  if (!isDetailsStep) {
+    return (
       <ImageUploadField
         id="image"
         status={upload.status}
         previewUrl={upload.previewUrl}
         uploadError={upload.error}
-        error={fieldErrors.image}
-        disabled={isSaving}
         onSelect={(file) => void handleSelect(file)}
         onRetry={
-          upload.blob && upload.previewUrl
+          upload.retryable && upload.blob && upload.previewUrl
             ? () => void sendUpload(upload.blob!, upload.previewUrl!)
             : undefined
         }
       />
+    );
+  }
 
-      <div className="flex flex-col gap-5">
+  return (
+    <div className="grid gap-6 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] md:items-start">
+      <div className="relative h-72 w-full overflow-hidden rounded-xl border border-border bg-background md:h-auto md:aspect-[4/5]">
+        <Image
+          src={upload.previewUrl!}
+          alt="Uploaded clothing photo"
+          fill
+          unoptimized
+          className="object-contain"
+        />
+      </div>
+
+      <form
+        onSubmit={handleSubmit}
+        noValidate
+        aria-labelledby="details-heading"
+        className="flex flex-col gap-5 rounded-2xl border border-border bg-surface p-5 sm:p-6"
+      >
+        <div>
+          <h1
+            id="details-heading"
+            ref={detailsHeading}
+            tabIndex={-1}
+            className="text-[1.75rem] md:text-3xl font-bold text-text"
+          >
+            Describe this item
+          </h1>
+          <p className="mt-1 text-text-muted">Check each detail before saving.</p>
+        </div>
+
         {formError && (
           <Alert
             variant="error"
@@ -230,18 +265,6 @@ export function AddClothingForm() {
             focusOnMount
           />
         )}
-
-        <FormField
-          id="name"
-          label="Name"
-          type="text"
-          value={details.name}
-          onChange={(e) => setDetail('name', e.target.value)}
-          optional
-          error={fieldErrors.name}
-          disabled={isSaving}
-          placeholder="e.g. White linen shirt"
-        />
 
         <div className="grid gap-5 sm:grid-cols-2">
           <SelectField
@@ -263,6 +286,17 @@ export function AddClothingForm() {
             required
             error={fieldErrors.color}
             disabled={isSaving}
+          />
+          <FormField
+            id="style"
+            label="Style"
+            type="text"
+            value={details.style}
+            onChange={(e) => setDetail('style', e.target.value)}
+            required
+            error={fieldErrors.style}
+            disabled={isSaving}
+            placeholder="e.g. Button-down"
           />
           <SelectField
             id="season"
@@ -286,30 +320,12 @@ export function AddClothingForm() {
           />
         </div>
 
-        <FormField
-          id="style"
-          label="Style"
-          type="text"
-          value={details.style}
-          onChange={(e) => setDetail('style', e.target.value)}
-          required
-          error={fieldErrors.style}
-          disabled={isSaving}
-          placeholder="e.g. Button-down"
-        />
-
-        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <Link
-            href={HOME_PATH}
-            className="inline-flex min-h-11 items-center justify-center rounded-xl border border-text-muted bg-surface px-4 font-medium text-text hover:bg-background"
-          >
-            Cancel
-          </Link>
+        <div className="flex justify-end">
           <PrimaryButton isLoading={isSaving} className="sm:w-auto">
-            Save to My Wardrobe
+            Confirm and save
           </PrimaryButton>
         </div>
-      </div>
-    </form>
+      </form>
+    </div>
   );
 }

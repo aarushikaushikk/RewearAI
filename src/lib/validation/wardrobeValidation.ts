@@ -17,7 +17,8 @@ const MAX_STYLE_LENGTH = 40;
 /** The Add Clothing details as untrusted strings, before validation. */
 export interface NewItemInput {
   publicId: string;
-  name: string;
+  /** Optional; the Add Clothing form doesn't ask for one (wireframes 05 and 06). */
+  name?: string;
   category: string;
   color: string;
   style: string;
@@ -73,7 +74,7 @@ export function validateNewItemInput(input: NewItemInput): ValidationResult {
   if (!input.publicId.trim()) {
     errors.image = 'Upload an image of the item.';
   }
-  if (input.name.trim().length > MAX_NAME_LENGTH) {
+  if ((input.name ?? '').trim().length > MAX_NAME_LENGTH) {
     errors.name = `Use ${MAX_NAME_LENGTH} characters or fewer.`;
   }
   if (!isOneOf(CATEGORIES, input.category)) {
@@ -100,7 +101,7 @@ export function validateNewItemInput(input: NewItemInput): ValidationResult {
 
 /** Converts input that passed validateNewItemInput into a typed, trimmed item. */
 export function toNewWardrobeItem(input: NewItemInput): NewWardrobeItem {
-  const name = input.name.trim();
+  const name = (input.name ?? '').trim();
   return {
     publicId: input.publicId.trim(),
     name: name || null,
