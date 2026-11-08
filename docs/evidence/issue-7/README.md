@@ -1,6 +1,6 @@
 # Issue #7 (Clothing Upload): test evidence
 
-Evidence for reworking User Story 2 onto the conventions merged with #6 (PR #33). **No check in this folder ran against Atlas or Cloudinary.** Unit and integration tests use in-memory repositories and an in-memory image store; `npm run test:db` uses a temporary local MongoDB. Nothing has run on Vercel.
+Evidence for reworking User Story 2 onto the conventions merged with #6 (PR #33). Unit and integration tests use in-memory repositories and an in-memory image store; `npm run test:db` uses a temporary local MongoDB. One manual run used real Cloudinary with a throwaway database ([commit-history-and-real-run.txt](commit-history-and-real-run.txt) §3). **Nothing has run against Atlas or on Vercel.**
 
 ## What was tested, and how
 
@@ -14,6 +14,9 @@ Evidence for reworking User Story 2 onto the conventions merged with #6 (PR #33)
 | Add Clothing form | `rework-red-green.txt` (`AddClothingForm.test.tsx`, `SelectField.test.tsx`) | jsdom, with `fetch` mocked | Yes |
 | Production build | `rework-red-green.txt` (smoke section) | `next build`, then the existing smoke tests | No, `npm run test:smoke` |
 | Signed-out access in a browser | Below | `next dev` | No, one-off check |
+| Each commit red or green on its own | `commit-history-and-real-run.txt` §1 | Every commit checked out separately | Yes, at each commit |
+| Dropping a photo on the image area | `commit-history-and-real-run.txt` §2 (red, then green) | jsdom | Yes |
+| Signed-in drop, upload, save, and cleanup route | `commit-history-and-real-run.txt` §3, [screenshots/](screenshots) | `next start`, real Cloudinary, temporary MongoDB | No, one-off check |
 
 The red run covers every new test file except `SelectField.test.tsx`, the `DuplicateImageError` case in `mongoErrorMapping.test.ts`, and `tests/db/mongoWardrobeItemRepository.test.ts`, which were written alongside their code.
 
@@ -21,15 +24,16 @@ The red run covers every new test file except `SelectField.test.tsx`, the `Dupli
 
 | Check | Result |
 |---|---|
-| `npm test` | 916 tests in 55 files pass |
+| `npm test` | 926 tests in 55 files pass |
 | `npm run test:db` | 361 tests in 13 files pass (346 from #6, 15 new) |
-| `npm run test:smoke` | 34 tests in 2 files pass; every `/api` route and `/wardrobe/new` build as `ƒ` |
+| `npm run test:smoke` | 35 tests in 2 files pass (34 from #6 and #35's update); every `/api` route and `/wardrobe/new` build as `ƒ` |
 | `tsc --noEmit`, `eslint src tests` | No errors |
 | Browser, signed out | `/wardrobe/new` redirects to `/sign-in`; `POST /api/uploads` returns 401; `GET /api/cron/cleanup-uploads` without the secret returns 401 |
+| Browser, signed in, real Cloudinary | Dropped JPEG uploads (201) and previews; save returns 201 and the saved card loads the photo from `res.cloudinary.com`; cleanup route with the secret returns `{"deleted":0,"confirmed":0}` |
 
 ## What hasn't been verified
 
-- A real upload to Cloudinary, or the Cloudinary adapter at all: no credentials are configured, and no test contacts Cloudinary.
-- The signed-in upload flow in a browser. It needs an account in a database; the form is covered by component tests instead.
-- The daily cron job on Vercel, and abandoned images actually being deleted from Cloudinary.
+- Saving to Atlas: the real run used a temporary database, so nothing was written to the team's data.
+- The daily cron job on Vercel, and an abandoned image over 24 hours old actually being deleted by the route. The route's listing call did reach Cloudinary.
+- Choosing a file with the picker and real mouse dragging in the signed-in browser run: the drop was a scripted `DragEvent`, and the picker path is covered by component tests.
 - Phone photos (HEIC, very large JPEGs) going through the browser's resize step, which jsdom can't run.
