@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import * as nextHeaders from 'next/headers';
 import { AuthService } from '@/services/authService';
@@ -9,7 +9,7 @@ import { SESSION_COOKIE_NAME } from '@/lib/auth/cookieConfig';
 import AuthLayout from '@/app/(auth)/layout';
 import SignInPage from '@/app/(auth)/sign-in/page';
 import SignUpPage from '@/app/(auth)/sign-up/page';
-import HomePage from '@/app/page';
+import HomePage from '@/app/home/page';
 import { MemoryUserRepository } from '../../mocks/memoryUserRepository';
 import { MemorySessionRepository } from '../../mocks/memorySessionRepository';
 
@@ -96,6 +96,43 @@ describe('page structure', () => {
         'href',
         '/wardrobe/new',
       );
+    });
+
+    // docs/Wireframes.pdf page 3, "02 Home / navigation hub".
+    it('greets the user and repeats the wireframe subtitle', async () => {
+      render(await HomePage());
+
+      const headings = screen.getAllByRole('heading', { level: 1 });
+      expect(headings).toHaveLength(1);
+      expect(headings[0]).toHaveTextContent('Welcome back, Alex');
+      expect(screen.getByText('Your wardrobe, your outfits, all in one place.')).toBeInTheDocument();
+    });
+
+    it('shows the three wireframe cards in order, each with an Open link', async () => {
+      render(await HomePage());
+
+      const cards = screen.getAllByRole('listitem');
+      expect(cards.map((card) => within(card).getByRole('heading', { level: 2 }).textContent)).toEqual([
+        'My Wardrobe',
+        'Create Outfit',
+        'Saved Outfits',
+      ]);
+      expect(cards.map((card) => within(card).getByText(/./, { selector: 'p' }).textContent)).toEqual([
+        'View and organize saved clothing',
+        'Choose an occasion',
+        'Revisit combinations',
+      ]);
+      expect(
+        cards.map((card) => within(card).getByRole('link', { name: /^open/i }).getAttribute('href')),
+      ).toEqual(['/wardrobe', '/outfits/create', '/outfits/saved']);
+    });
+
+    it('gives each Open link a distinct accessible name', async () => {
+      render(await HomePage());
+
+      for (const name of ['Open My Wardrobe', 'Open Create Outfit', 'Open Saved Outfits']) {
+        expect(screen.getByRole('link', { name })).toBeInTheDocument();
+      }
     });
   });
 });

@@ -100,7 +100,7 @@ describe('pageSession', () => {
 
       const err = await redirectIfAuthenticated(authService).catch((e) => e);
 
-      expect(digestOf(err)).toContain(';/;');
+      expect(digestOf(err)).toContain(';/home;');
     });
 
     it('reports an outage instead of throwing when validation fails', async () => {

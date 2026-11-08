@@ -3,6 +3,7 @@ import { redirect, unstable_rethrow } from 'next/navigation';
 import { AuthService } from '@/services/authService';
 import { SESSION_COOKIE_NAME } from '@/lib/auth/cookieConfig';
 import { AuthenticatedSession, getServerSession } from '@/lib/auth/sessionHelper';
+import { HOME_PATH } from '@/lib/routes';
 
 export const SESSION_ENDED_REASON = 'session-ended';
 export const SIGN_IN_SESSION_ENDED_PATH = `/sign-in?reason=${SESSION_ENDED_REASON}`;
@@ -51,7 +52,7 @@ export async function redirectIfAuthenticated(
   }
 
   if (auth) {
-    redirect('/');
+    redirect(HOME_PATH);
   }
 
   return { serviceUnavailable: false };
