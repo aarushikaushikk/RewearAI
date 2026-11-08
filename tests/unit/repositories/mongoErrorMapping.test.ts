@@ -5,6 +5,7 @@ import { categorizeError, toRepositoryError } from '@/lib/repositories/mongoSupp
 import {
   DuplicateAccountError,
   DuplicateEmailError,
+  DuplicateImageError,
   DuplicateUserIdError,
   RepositoryError,
   RepositoryUnavailableError,
@@ -121,6 +122,13 @@ describe('MongoDB error mapping', () => {
 
       expect(toRepositoryError(err)).toBeInstanceOf(DuplicateUserIdError);
       expect(categorizeError(err)).toBe('duplicate_user_id');
+    });
+
+    it('an image already saved to a wardrobe item becomes DuplicateImageError', () => {
+      const err = serverError({ code: 11000, keyPattern: { 'image.publicId': 1 } });
+
+      expect(toRepositoryError(err)).toBeInstanceOf(DuplicateImageError);
+      expect(categorizeError(err)).toBe('duplicate_image');
     });
 
     it.each([
