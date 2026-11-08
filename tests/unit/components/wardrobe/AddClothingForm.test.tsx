@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import { AddClothingForm } from '@/components/wardrobe/AddClothingForm';
@@ -111,6 +111,35 @@ describe('AddClothingForm', () => {
       screen.getByLabelText(/clothing image/i),
       new File(['GIF89a'], 'shirt.gif', { type: 'image/gif' }),
     );
+
+    expect(
+      await screen.findByText("This file type isn't supported. Choose a JPEG, PNG, or WebP image."),
+    ).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('uploads a photo dropped on the image area', async () => {
+    const fetchMock = mockRoutes({
+      '/api/uploads': [{ status: 201, body: { success: true, data: IMAGE } }],
+    });
+    render(<AddClothingForm />);
+
+    const dropZone = screen.getByText(/drag a photo here/i);
+    fireEvent.dragOver(dropZone, { dataTransfer: { files: [], types: ['Files'] } });
+    fireEvent.drop(dropZone, { dataTransfer: { files: [jpeg()], types: ['Files'] } });
+
+    expect(await screen.findByText('Image uploaded.')).toBeInTheDocument();
+    expect(screen.getByAltText('Preview of the selected clothing photo')).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a dropped file of an unsupported type without uploading it', async () => {
+    const fetchMock = mockRoutes({});
+    render(<AddClothingForm />);
+
+    fireEvent.drop(screen.getByText(/drag a photo here/i), {
+      dataTransfer: { files: [new File(['%PDF'], 'shirt.pdf', { type: 'application/pdf' })], types: ['Files'] },
+    });
 
     expect(
       await screen.findByText("This file type isn't supported. Choose a JPEG, PNG, or WebP image."),
