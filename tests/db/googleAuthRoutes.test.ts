@@ -180,7 +180,7 @@ describe('a successful sign-in', () => {
     const { res } = await completeFlow();
 
     expect(res.status).toBe(303);
-    expect(res.headers.get('location')).toBe('/');
+    expect(res.headers.get('location')).toBe('/home');
     const session = setCookies(res).find((c) => c.startsWith(`${SESSION_COOKIE_NAME}=`)) ?? '';
     expect(session).toMatch(/HttpOnly/i);
     expect(session).toMatch(/SameSite=Lax/i);
@@ -228,7 +228,7 @@ describe('a successful sign-in', () => {
       flow.cookie,
     );
 
-    expect(res.headers.get('location')).toBe('/');
+    expect(res.headers.get('location')).toBe('/home');
   });
 });
 

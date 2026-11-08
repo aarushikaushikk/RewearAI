@@ -191,7 +191,7 @@ describe('production build with Google settings and a fake Google', () => {
     const res = await callback({ code, state: flow.state }, flow.cookie);
 
     expect(res.status).toBe(303);
-    expect(res.headers.get('location')).toBe('/');
+    expect(res.headers.get('location')).toBe('/home');
     const setCookie = res.headers.getSetCookie().find((c) => c.startsWith(`${SESSION_COOKIE}=`)) ?? '';
     expect(setCookie).toMatch(/HttpOnly/i);
     expect(setCookie).toMatch(/Secure/i);
