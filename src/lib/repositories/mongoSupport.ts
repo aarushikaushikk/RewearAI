@@ -1,10 +1,11 @@
 import 'server-only';
 import type { Connection } from 'mongoose';
 import { connectToDatabase } from '@/lib/db';
-import { ensureAuthIndexes } from './mongoIndexes';
+import { ensureRequiredIndexes } from './mongoIndexes';
 import {
   DuplicateAccountError,
   DuplicateEmailError,
+  DuplicateImageError,
   DuplicateUserIdError,
   RepositoryError,
   RepositoryUnavailableError,
@@ -27,7 +28,10 @@ export type RepositoryOperation =
   | 'account.create'
   | 'session.create'
   | 'session.findActive'
-  | 'session.revoke';
+  | 'session.revoke'
+  | 'wardrobeItem.create'
+  | 'wardrobeItem.findByImage'
+  | 'wardrobeItem.findUsedImageIds';
 
 export type ErrorCategory =
   | 'connection'
@@ -37,6 +41,7 @@ export type ErrorCategory =
   | 'duplicate_email'
   | 'duplicate_account'
   | 'duplicate_user_id'
+  | 'duplicate_image'
   | 'duplicate_key'
   | 'validation'
   | 'unknown';
@@ -68,6 +73,7 @@ const DUPLICATE_CATEGORIES = new Map<string, ErrorCategory>([
   ['_id', 'duplicate_user_id'],
   ['provider,providerAccountId', 'duplicate_account'],
   ['provider,userId', 'duplicate_account'],
+  ['image.publicId', 'duplicate_image'],
 ]);
 
 // Expected when requests race, so they aren't logged as failures.
@@ -75,6 +81,7 @@ const EXPECTED_DUPLICATES = new Set<ErrorCategory>([
   'duplicate_email',
   'duplicate_account',
   'duplicate_user_id',
+  'duplicate_image',
 ]);
 
 function categorizeDuplicate(keyPattern: unknown): ErrorCategory {
@@ -132,6 +139,8 @@ function errorForCategory(category: ErrorCategory): RepositoryError {
       return new DuplicateAccountError();
     case 'duplicate_user_id':
       return new DuplicateUserIdError();
+    case 'duplicate_image':
+      return new DuplicateImageError();
     default:
       return new RepositoryError();
   }
@@ -149,7 +158,7 @@ export function toRepositoryError(err: unknown): RepositoryError {
  */
 async function ensureIndexes(connection: Connection): Promise<void> {
   try {
-    await ensureAuthIndexes(connection);
+    await ensureRequiredIndexes(connection);
   } catch (err) {
     if (isOutage(categorizeError(err))) {
       throw err;
