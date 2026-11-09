@@ -1,13 +1,20 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Alert } from '@/components/ui/Alert';
 import { ClothingCard } from '@/components/wardrobe/ClothingCard';
+import { FilterBar } from '@/components/wardrobe/FilterBar';
 import {
   getLoadErrorMessage,
   LOAD_WARDROBE_FAILED_MESSAGE,
 } from '@/components/wardrobe/wardrobeFormErrors';
+import {
+  EMPTY_FILTERS,
+  filterWardrobeItems,
+  hasActiveFilters,
+  type WardrobeFilters,
+} from '@/services/filterWardrobeItems';
 import type { WardrobeItemDto } from '@/types/wardrobe';
 
 /** Notices another page can send here with, in the `notice` prop. */
@@ -26,11 +33,12 @@ const SECONDARY_BUTTON =
   'inline-flex min-h-11 items-center justify-center rounded-xl border border-text-muted bg-surface px-4 text-base font-medium text-text hover:bg-background focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2';
 
 /**
- * The saved items in My Wardrobe (wireframe 03, US4). Search and filters (#10)
- * will narrow this same list; until then every item is shown.
+ * The saved items in My Wardrobe (wireframe 03, US4), narrowed by search and
+ * filters (US5). The filters live here, so a failed load and retry keeps them.
  */
 export function WardrobeGrid({ notice }: { notice?: WardrobeNotice }) {
   const [state, setState] = useState<LoadState>({ status: 'loading' });
+  const [filters, setFilters] = useState<WardrobeFilters>(EMPTY_FILTERS);
 
   const load = useCallback(async () => {
     setState({ status: 'loading' });
@@ -56,15 +64,31 @@ export function WardrobeGrid({ notice }: { notice?: WardrobeNotice }) {
     void load();
   }, [load]);
 
+  // An empty wardrobe has nothing to search, so the filters are not offered.
+  const showFilters = !(state.status === 'loaded' && state.items.length === 0);
+
   return (
     <div className="flex flex-col gap-6">
       {notice && <Alert variant="success" message={NOTICE_MESSAGES[notice]} />}
-      <WardrobeContent state={state} onRetry={() => void load()} />
+      {showFilters && <FilterBar filters={filters} onChange={setFilters} />}
+      <WardrobeContent
+        state={state}
+        filters={filters}
+        onClearFilters={() => setFilters(EMPTY_FILTERS)}
+        onRetry={() => void load()}
+      />
     </div>
   );
 }
 
-function WardrobeContent({ state, onRetry }: { state: LoadState; onRetry: () => void }) {
+interface WardrobeContentProps {
+  state: LoadState;
+  filters: WardrobeFilters;
+  onClearFilters: () => void;
+  onRetry: () => void;
+}
+
+function WardrobeContent({ state, filters, onClearFilters, onRetry }: WardrobeContentProps) {
   if (state.status === 'loading') {
     return (
       <div aria-busy="true">
@@ -94,7 +118,20 @@ function WardrobeContent({ state, onRetry }: { state: LoadState; onRetry: () => 
     );
   }
 
-  const { items } = state;
+  return <LoadedWardrobe items={state.items} filters={filters} onClearFilters={onClearFilters} />;
+}
+
+function LoadedWardrobe({
+  items,
+  filters,
+  onClearFilters,
+}: {
+  items: WardrobeItemDto[];
+  filters: WardrobeFilters;
+  onClearFilters: () => void;
+}) {
+  const shown = useMemo(() => filterWardrobeItems(items, filters), [items, filters]);
+
   if (items.length === 0) {
     return (
       <section
@@ -117,16 +154,41 @@ function WardrobeContent({ state, onRetry }: { state: LoadState; onRetry: () => 
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-text-muted">
-        Showing {items.length} of {items.length} {items.length === 1 ? 'item' : 'items'}
-      </p>
-      <ul className="grid grid-cols-2 gap-6 sm:grid-cols-3 lg:grid-cols-4">
-        {items.map((item) => (
-          <li key={item.id}>
-            <ClothingCard item={item} />
-          </li>
-        ))}
-      </ul>
+      <div className="flex items-center justify-between gap-4">
+        <p role="status" className="text-text-muted">
+          Showing {shown.length} of {items.length} {items.length === 1 ? 'item' : 'items'}
+        </p>
+        <button
+          type="button"
+          onClick={onClearFilters}
+          disabled={!hasActiveFilters(filters)}
+          className="inline-flex min-h-11 shrink-0 items-center rounded-lg px-2 text-base font-medium text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:cursor-not-allowed disabled:text-text-muted disabled:no-underline"
+        >
+          Clear filters
+        </button>
+      </div>
+
+      {shown.length === 0 ? (
+        <section
+          aria-labelledby="no-matches-heading"
+          className="flex flex-col items-start gap-2 rounded-xl border border-border bg-surface p-6"
+        >
+          <h2 id="no-matches-heading" className="text-lg font-semibold text-text">
+            No items match your search and filters.
+          </h2>
+          <p className="text-text-muted">
+            Change your search, or clear filters to see your whole wardrobe.
+          </p>
+        </section>
+      ) : (
+        <ul className="grid grid-cols-2 gap-6 sm:grid-cols-3 lg:grid-cols-4">
+          {shown.map((item) => (
+            <li key={item.id}>
+              <ClothingCard item={item} />
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
