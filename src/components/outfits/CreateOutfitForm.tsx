@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import Image from 'next/image';
 import Link from 'next/link';
 import { NETWORK_ERROR_MESSAGE } from '@/components/auth/authFormErrors';
+import { OutfitItemImage } from '@/components/outfits/OutfitItemImage';
 import { Alert } from '@/components/ui/Alert';
 import { PrimaryButton } from '@/components/ui/PrimaryButton';
 import { SelectField } from '@/components/ui/SelectField';
@@ -15,14 +15,17 @@ import {
   type OutfitRole,
 } from '@/types/outfit';
 
-type GeneratedOutfit = Extract<OutfitRecommendationDto, { status: 'ok' }>;
+/** A recommended item as received; its image is checked when shown, so it may be missing. */
+type ShownItem = Omit<OutfitItemDto, 'image'> & { image?: { url?: unknown } };
+
+type GeneratedOutfit = Omit<Extract<OutfitRecommendationDto, { status: 'ok' }>, 'items'> & { items: ShownItem[] };
 
 type ViewState =
   | { status: 'idle' }
   | { status: 'loading' }
   | { status: 'ok'; outfit: GeneratedOutfit }
   | { status: 'insufficient'; occasion: Occasion }
-  | { status: 'error'; message: string };
+  | { status: 'error'; message: string; sessionEnded?: boolean };
 
 const OCCASION_LABELS: Record<Occasion, string> = {
   work: 'Work',
@@ -52,6 +55,9 @@ const STATUS_MESSAGES: Record<number, string> = {
   503: 'Service temporarily unavailable. Please try again later.',
 };
 
+// Same as SIGN_IN_SESSION_ENDED_PATH, which lives in a server-only module; a test keeps them in sync.
+const SIGN_IN_SESSION_ENDED_PATH = '/sign-in?reason=session-ended';
+
 const SECONDARY_ACTION =
   'inline-flex min-h-11 items-center justify-center rounded-xl border border-text-muted bg-surface px-4 font-medium text-text hover:bg-background focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2';
 
@@ -59,7 +65,7 @@ const occasionFromLabel = (label: string): Occasion | undefined =>
   OCCASIONS.find((occasion) => OCCASION_LABELS[occasion] === label);
 
 /** The item's name, or its color and style when it has none (as on the Add Clothing card). */
-function displayName(item: OutfitItemDto): string {
+function displayName(item: Pick<OutfitItemDto, 'name' | 'color' | 'style'>): string {
   return item.name ?? `${item.color} ${item.style}`;
 }
 
@@ -67,15 +73,20 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-function isOutfitItem(value: unknown): value is OutfitItemDto {
-  if (!isRecord(value) || !isRecord(value.image)) {
+/**
+ * Checks what's needed to name and label an item. The role must be one of ROLE_LABELS' own
+ * keys, so inherited names such as "toString" are rejected. A missing or unusable image is
+ * allowed: OutfitItemImage shows a placeholder for it.
+ */
+function isOutfitItem(value: unknown): value is ShownItem {
+  if (!isRecord(value)) {
     return false;
   }
   return (
     typeof value.id === 'string' &&
     typeof value.role === 'string' &&
-    value.role in ROLE_LABELS &&
-    typeof value.image.url === 'string' &&
+    Object.hasOwn(ROLE_LABELS, value.role) &&
+    (value.image === undefined || isRecord(value.image)) &&
     (value.name === null || typeof value.name === 'string') &&
     typeof value.color === 'string' &&
     typeof value.style === 'string'
@@ -134,7 +145,11 @@ export function CreateOutfitForm() {
         const body = (await response.json().catch(() => null)) as { data?: unknown } | null;
         next = viewFor(body?.data, occasion);
       } else {
-        next = { status: 'error', message: STATUS_MESSAGES[response.status] ?? GENERATE_FAILED_MESSAGE };
+        next = {
+          status: 'error',
+          message: STATUS_MESSAGES[response.status] ?? GENERATE_FAILED_MESSAGE,
+          sessionEnded: response.status === 401,
+        };
       }
     } catch {
       next = { status: 'error', message: NETWORK_ERROR_MESSAGE };
@@ -196,10 +211,21 @@ export function CreateOutfitForm() {
       {view.status === 'error' && (
         <div className="flex flex-col gap-3">
           <Alert variant="error" message={view.message} focusOnMount />
-          {occasion && (
-            <button type="button" onClick={() => void generate(occasion)} className={`${SECONDARY_ACTION} self-start`}>
-              Try again
-            </button>
+          {/* Retrying can't succeed once the session has ended, so offer Sign in instead. */}
+          {view.sessionEnded ? (
+            <Link href={SIGN_IN_SESSION_ENDED_PATH} className={`${SECONDARY_ACTION} self-start`}>
+              Sign in
+            </Link>
+          ) : (
+            occasion && (
+              <button
+                type="button"
+                onClick={() => void generate(occasion)}
+                className={`${SECONDARY_ACTION} self-start`}
+              >
+                Try again
+              </button>
+            )
           )}
         </div>
       )}
@@ -234,12 +260,12 @@ export function CreateOutfitForm() {
             {view.outfit.items.map((item) => (
               <li key={item.id} className="overflow-hidden rounded-xl border border-border bg-surface">
                 <div className="relative aspect-[4/5] bg-background">
-                  <Image
-                    src={item.image.url}
-                    alt={displayName(item)}
-                    fill
+                  <OutfitItemImage
+                    // A new URL gets a fresh attempt, even if an earlier photo failed to load.
+                    key={String(item.image?.url)}
+                    url={item.image?.url}
+                    name={displayName(item)}
                     sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
-                    className="object-contain"
                   />
                 </div>
                 <div className="p-3">

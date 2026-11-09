@@ -1,10 +1,13 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import { CreateOutfitForm } from '@/components/outfits/CreateOutfitForm';
+import { ALLOWED_IMAGE_HOST } from '@/components/outfits/OutfitItemImage';
+import { SIGN_IN_SESSION_ENDED_PATH } from '@/lib/auth/pageSession';
 import type { OutfitItemDto, OutfitRecommendationDto } from '@/types/outfit';
+import nextConfig from '../../../../next.config';
 
 const LABELS = ['Work', 'Dinner', 'Weekend', 'Casual', 'Formal'];
 const VALUES = ['work', 'dinner', 'weekend', 'casual', 'formal'];
@@ -202,7 +205,6 @@ describe('CreateOutfitForm', () => {
   });
 
   it.each([
-    ['a signed-out session (401)', reply(401), 'Your session has ended. Sign in again to continue.'],
     ['an unavailable service (503)', reply(503), 'Service temporarily unavailable. Please try again later.'],
     ['a server error (500)', reply(500, { success: false, error: 'driver detail' }), "We couldn't generate an outfit. Try again."],
     ['a network failure', new TypeError('Failed to fetch'), "We couldn't reach the server. Check your connection and try again."],
@@ -253,5 +255,87 @@ describe('CreateOutfitForm', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent("We couldn't generate an outfit. Try again.");
     expect(screen.queryByRole('heading', { name: /Your outfit for/ })).not.toBeInTheDocument();
+  });
+
+  describe('robustness (final review fixes)', () => {
+    const PLACEHOLDER = 'Image unavailable for Linen shirt';
+
+    async function showOutfit(items: unknown[]) {
+      mockFetch(success({ ...OUTFIT, items }));
+      render(<CreateOutfitForm />);
+      await generateFor(user, 'Work');
+      return within(await screen.findByRole('list', { name: 'Items in this outfit' })).getAllByRole('listitem');
+    }
+
+    it.each(['toString', 'constructor', '__proto__', 'hasOwnProperty'])(
+      'rejects the inherited property "%s" as an outfit role',
+      async (role) => {
+        mockFetch(success({ ...OUTFIT, items: [{ ...SHIRT, role }] }));
+        render(<CreateOutfitForm />);
+
+        await generateFor(user, 'Work');
+
+        expect(await screen.findByRole('alert')).toHaveTextContent("We couldn't generate an outfit. Try again.");
+        expect(screen.queryByRole('list')).not.toBeInTheDocument();
+      },
+    );
+
+    it.each([
+      ['an http URL', 'http://res.cloudinary.com/test/image/upload/v1/shirt.jpg'],
+      ['another host', 'https://evil.example/shirt.jpg'],
+      ['a look-alike host', 'https://res.cloudinary.com.evil.example/shirt.jpg'],
+      ['a protocol-relative URL', '//res.cloudinary.com/test/shirt.jpg'],
+      ['a javascript: URL', 'javascript:alert(1)'],
+      ['text that is not a URL', 'not a url'],
+      ['an empty URL', ''],
+    ])('shows a placeholder instead of crashing for %s, keeping the name and role', async (_label, url) => {
+      const [shirt, chinos] = await showOutfit([{ ...SHIRT, image: { url } }, CHINOS]);
+
+      expect(within(shirt).getByRole('img', { name: PLACEHOLDER })).toHaveTextContent('Image unavailable');
+      expect(within(shirt).queryByRole('img', { name: 'Linen shirt' })).not.toBeInTheDocument();
+      expect(document.querySelector(`img[src*="${encodeURIComponent(url) || 'x-never'}"]`)).toBeNull();
+      expect(within(shirt).getByText('Linen shirt')).toBeInTheDocument();
+      expect(within(shirt).getByText('Top')).toBeInTheDocument();
+      // Other items keep their photos.
+      expect(within(chinos).getByRole('img', { name: 'Navy Chinos' })).toBeInTheDocument();
+    });
+
+    it.each([
+      ['no image at all', { ...SHIRT, image: undefined }],
+      ['an image without a URL', { ...SHIRT, image: {} }],
+      ['a non-string URL', { ...SHIRT, image: { url: 42 } }],
+    ])('shows a placeholder for an item with %s', async (_label, item) => {
+      const [shirt] = await showOutfit([item, CHINOS]);
+
+      expect(within(shirt).getByRole('img', { name: PLACEHOLDER })).toBeInTheDocument();
+      expect(within(shirt).getByText('Linen shirt')).toBeInTheDocument();
+    });
+
+    it('replaces a photo that fails to load with the placeholder, keeping the name and role', async () => {
+      const [shirt] = await showOutfit([SHIRT, CHINOS]);
+
+      fireEvent.error(within(shirt).getByRole('img', { name: 'Linen shirt' }));
+
+      expect(within(shirt).getByRole('img', { name: PLACEHOLDER })).toHaveTextContent('Image unavailable');
+      expect(within(shirt).getByText('Linen shirt')).toBeInTheDocument();
+      expect(within(shirt).getByText('Top')).toBeInTheDocument();
+    });
+
+    it('allows exactly the image host that next.config.ts allows', () => {
+      expect(nextConfig.images?.remotePatterns).toEqual([{ protocol: 'https', hostname: ALLOWED_IMAGE_HOST }]);
+    });
+
+    it('offers Sign in, not Try again, when the session has ended, and keeps the occasion', async () => {
+      const fetchMock = mockFetch(reply(401));
+      render(<CreateOutfitForm />);
+
+      await generateFor(user, 'Dinner');
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('Your session has ended. Sign in again to continue.');
+      expect(screen.getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', SIGN_IN_SESSION_ENDED_PATH);
+      expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument();
+      expect(occasionSelect()).toHaveValue('Dinner');
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
   });
 });
