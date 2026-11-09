@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  parseItemDetailsPayload,
   parseNewItemPayload,
+  toItemDetails,
   toNewWardrobeItem,
+  validateItemDetails,
   validateNewItemInput,
 } from '@/lib/validation/wardrobeValidation';
 
@@ -99,6 +102,72 @@ describe('toNewWardrobeItem', () => {
       category: 'Top',
       color: 'White',
       style: 'Button-down',
+      season: 'Summer',
+      formality: 'Smart casual',
+    });
+  });
+});
+
+// Editing an item (US4, #9) uses the same rules as Add Clothing, without the image.
+function validDetails(overrides: Record<string, string> = {}) {
+  const { name, category, color, style, season, formality } = validInput(overrides);
+  return { name, category, color, style, season, formality };
+}
+
+describe('parseItemDetailsPayload', () => {
+  it('keeps only the editable fields, dropping the image, owner and availability', () => {
+    expect(
+      parseItemDetailsPayload({
+        ...validInput(),
+        owner: 'someone-else',
+        ownerId: 'someone-else',
+        isAvailable: false,
+        image: { url: 'https://evil.example/x.jpg', publicId: 'x' },
+      }),
+    ).toEqual(validDetails());
+  });
+
+  it('turns missing fields into empty strings so they are reported as field errors', () => {
+    expect(parseItemDetailsPayload({})).toEqual({
+      name: '',
+      category: '',
+      color: '',
+      style: '',
+      season: '',
+      formality: '',
+    });
+  });
+
+  it.each([null, 'text', 42, [], { style: 7 }])('rejects the malformed body %j', (body) => {
+    expect(parseItemDetailsPayload(body)).toBeNull();
+  });
+});
+
+describe('validateItemDetails', () => {
+  it('accepts complete details, with or without a name', () => {
+    expect(validateItemDetails(validDetails())).toEqual({ isValid: true, errors: {} });
+    expect(validateItemDetails(validDetails({ name: '' })).isValid).toBe(true);
+  });
+
+  it('does not ask for an image', () => {
+    expect(validateItemDetails(validDetails()).errors.image).toBeUndefined();
+  });
+
+  it('reports the same field errors as Add Clothing', () => {
+    const edited = validDetails({ category: 'Hat', style: ' ', name: 'x'.repeat(81) });
+    const added = validateNewItemInput({ ...edited, publicId: 'p' });
+
+    expect(validateItemDetails(edited).errors).toEqual(added.errors);
+  });
+});
+
+describe('toItemDetails', () => {
+  it('trims text and stores a blank name as null', () => {
+    expect(toItemDetails(validDetails({ name: '  ', style: ' Oxford ' }))).toEqual({
+      name: null,
+      category: 'Top',
+      color: 'White',
+      style: 'Oxford',
       season: 'Summer',
       formality: 'Smart casual',
     });

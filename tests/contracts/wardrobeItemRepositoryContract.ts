@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { DuplicateImageError } from '@/lib/repositories/repositoryErrors';
 import { IWardrobeItemRepository } from '@/lib/repositories/wardrobeItemRepository';
-import { CreateWardrobeItemDTO } from '@/types/wardrobe';
+import { CreateWardrobeItemDTO, WardrobeItemDetails } from '@/types/wardrobe';
 
 export interface WardrobeItemContractSetup {
   /** Returns an empty repository. */
@@ -22,6 +22,16 @@ export function itemFor(ownerId: string, publicId: string): CreateWardrobeItemDT
     formality: 'Smart casual',
   };
 }
+
+/** Edited details for an item, as the Clothing Detail page saves them (US4). */
+export const EDITED_DETAILS: WardrobeItemDetails = {
+  name: 'White Oxford Shirt',
+  category: 'Top',
+  color: 'Blue',
+  style: 'Oxford',
+  season: 'All-season',
+  formality: 'Formal',
+};
 
 /**
  * Behaviour every IWardrobeItemRepository must have. The MongoDB adapter runs this
@@ -110,6 +120,135 @@ export function describeWardrobeItemRepositoryContract(
 
       it('returns nothing for an empty list', async () => {
         await expect(repo.findUsedImageIds([])).resolves.toEqual([]);
+      });
+    });
+
+    describe('listByOwner', () => {
+      it("returns only the owner's items, newest first", async () => {
+        const first = await repo.create(itemFor(userA, 'u/a/1'));
+        await repo.create(itemFor(userB, 'u/b/1'));
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        const second = await repo.create(itemFor(userA, 'u/a/2'));
+
+        const items = await repo.listByOwner(userA);
+
+        expect(items.map((item) => item.id)).toEqual([second.id, first.id]);
+        expect(items.every((item) => item.ownerId === userA)).toBe(true);
+      });
+
+      it('returns an empty list for a user with no items', async () => {
+        await repo.create(itemFor(userA, 'u/a/1'));
+
+        await expect(repo.listByOwner(userB)).resolves.toEqual([]);
+      });
+    });
+
+    describe('findByIdForOwner', () => {
+      it("finds the owner's item by ID", async () => {
+        const created = await repo.create(itemFor(userA, 'u/a/1'));
+
+        const found = await repo.findByIdForOwner(userA, created.id);
+
+        expect(found).toMatchObject({ id: created.id, ownerId: userA, name: 'Linen shirt' });
+      });
+
+      it("never returns another user's item", async () => {
+        const created = await repo.create(itemFor(userA, 'u/a/1'));
+
+        await expect(repo.findByIdForOwner(userB, created.id)).resolves.toBeNull();
+      });
+
+      it('returns null for an unknown or malformed ID', async () => {
+        await repo.create(itemFor(userA, 'u/a/1'));
+
+        await expect(repo.findByIdForOwner(userA, '64b0000000000000000000ff')).resolves.toBeNull();
+        await expect(repo.findByIdForOwner(userA, 'not-an-id')).resolves.toBeNull();
+      });
+    });
+
+    describe('updateForOwner', () => {
+      it('replaces the details, keeps the image and availability, and returns the update', async () => {
+        const created = await repo.create(itemFor(userA, 'u/a/1'));
+        await new Promise((resolve) => setTimeout(resolve, 5));
+
+        const updated = await repo.updateForOwner(userA, created.id, EDITED_DETAILS);
+
+        expect(updated).toMatchObject({
+          ...EDITED_DETAILS,
+          id: created.id,
+          ownerId: userA,
+          image: created.image,
+          isAvailable: true,
+        });
+        expect(updated!.updatedAt.getTime()).toBeGreaterThan(created.updatedAt.getTime());
+        expect(updated!.createdAt.getTime()).toBe(created.createdAt.getTime());
+      });
+
+      it('persists the update for later reads', async () => {
+        const created = await repo.create(itemFor(userA, 'u/a/1'));
+        await repo.updateForOwner(userA, created.id, EDITED_DETAILS);
+
+        await expect(repo.findByIdForOwner(userA, created.id)).resolves.toMatchObject(
+          EDITED_DETAILS,
+        );
+      });
+
+      it('clears the name when it is null', async () => {
+        const created = await repo.create(itemFor(userA, 'u/a/1'));
+
+        const updated = await repo.updateForOwner(userA, created.id, { ...EDITED_DETAILS, name: null });
+
+        expect(updated?.name).toBeNull();
+        expect((await repo.findByIdForOwner(userA, created.id))?.name).toBeNull();
+      });
+
+      it("returns null and changes nothing for another user's item", async () => {
+        const created = await repo.create(itemFor(userA, 'u/a/1'));
+
+        await expect(repo.updateForOwner(userB, created.id, EDITED_DETAILS)).resolves.toBeNull();
+        await expect(repo.findByIdForOwner(userA, created.id)).resolves.toMatchObject({
+          name: 'Linen shirt',
+          color: 'White',
+        });
+      });
+
+      it('returns null for an unknown or malformed ID', async () => {
+        await expect(
+          repo.updateForOwner(userA, '64b0000000000000000000ff', EDITED_DETAILS),
+        ).resolves.toBeNull();
+        await expect(repo.updateForOwner(userA, 'not-an-id', EDITED_DETAILS)).resolves.toBeNull();
+      });
+    });
+
+    describe('deleteForOwner', () => {
+      it("deletes the owner's item and reports it", async () => {
+        const created = await repo.create(itemFor(userA, 'u/a/1'));
+
+        await expect(repo.deleteForOwner(userA, created.id)).resolves.toBe(true);
+        await expect(repo.findByIdForOwner(userA, created.id)).resolves.toBeNull();
+        await expect(repo.listByOwner(userA)).resolves.toEqual([]);
+      });
+
+      it('frees the image ID once its item is gone', async () => {
+        const created = await repo.create(itemFor(userA, 'u/a/1'));
+        await repo.deleteForOwner(userA, created.id);
+
+        await expect(repo.findUsedImageIds(['u/a/1'])).resolves.toEqual([]);
+      });
+
+      it("returns false and keeps another user's item", async () => {
+        const created = await repo.create(itemFor(userA, 'u/a/1'));
+
+        await expect(repo.deleteForOwner(userB, created.id)).resolves.toBe(false);
+        await expect(repo.findByIdForOwner(userA, created.id)).resolves.not.toBeNull();
+      });
+
+      it('returns false for an item already deleted, or a malformed ID', async () => {
+        const created = await repo.create(itemFor(userA, 'u/a/1'));
+        await repo.deleteForOwner(userA, created.id);
+
+        await expect(repo.deleteForOwner(userA, created.id)).resolves.toBe(false);
+        await expect(repo.deleteForOwner(userA, 'not-an-id')).resolves.toBe(false);
       });
     });
   });

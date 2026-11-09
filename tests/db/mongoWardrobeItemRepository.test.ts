@@ -6,6 +6,7 @@ import { DuplicateImageError, RepositoryError } from '@/lib/repositories/reposit
 import { WardrobeItemService } from '@/services/wardrobeItemService';
 import {
   describeWardrobeItemRepositoryContract,
+  EDITED_DETAILS,
   itemFor,
 } from '../contracts/wardrobeItemRepositoryContract';
 import { USER_IDS } from '../contracts/fixtures';
@@ -14,6 +15,7 @@ import { JPEG_BYTES } from '../helpers/imageBytes';
 import { errorFrom } from '../helpers/dbTestTools';
 import {
   clearTestDatabase,
+  disconnectTestClient,
   resetTestDatabase,
   startMongoTestServer,
   type MongoTestServer,
@@ -96,6 +98,40 @@ describe('MongoWardrobeItemRepository on a real database', () => {
 
   it('returns null rather than querying for an owner that is not a stored ID', async () => {
     await expect(repo.findByImage('not-an-id', 'u/a/1')).resolves.toBeNull();
+  });
+
+  // US4 (#9)
+  it('applies the model rules to an update, and leaves the item unchanged when they fail', async () => {
+    const created = await repo.create(itemFor(ALEX, 'u/a/1'));
+
+    const error = await errorFrom(() =>
+      repo.updateForOwner(ALEX, created.id, { ...EDITED_DETAILS, category: 'Hat' as never }),
+    );
+
+    expect(error).toBeInstanceOf(RepositoryError);
+    expect(await repo.findByIdForOwner(ALEX, created.id)).toMatchObject({ category: 'Top' });
+  });
+
+  it('removes the stored name field when an update clears it', async () => {
+    const created = await repo.create(itemFor(ALEX, 'u/a/1'));
+
+    await repo.updateForOwner(ALEX, created.id, { ...EDITED_DETAILS, name: null });
+    const stored = await WardrobeItem.collection.findOne({ 'image.publicId': 'u/a/1' });
+
+    expect(stored).not.toHaveProperty('name');
+  });
+
+  it('keeps an update and a deletion after reconnecting', async () => {
+    const kept = await repo.create(itemFor(ALEX, 'u/a/1'));
+    const removed = await repo.create(itemFor(ALEX, 'u/a/2'));
+    await repo.updateForOwner(ALEX, kept.id, EDITED_DETAILS);
+    await repo.deleteForOwner(ALEX, removed.id);
+
+    await disconnectTestClient();
+
+    const items = await new MongoWardrobeItemRepository().listByOwner(ALEX);
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ id: kept.id, ...EDITED_DETAILS });
   });
 
   it('lets a retried save through the service return the one stored item', async () => {

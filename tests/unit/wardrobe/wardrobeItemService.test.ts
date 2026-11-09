@@ -163,6 +163,200 @@ describe('WardrobeItemService', () => {
     });
   });
 
+  // US4 (#9): view, edit and delete saved items. Every lookup is scoped to the signed-in user.
+  async function savedItem(userId: string, name = 'Linen shirt') {
+    const image = await service.uploadImage(userId, JPEG_BYTES);
+    const { item } = await service.createItem(userId, { ...details(image.publicId), name });
+    return item;
+  }
+
+  const EDITS = {
+    name: 'White Oxford Shirt',
+    category: 'Top',
+    color: 'Blue',
+    style: ' Oxford ',
+    season: 'All-season',
+    formality: 'Formal',
+  };
+
+  describe('listItems', () => {
+    it("returns only the user's items, newest first, as client data", async () => {
+      const older = await savedItem(ALEX, 'Older');
+      await savedItem(SAM);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      const newer = await savedItem(ALEX, 'Newer');
+
+      const items = await service.listItems(ALEX);
+
+      expect(items.map((item) => item.id)).toEqual([newer.id, older.id]);
+      expect(items[0]).not.toHaveProperty('ownerId');
+      expect(typeof items[0].updatedAt).toBe('string');
+    });
+
+    it('returns an empty list for an empty wardrobe', async () => {
+      await expect(service.listItems(ALEX)).resolves.toEqual([]);
+    });
+  });
+
+  describe('getItem', () => {
+    it("returns the user's item", async () => {
+      const item = await savedItem(ALEX);
+
+      await expect(service.getItem(ALEX, item.id)).resolves.toEqual(item);
+    });
+
+    it("answers another user's item exactly as a missing one", async () => {
+      const samsItem = await savedItem(SAM);
+
+      const other = await rejection(service.getItem(ALEX, samsItem.id));
+      const missing = await rejection(service.getItem(ALEX, 'item_999'));
+
+      expect(other.code).toBe('ITEM_NOT_FOUND');
+      expect(other.statusCode).toBe(404);
+      expect(other.message).toBe("We couldn't find that clothing item.");
+      expect([missing.code, missing.statusCode, missing.message]).toEqual([
+        other.code,
+        other.statusCode,
+        other.message,
+      ]);
+    });
+  });
+
+  describe('updateItem', () => {
+    it('saves the edited details, trimmed, keeping the image and availability', async () => {
+      const item = await savedItem(ALEX);
+
+      const updated = await service.updateItem(ALEX, item.id, EDITS);
+
+      expect(updated).toMatchObject({
+        id: item.id,
+        image: item.image,
+        name: 'White Oxford Shirt',
+        color: 'Blue',
+        style: 'Oxford',
+        season: 'All-season',
+        formality: 'Formal',
+        isAvailable: true,
+      });
+      await expect(service.getItem(ALEX, item.id)).resolves.toEqual(updated);
+    });
+
+    it('removes the name when it is cleared', async () => {
+      const item = await savedItem(ALEX);
+
+      const updated = await service.updateItem(ALEX, item.id, { ...EDITS, name: '  ' });
+
+      expect(updated).not.toHaveProperty('name');
+    });
+
+    it('rejects invalid details with the same first field error as Add Clothing, changing nothing', async () => {
+      const item = await savedItem(ALEX);
+
+      const error = await rejection(
+        service.updateItem(ALEX, item.id, { ...EDITS, category: 'Hat', style: '' }),
+      );
+
+      expect(error.code).toBe('VALIDATION_ERROR');
+      expect(error.statusCode).toBe(400);
+      expect(error.message).toBe('Choose a category.');
+      await expect(service.getItem(ALEX, item.id)).resolves.toEqual(item);
+    });
+
+    it("refuses another user's item as not found, and leaves it unchanged", async () => {
+      const samsItem = await savedItem(SAM);
+
+      const error = await rejection(service.updateItem(ALEX, samsItem.id, EDITS));
+
+      expect(error.code).toBe('ITEM_NOT_FOUND');
+      await expect(service.getItem(SAM, samsItem.id)).resolves.toEqual(samsItem);
+    });
+
+    it('lets a database outage through for the handler to report', async () => {
+      const item = await savedItem(ALEX);
+      vi.spyOn(repo, 'updateForOwner').mockRejectedValue(new RepositoryUnavailableError());
+
+      await expect(service.updateItem(ALEX, item.id, EDITS)).rejects.toBeInstanceOf(
+        RepositoryUnavailableError,
+      );
+    });
+  });
+
+  describe('deleteItem', () => {
+    it('deletes the item and its Cloudinary image', async () => {
+      const item = await savedItem(ALEX);
+
+      await service.deleteItem(ALEX, item.id);
+
+      expect(store.has(item.image.publicId)).toBe(false);
+      await expect(service.listItems(ALEX)).resolves.toEqual([]);
+    });
+
+    it('deletes the image before the record, so the record is never left pointing nowhere unnoticed', async () => {
+      const item = await savedItem(ALEX);
+      const order: string[] = [];
+      vi.spyOn(store, 'delete').mockImplementation(async () => {
+        order.push('image');
+      });
+      vi.spyOn(repo, 'deleteForOwner').mockImplementation(async () => {
+        order.push('record');
+        return true;
+      });
+
+      await service.deleteItem(ALEX, item.id);
+
+      expect(order).toEqual(['image', 'record']);
+    });
+
+    it('keeps the item, and reports a safe error, when the image cannot be deleted', async () => {
+      const item = await savedItem(ALEX);
+      store.failing = true;
+
+      const error = await rejection(service.deleteItem(ALEX, item.id));
+
+      expect(error.code).toBe('DELETE_FAILED');
+      expect(error.statusCode).toBe(502);
+      expect(error.message).toBe("We couldn't delete this item. Try again.");
+      expect(consoleError).toHaveBeenCalledWith('[wardrobe] operation failed', {
+        operation: 'image.delete',
+      });
+      store.failing = false;
+      await expect(service.getItem(ALEX, item.id)).resolves.toEqual(item);
+    });
+
+    it('finishes on retry after the image was deleted but the record was not', async () => {
+      const item = await savedItem(ALEX);
+      vi.spyOn(repo, 'deleteForOwner').mockRejectedValueOnce(new RepositoryUnavailableError());
+
+      await expect(service.deleteItem(ALEX, item.id)).rejects.toBeInstanceOf(
+        RepositoryUnavailableError,
+      );
+      expect(store.has(item.image.publicId)).toBe(false);
+
+      await service.deleteItem(ALEX, item.id);
+
+      await expect(service.listItems(ALEX)).resolves.toEqual([]);
+    });
+
+    it("refuses another user's item as not found, and deletes neither it nor its image", async () => {
+      const samsItem = await savedItem(SAM);
+
+      const error = await rejection(service.deleteItem(ALEX, samsItem.id));
+
+      expect(error.code).toBe('ITEM_NOT_FOUND');
+      expect(store.has(samsItem.image.publicId)).toBe(true);
+      await expect(service.getItem(SAM, samsItem.id)).resolves.toEqual(samsItem);
+    });
+
+    it('reports an item that is already gone as not found', async () => {
+      const item = await savedItem(ALEX);
+      await service.deleteItem(ALEX, item.id);
+
+      const error = await rejection(service.deleteItem(ALEX, item.id));
+
+      expect(error.code).toBe('ITEM_NOT_FOUND');
+    });
+  });
+
   describe('cleanupAbandonedUploads', () => {
     const NOW = new Date('2026-11-08T12:00:00Z');
     const STALE = new Date(NOW.getTime() - PENDING_UPLOAD_TTL_MS - 1);
