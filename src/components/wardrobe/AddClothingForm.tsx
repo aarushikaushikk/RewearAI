@@ -17,6 +17,7 @@ import {
   UNSUPPORTED_TYPE_MESSAGE,
 } from '@/components/wardrobe/wardrobeFormErrors';
 import { resizeImageForUpload } from '@/lib/images/resizeImage';
+import { itemDisplayName } from '@/lib/wardrobe/itemDisplayName';
 import { validateNewItemInput } from '@/lib/validation/wardrobeValidation';
 import { getBrowserClassifier } from '@/services/classification/browser/getBrowserClassifier';
 import { classifyClothingImage } from '@/services/classification/classifyClothingImage';
@@ -250,7 +251,7 @@ export function AddClothingForm() {
   }
 
   if (savedItem) {
-    const label = savedItem.name ?? `${savedItem.color} ${savedItem.style}`;
+    const label = itemDisplayName(savedItem);
     return (
       <section aria-labelledby="saved-heading" className="flex flex-col gap-4">
         <Alert variant="success" message="Saved to your wardrobe." focusOnMount />

@@ -2,6 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } fr
 import {
   handleCleanupUploads,
   handleCreateItem,
+  handleDeleteItem,
+  handleGetItem,
+  handleListItems,
+  handleUpdateItem,
   handleUploadImage,
 } from '@/lib/wardrobe/wardrobeHandlers';
 import { AuthService } from '@/services/authService';
@@ -58,6 +62,33 @@ function createRequest(body: unknown, options: { cookie?: string; origin?: strin
   });
 }
 
+function itemRequest(
+  method: 'GET' | 'PATCH' | 'DELETE',
+  path: string,
+  options: { cookie?: string; origin?: string | null; body?: unknown } = {},
+) {
+  const hasBody = options.body !== undefined;
+  return new Request(`${ORIGIN}${path}`, {
+    method,
+    headers: {
+      ...headers(options.cookie, options.origin),
+      ...(hasBody ? { 'Content-Type': 'application/json' } : {}),
+    },
+    ...(hasBody
+      ? { body: typeof options.body === 'string' ? options.body : JSON.stringify(options.body) }
+      : {}),
+  });
+}
+
+const EDITS = {
+  name: 'White Oxford Shirt',
+  category: 'Top',
+  color: 'Blue',
+  style: 'Oxford',
+  season: 'All-season',
+  formality: 'Formal',
+};
+
 describe('Wardrobe API routes', () => {
   let authService: AuthService;
   let itemRepo: MemoryWardrobeItemRepository;
@@ -76,6 +107,15 @@ describe('Wardrobe API routes', () => {
   async function uploadAs(user: { cookie: string }) {
     const res = await handleUploadImage(uploadRequest({ cookie: user.cookie }), deps);
     return (await res.json()).data as { url: string; publicId: string };
+  }
+
+  async function saveItemAs(user: { cookie: string }, name = 'Linen shirt') {
+    const image = await uploadAs(user);
+    const res = await handleCreateItem(
+      createRequest({ ...DETAILS, name, publicId: image.publicId }, { cookie: user.cookie }),
+      deps,
+    );
+    return (await res.json()).data as { id: string; image: { url: string; publicId: string } };
   }
 
   beforeEach(async () => {
@@ -286,6 +326,288 @@ describe('Wardrobe API routes', () => {
       expect(res.status).toBe(500);
       expect(JSON.stringify(await res.json())).not.toContain('secret detail');
       expect(JSON.stringify(consoleError.mock.calls)).not.toContain('secret detail');
+    });
+  });
+
+  // US4 (#9): view, edit and delete saved items.
+  describe('GET /api/wardrobe', () => {
+    it("lists only the signed-in user's items, newest first", async () => {
+      const older = await saveItemAs(alex, 'Older');
+      await saveItemAs(sam);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      const newer = await saveItemAs(alex, 'Newer');
+
+      const res = await handleListItems(itemRequest('GET', '/api/wardrobe', { cookie: alex.cookie }), deps);
+
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.success).toBe(true);
+      expect(json.data.map((item: { id: string }) => item.id)).toEqual([newer.id, older.id]);
+      expect(json.data[0].ownerId).toBeUndefined();
+    });
+
+    it('returns an empty list for an empty wardrobe', async () => {
+      const res = await handleListItems(itemRequest('GET', '/api/wardrobe', { cookie: alex.cookie }), deps);
+
+      expect(await res.json()).toEqual({ success: true, data: [] });
+    });
+
+    it('returns 401 without a session', async () => {
+      const res = await handleListItems(itemRequest('GET', '/api/wardrobe'), deps);
+
+      expect(res.status).toBe(401);
+    });
+
+    it('returns 503 with a safe message when the database is unavailable', async () => {
+      vi.spyOn(itemRepo, 'listByOwner').mockRejectedValue(new RepositoryUnavailableError());
+
+      const res = await handleListItems(itemRequest('GET', '/api/wardrobe', { cookie: alex.cookie }), deps);
+
+      expect(res.status).toBe(503);
+      expect(JSON.stringify(await res.json())).not.toMatch(/mongo|repository/i);
+    });
+  });
+
+  describe('GET /api/wardrobe/[itemId]', () => {
+    it("returns the signed-in user's item", async () => {
+      const item = await saveItemAs(alex);
+
+      const res = await handleGetItem(
+        itemRequest('GET', `/api/wardrobe/${item.id}`, { cookie: alex.cookie }),
+        item.id,
+        deps,
+      );
+
+      expect(res.status).toBe(200);
+      expect((await res.json()).data).toMatchObject({ id: item.id, name: 'Linen shirt' });
+    });
+
+    it("returns 404 for another user's item, the same as for a missing one", async () => {
+      const samsItem = await saveItemAs(sam);
+
+      const other = await handleGetItem(
+        itemRequest('GET', `/api/wardrobe/${samsItem.id}`, { cookie: alex.cookie }),
+        samsItem.id,
+        deps,
+      );
+      const missing = await handleGetItem(
+        itemRequest('GET', '/api/wardrobe/item_999', { cookie: alex.cookie }),
+        'item_999',
+        deps,
+      );
+
+      expect(other.status).toBe(404);
+      expect(missing.status).toBe(404);
+      expect(await other.json()).toEqual(await missing.json());
+    });
+
+    it('returns 401 without a session', async () => {
+      const item = await saveItemAs(alex);
+
+      const res = await handleGetItem(itemRequest('GET', `/api/wardrobe/${item.id}`), item.id, deps);
+
+      expect(res.status).toBe(401);
+    });
+  });
+
+  describe('PATCH /api/wardrobe/[itemId]', () => {
+    it('saves the edits and returns the updated item', async () => {
+      const item = await saveItemAs(alex);
+
+      const res = await handleUpdateItem(
+        itemRequest('PATCH', `/api/wardrobe/${item.id}`, { cookie: alex.cookie, body: EDITS }),
+        item.id,
+        deps,
+      );
+
+      expect(res.status).toBe(200);
+      expect((await res.json()).data).toMatchObject({ ...EDITS, id: item.id, image: item.image });
+      expect(await itemRepo.findByIdForOwner(alex.id, item.id)).toMatchObject(EDITS);
+    });
+
+    it('ignores an image, owner or availability supplied by the client', async () => {
+      const item = await saveItemAs(alex);
+
+      await handleUpdateItem(
+        itemRequest('PATCH', `/api/wardrobe/${item.id}`, {
+          cookie: alex.cookie,
+          body: {
+            ...EDITS,
+            owner: sam.id,
+            ownerId: sam.id,
+            isAvailable: false,
+            image: { url: 'https://evil.example/x.jpg', publicId: 'x' },
+          },
+        }),
+        item.id,
+        deps,
+      );
+
+      expect(await itemRepo.findByIdForOwner(alex.id, item.id)).toMatchObject({
+        ownerId: alex.id,
+        image: item.image,
+        isAvailable: true,
+      });
+    });
+
+    it("returns 404 for another user's item, and changes nothing", async () => {
+      const samsItem = await saveItemAs(sam);
+
+      const res = await handleUpdateItem(
+        itemRequest('PATCH', `/api/wardrobe/${samsItem.id}`, { cookie: alex.cookie, body: EDITS }),
+        samsItem.id,
+        deps,
+      );
+
+      expect(res.status).toBe(404);
+      expect(await itemRepo.findByIdForOwner(sam.id, samsItem.id)).toMatchObject({
+        name: 'Linen shirt',
+      });
+    });
+
+    it('returns 400 with the first field error for invalid details', async () => {
+      const item = await saveItemAs(alex);
+
+      const res = await handleUpdateItem(
+        itemRequest('PATCH', `/api/wardrobe/${item.id}`, {
+          cookie: alex.cookie,
+          body: { ...EDITS, color: '' },
+        }),
+        item.id,
+        deps,
+      );
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ success: false, error: 'Choose a color.' });
+    });
+
+    it.each(['not json', '"a string"', '[]'])('returns 400 for the malformed body %s', async (body) => {
+      const item = await saveItemAs(alex);
+
+      const res = await handleUpdateItem(
+        itemRequest('PATCH', `/api/wardrobe/${item.id}`, { cookie: alex.cookie, body }),
+        item.id,
+        deps,
+      );
+
+      expect(res.status).toBe(400);
+    });
+
+    it('rejects a cross-site request with 403, before reading the session', async () => {
+      const item = await saveItemAs(alex);
+      const validate = vi.spyOn(authService, 'validateSession');
+
+      const res = await handleUpdateItem(
+        itemRequest('PATCH', `/api/wardrobe/${item.id}`, {
+          cookie: alex.cookie,
+          origin: 'https://evil.example',
+          body: EDITS,
+        }),
+        item.id,
+        deps,
+      );
+
+      expect(res.status).toBe(403);
+      expect(validate).not.toHaveBeenCalled();
+    });
+
+    it('returns 401 without a session', async () => {
+      const item = await saveItemAs(alex);
+
+      const res = await handleUpdateItem(
+        itemRequest('PATCH', `/api/wardrobe/${item.id}`, { body: EDITS }),
+        item.id,
+        deps,
+      );
+
+      expect(res.status).toBe(401);
+    });
+
+    it('returns 503 with a safe message when the database is unavailable', async () => {
+      const item = await saveItemAs(alex);
+      vi.spyOn(itemRepo, 'updateForOwner').mockRejectedValue(new RepositoryUnavailableError());
+
+      const res = await handleUpdateItem(
+        itemRequest('PATCH', `/api/wardrobe/${item.id}`, { cookie: alex.cookie, body: EDITS }),
+        item.id,
+        deps,
+      );
+
+      expect(res.status).toBe(503);
+    });
+  });
+
+  describe('DELETE /api/wardrobe/[itemId]', () => {
+    it('deletes the item and its Cloudinary image', async () => {
+      const item = await saveItemAs(alex);
+
+      const res = await handleDeleteItem(
+        itemRequest('DELETE', `/api/wardrobe/${item.id}`, { cookie: alex.cookie }),
+        item.id,
+        deps,
+      );
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ success: true, data: { id: item.id } });
+      expect(await itemRepo.findByIdForOwner(alex.id, item.id)).toBeNull();
+      expect(imageStore.has(item.image.publicId)).toBe(false);
+    });
+
+    it("returns 404 for another user's item, and deletes neither it nor its image", async () => {
+      const samsItem = await saveItemAs(sam);
+
+      const res = await handleDeleteItem(
+        itemRequest('DELETE', `/api/wardrobe/${samsItem.id}`, { cookie: alex.cookie }),
+        samsItem.id,
+        deps,
+      );
+
+      expect(res.status).toBe(404);
+      expect(await itemRepo.findByIdForOwner(sam.id, samsItem.id)).not.toBeNull();
+      expect(imageStore.has(samsItem.image.publicId)).toBe(true);
+    });
+
+    it('returns 502 and keeps the item when Cloudinary fails', async () => {
+      const item = await saveItemAs(alex);
+      imageStore.failing = true;
+
+      const res = await handleDeleteItem(
+        itemRequest('DELETE', `/api/wardrobe/${item.id}`, { cookie: alex.cookie }),
+        item.id,
+        deps,
+      );
+
+      expect(res.status).toBe(502);
+      expect(await res.json()).toEqual({
+        success: false,
+        error: "We couldn't delete this item. Try again.",
+      });
+      expect(await itemRepo.findByIdForOwner(alex.id, item.id)).not.toBeNull();
+    });
+
+    it('rejects a cross-site request with 403, and deletes nothing', async () => {
+      const item = await saveItemAs(alex);
+
+      const res = await handleDeleteItem(
+        itemRequest('DELETE', `/api/wardrobe/${item.id}`, {
+          cookie: alex.cookie,
+          origin: 'https://evil.example',
+        }),
+        item.id,
+        deps,
+      );
+
+      expect(res.status).toBe(403);
+      expect(await itemRepo.findByIdForOwner(alex.id, item.id)).not.toBeNull();
+    });
+
+    it('returns 401 without a session', async () => {
+      const item = await saveItemAs(alex);
+
+      const res = await handleDeleteItem(itemRequest('DELETE', `/api/wardrobe/${item.id}`), item.id, deps);
+
+      expect(res.status).toBe(401);
+      expect(imageStore.has(item.image.publicId)).toBe(true);
     });
   });
 

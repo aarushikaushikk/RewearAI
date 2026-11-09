@@ -1,6 +1,6 @@
 import { DuplicateImageError } from '@/lib/repositories/repositoryErrors';
 import { IWardrobeItemRepository } from '@/lib/repositories/wardrobeItemRepository';
-import { CreateWardrobeItemDTO, WardrobeItemRecord } from '@/types/wardrobe';
+import { CreateWardrobeItemDTO, WardrobeItemDetails, WardrobeItemRecord } from '@/types/wardrobe';
 
 export class MemoryWardrobeItemRepository implements IWardrobeItemRepository {
   private items: WardrobeItemRecord[] = [];
@@ -39,5 +39,43 @@ export class MemoryWardrobeItemRepository implements IWardrobeItemRepository {
   async findUsedImageIds(publicIds: string[]): Promise<string[]> {
     const used = new Set(this.items.map((item) => item.image.publicId));
     return publicIds.filter((publicId) => used.has(publicId));
+  }
+
+  async listByOwner(ownerId: string): Promise<WardrobeItemRecord[]> {
+    return this.items
+      .filter((item) => item.ownerId === ownerId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .map((item) => structuredClone(item));
+  }
+
+  async findByIdForOwner(ownerId: string, itemId: string): Promise<WardrobeItemRecord | null> {
+    const item = this.ownedItem(ownerId, itemId);
+    return item ? structuredClone(item) : null;
+  }
+
+  async updateForOwner(
+    ownerId: string,
+    itemId: string,
+    details: WardrobeItemDetails,
+  ): Promise<WardrobeItemRecord | null> {
+    const item = this.ownedItem(ownerId, itemId);
+    if (!item) {
+      return null;
+    }
+    Object.assign(item, details, { updatedAt: new Date() });
+    return structuredClone(item);
+  }
+
+  async deleteForOwner(ownerId: string, itemId: string): Promise<boolean> {
+    const item = this.ownedItem(ownerId, itemId);
+    if (!item) {
+      return false;
+    }
+    this.items = this.items.filter((candidate) => candidate !== item);
+    return true;
+  }
+
+  private ownedItem(ownerId: string, itemId: string): WardrobeItemRecord | undefined {
+    return this.items.find((item) => item.id === itemId && item.ownerId === ownerId);
   }
 }

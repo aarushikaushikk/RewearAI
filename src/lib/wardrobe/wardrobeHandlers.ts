@@ -6,7 +6,7 @@ import { validateCsrfOrigin } from '@/lib/auth/csrf';
 import { requireAuth } from '@/lib/auth/sessionHelper';
 import { RepositoryUnavailableError } from '@/lib/repositories/repositoryErrors';
 import { getProductionWardrobeItemService } from '@/lib/wardrobe/getWardrobeItemService';
-import { parseNewItemPayload } from '@/lib/validation/wardrobeValidation';
+import { parseItemDetailsPayload, parseNewItemPayload } from '@/lib/validation/wardrobeValidation';
 import { MAX_IMAGE_BYTES, MAX_IMAGE_LABEL } from '@/types/upload';
 
 export interface WardrobeHandlerDeps {
@@ -100,6 +100,80 @@ export async function handleCreateItem(
     return NextResponse.json({ success: true, data: item }, { status: created ? 201 : 200 });
   } catch (err) {
     return failureResponse(err, 'create');
+  }
+}
+
+/** GET /api/wardrobe: the signed-in user's items, newest first (US4). */
+export async function handleListItems(req: Request, deps?: WardrobeHandlerDeps): Promise<Response> {
+  try {
+    const { user } = await requireAuth(req, deps?.authService);
+    const wardrobeService = deps?.wardrobeService || getProductionWardrobeItemService();
+    const items = await wardrobeService.listItems(user.id);
+    return NextResponse.json({ success: true, data: items });
+  } catch (err) {
+    return failureResponse(err, 'list');
+  }
+}
+
+/** GET /api/wardrobe/[itemId]: 404 for another user's item, as for a missing one. */
+export async function handleGetItem(
+  req: Request,
+  itemId: string,
+  deps?: WardrobeHandlerDeps,
+): Promise<Response> {
+  try {
+    const { user } = await requireAuth(req, deps?.authService);
+    const wardrobeService = deps?.wardrobeService || getProductionWardrobeItemService();
+    const item = await wardrobeService.getItem(user.id, itemId);
+    return NextResponse.json({ success: true, data: item });
+  } catch (err) {
+    return failureResponse(err, 'get');
+  }
+}
+
+/** PATCH /api/wardrobe/[itemId]: replaces the editable details. */
+export async function handleUpdateItem(
+  req: Request,
+  itemId: string,
+  deps?: WardrobeHandlerDeps,
+): Promise<Response> {
+  if (!validateCsrfOrigin(req)) {
+    return csrfFailure();
+  }
+
+  try {
+    // The owner comes from the session; an image, owner or availability in the body is dropped.
+    const { user } = await requireAuth(req, deps?.authService);
+    const input = parseItemDetailsPayload(await req.json().catch(() => undefined));
+    if (!input) {
+      return errorResponse(INVALID_PAYLOAD_ERROR, 400);
+    }
+
+    const wardrobeService = deps?.wardrobeService || getProductionWardrobeItemService();
+    const item = await wardrobeService.updateItem(user.id, itemId, input);
+    return NextResponse.json({ success: true, data: item });
+  } catch (err) {
+    return failureResponse(err, 'update');
+  }
+}
+
+/** DELETE /api/wardrobe/[itemId]: deletes the item and its Cloudinary photo. */
+export async function handleDeleteItem(
+  req: Request,
+  itemId: string,
+  deps?: WardrobeHandlerDeps,
+): Promise<Response> {
+  if (!validateCsrfOrigin(req)) {
+    return csrfFailure();
+  }
+
+  try {
+    const { user } = await requireAuth(req, deps?.authService);
+    const wardrobeService = deps?.wardrobeService || getProductionWardrobeItemService();
+    await wardrobeService.deleteItem(user.id, itemId);
+    return NextResponse.json({ success: true, data: { id: itemId } });
+  } catch (err) {
+    return failureResponse(err, 'delete');
   }
 }
 

@@ -1,6 +1,6 @@
 import 'server-only';
 import { WardrobeItem } from '@/models/WardrobeItem';
-import { CreateWardrobeItemDTO, WardrobeItemRecord } from '@/types/wardrobe';
+import { CreateWardrobeItemDTO, WardrobeItemDetails, WardrobeItemRecord } from '@/types/wardrobe';
 import { isObjectIdString, withDatabase } from './mongoSupport';
 import { RepositoryError } from './repositoryErrors';
 import { IWardrobeItemRepository } from './wardrobeItemRepository';
@@ -67,6 +67,59 @@ export class MongoWardrobeItemRepository implements IWardrobeItemRepository {
         'image.publicId': { $in: publicIds },
       });
       return used;
+    });
+  }
+
+  async listByOwner(ownerId: string): Promise<WardrobeItemRecord[]> {
+    if (!isObjectIdString(ownerId)) {
+      return [];
+    }
+    return withDatabase('wardrobeItem.listByOwner', async () => {
+      // _id breaks ties between items created in the same millisecond.
+      const items = await WardrobeItem.find({ owner: ownerId }).sort({ createdAt: -1, _id: -1 }).lean();
+      return items.map((item) => toRecord(item as StoredItem));
+    });
+  }
+
+  async findByIdForOwner(ownerId: string, itemId: string): Promise<WardrobeItemRecord | null> {
+    if (!isObjectIdString(ownerId) || !isObjectIdString(itemId)) {
+      return null;
+    }
+    return withDatabase('wardrobeItem.findByIdForOwner', async () => {
+      const item = await WardrobeItem.findOne({ _id: itemId, owner: ownerId }).lean();
+      return item ? toRecord(item as StoredItem) : null;
+    });
+  }
+
+  async updateForOwner(
+    ownerId: string,
+    itemId: string,
+    details: WardrobeItemDetails,
+  ): Promise<WardrobeItemRecord | null> {
+    if (!isObjectIdString(ownerId) || !isObjectIdString(itemId)) {
+      return null;
+    }
+    const { name, category, color, style, season, formality } = details;
+    return withDatabase('wardrobeItem.updateForOwner', async () => {
+      const item = await WardrobeItem.findOneAndUpdate(
+        { _id: itemId, owner: ownerId },
+        {
+          $set: { category, color, style, season, formality, ...(name ? { name } : {}) },
+          ...(name ? {} : { $unset: { name: 1 } }),
+        },
+        { returnDocument: 'after', runValidators: true },
+      ).lean();
+      return item ? toRecord(item as StoredItem) : null;
+    });
+  }
+
+  async deleteForOwner(ownerId: string, itemId: string): Promise<boolean> {
+    if (!isObjectIdString(ownerId) || !isObjectIdString(itemId)) {
+      return false;
+    }
+    return withDatabase('wardrobeItem.deleteForOwner', async () => {
+      const result = await WardrobeItem.deleteOne({ _id: itemId, owner: ownerId });
+      return result.deletedCount === 1;
     });
   }
 }

@@ -1,0 +1,61 @@
+Issue #9 (Edit and Remove Clothing): red, then green
+Command: npx vitest run <the new and changed test files>
+
+=== RED: commit e557600, before any implementation ===
+ FAIL  tests/integration/pages/wardrobePages.test.tsx [ tests/integration/pages/wardrobePages.test.tsx ]
+ FAIL  tests/unit/components/ui/ConfirmDialog.test.tsx [ tests/unit/components/ui/ConfirmDialog.test.tsx ]
+ FAIL  tests/unit/components/wardrobe/ClothingDetail.test.tsx [ tests/unit/components/wardrobe/ClothingDetail.test.tsx ]
+ FAIL  tests/unit/components/wardrobe/WardrobeGrid.test.tsx [ tests/unit/components/wardrobe/WardrobeGrid.test.tsx ]
+ FAIL  tests/unit/wardrobe/itemDisplayName.test.ts [ tests/unit/wardrobe/itemDisplayName.test.ts ]
+Error: Cannot find module '@/lib/wardrobe/itemDisplayName' imported from 'tests/unit/wardrobe/itemDisplayName.test.ts'.
+Error: Failed to resolve import "@/app/wardrobe/page" from "tests/integration/pages/wardrobePages.test.tsx". Does the file exist?
+Error: Failed to resolve import "@/components/ui/ConfirmDialog" from "tests/unit/components/ui/ConfirmDialog.test.tsx". Does the file exist?
+Error: Failed to resolve import "@/components/wardrobe/ClothingDetail" from "tests/unit/components/wardrobe/ClothingDetail.test.tsx". Does the file exist?
+Error: Failed to resolve import "@/components/wardrobe/WardrobeGrid" from "tests/unit/components/wardrobe/WardrobeGrid.test.tsx". Does the file exist?
+Typical failures in files that loaded:
+   7 TypeError: (0 , handleUpdateItem) is not a function
+   5 TypeError: repo.updateForOwner is not a function
+   5 TypeError: (0 , handleDeleteItem) is not a function
+   4 TypeError: service.updateItem is not a function
+   4 TypeError: service.deleteItem is not a function
+   4 TypeError: repo.deleteForOwner is not a function
+   3 TypeError: repo.findByIdForOwner is not a function
+   3 TypeError: (0 , validateItemDetails) is not a function
+   3 TypeError: (0 , parseItemDetailsPayload) is not a function
+   3 TypeError: (0 , handleListItems) is not a function
+   3 TypeError: (0 , handleGetItem) is not a function
+   2 TypeError: service.listItems is not a function
+ Test Files  9 failed (9)
+      Tests  62 failed | 130 passed (192)
+
+=== GREEN: npm test ===
+ Test Files  69 passed | 1 skipped (70)
+      Tests  1148 passed | 1 skipped (1149)
+
+=== GREEN: npm run test:db ===
+ ✓ tests/db/mongoWardrobeItemRepository.test.ts (32 tests) 943ms
+ Test Files  13 passed (13)
+      Tests  378 passed (378)
+
+=== GREEN: npm run test:smoke (build routes, then tests) ===
+┌ ○ /
+├ ○ /_not-found
+├ ƒ /api/auth/google
+├ ƒ /api/auth/google/callback
+├ ƒ /api/auth/login
+├ ƒ /api/auth/logout
+├ ƒ /api/auth/register
+├ ƒ /api/auth/session
+├ ƒ /api/cron/cleanup-uploads
+├ ƒ /api/uploads
+├ ƒ /api/wardrobe
+├ ƒ /api/wardrobe/[itemId]
+├ ƒ /home
+├ ƒ /sign-in
+├ ƒ /sign-up
+├ ƒ /wardrobe
+├   /wardrobe/[itemId]
+│ └ ◐ /wardrobe/[itemId]
+└ ƒ /wardrobe/new
+ Test Files  2 passed (2)
+      Tests  35 passed (35)
