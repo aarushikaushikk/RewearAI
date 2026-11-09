@@ -292,7 +292,7 @@ describe('AddClothingForm', () => {
       await user.click(screen.getByRole('button', { name: 'Confirm and save' }));
 
       expect(await screen.findByText('Saved to your wardrobe.')).toBeInTheDocument();
-      expect(screen.getByAltText('White Button-down')).toHaveAttribute(
+      expect(screen.getByAltText('White Top')).toHaveAttribute(
         'src',
         expect.stringContaining('res.cloudinary.com'),
       );

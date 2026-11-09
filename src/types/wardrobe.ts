@@ -93,7 +93,10 @@ export interface NewWardrobeItem {
   formality: Formality;
 }
 
-export interface CreateWardrobeItemDTO extends Omit<NewWardrobeItem, "publicId"> {
+/** The details a user can edit on a saved item (US4): everything but the image and availability. */
+export type WardrobeItemDetails = Omit<NewWardrobeItem, "publicId">;
+
+export interface CreateWardrobeItemDTO extends WardrobeItemDetails {
   ownerId: string;
   image: WardrobeImage;
 }
