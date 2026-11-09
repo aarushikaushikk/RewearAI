@@ -27,6 +27,7 @@ export type RepositoryOperation =
   | 'account.findByProvider'
   | 'account.create'
   | 'session.create'
+  | 'outfit.listAvailableItems'
   | 'session.findActive'
   | 'session.revoke'
   | 'wardrobeItem.create'

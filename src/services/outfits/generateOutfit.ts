@@ -9,8 +9,10 @@
 // - Only the user's own, available items are used, each at most once. Nothing is invented:
 //   when no core can be formed, the result says so instead of returning a partial outfit.
 
-import { OCCASIONS, type Occasion } from '@/types/outfit';
+import { OCCASIONS, type InsufficientReason, type Occasion, type OutfitRole } from '@/types/outfit';
 import type { Category, Formality, Season, WardrobeItemRecord } from '@/types/wardrobe';
+
+export type { InsufficientReason, OutfitRole };
 
 /** The fields generation needs; callers may pass richer records and get the same objects back. */
 export type OutfitCandidate = Pick<
@@ -18,18 +20,10 @@ export type OutfitCandidate = Pick<
   'id' | 'ownerId' | 'isAvailable' | 'category' | 'season' | 'formality'
 >;
 
-export type OutfitRole = 'top' | 'bottom' | 'dress' | 'shoes' | 'outerwear' | 'accessory';
-
 export interface OutfitPiece<T> {
   role: OutfitRole;
   item: T;
 }
-
-/**
- * - `no_suitable_items`: none of the user's available items has a formality for this occasion.
- * - `no_complete_outfit`: suitable items exist, but no Top + Bottom or Dress can be formed.
- */
-export type InsufficientReason = 'no_suitable_items' | 'no_complete_outfit';
 
 export type OutfitGenerationResult<T> =
   | {
