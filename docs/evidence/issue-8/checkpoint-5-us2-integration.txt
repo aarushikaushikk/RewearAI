@@ -1,0 +1,43 @@
+Issue #8 (US3) Checkpoint 5: classification integrated into US2's Add Clothing flow
+Branch: feature/8-classification-integration (after merging origin/main at 2a358c0)
+
+Flow: choose photo -> resize (US2) -> upload to /api/uploads (US2) and, at the same time,
+classifyClothingImage(resizedBlob, getBrowserClassifier()) in the browser worker (US3) -> details
+step appears when the upload finishes -> suggestions fill fields the user hasn't touched ->
+user reviews/edits -> Confirm and save -> POST /api/wardrobe (US2, unchanged).
+No new endpoint, schema, auth, or API contract change. @huggingface/transformers stays at 4.3.1.
+
+=== TDD ===
+RED (reviewFields stubbed to throw; AddClothingForm unchanged):
+  Test Files  3 failed (3)
+       Tests  17 failed | 16 passed (33)
+  The 16 passing are US2's existing tests plus "ignores a result that arrives after the form
+  was reset", which passes trivially before integration (nothing is filled in) and is kept
+  as a regression guard.
+GREEN: 33 of 33 on the first implementation run.
+Mutation checks (each restored afterwards):
+  - Removing the stale-result check in runClassification: 3 tests failed (replaced photo,
+    reset form, Enter details manually while loading).
+  - Letting suggestions overwrite edited fields: 2 tests failed (reviewFields unit test and
+    the AddClothingForm delayed-prediction test).
+
+=== SUPERSEDED US2 ASSUMPTION ===
+"shows the uploaded photo beside the five detail fields": the assertion that no text mentions
+"suggest" described the form before classification existed. It now asserts that, while the
+model loads, the analysis status is shown and no field is labelled "Suggested from your photo."
+All other US2 assertions are unchanged.
+
+=== FINAL CHECKS ===
+npm test:             1045 passed, 1 skipped (opt-in live model test), 65 files
+                      (baseline 1036, minus 9 removed ClassificationReview tests, plus 18 new)
+npm run typecheck:    exit 0
+npm run lint:         exit 0, no warnings
+npm run build:        exit 0. Transformers.js only in one 526 KB client chunk loaded by the
+                      worker; .next/server contains no Transformers.js or onnxruntime code.
+npm audit --omit=dev: 0 vulnerabilities
+git diff --check:     exit 0
+
+=== NOT VERIFIED HERE ===
+The signed-in /wardrobe/new page wasn't run end to end in a real browser, because that uses
+real Atlas and Cloudinary credentials. The worker and model were verified in real Chrome
+in Checkpoint 4B.

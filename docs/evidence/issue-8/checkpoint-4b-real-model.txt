@@ -1,0 +1,64 @@
+Issue #8 (US3) Checkpoint 4B: real FashionSigLIP model in a Web Worker
+
+Dependency: @huggingface/transformers 4.3.1, pinned exactly (provisional; Aarushi to confirm before
+merging, per AGENTS.md section 2). It shares sharp with Next.js. npm audit --omit=dev: 0 vulnerabilities.
+No paid API, API key, or cloud billing. Images are processed in the browser and never uploaded for
+classification; only the model and runtime files are downloaded (Hugging Face, jsDelivr).
+
+=== 1. MODEL LOADS WITH 4.3.1 (Node, before writing any code) ===
+AutoTokenizer, AutoProcessor, SiglipTextModel, and SiglipVisionModel, as in the model card,
+with dtype "q8". Outputs: text_embeds [n, 768], image_embeds [1, 768].
+Quantized files: vision_model_quantized.onnx 94.0 MB, text_model_quantized.onnx 111.1 MB.
+Model card example image (a hippo in a hat): "a hat" 0.973 (the card reports 0.986 at full precision).
+
+=== 2. TDD: worker request handling ===
+RED: isClassifyRequest and createClassifierRequestHandler were stubs that threw.
+ Test Files  2 failed (2)
+      Tests  17 failed | 14 passed (31)     (the 14 passing are the existing isWorkerResponse tests)
+GREEN: 47 of 48 at first; the failing one was a test bug (a variable used before declaration),
+fixed by rewriting that test. Then 48 of 48.
+Mutation check: removing the one-at-a-time queue made "runs requests one at a time" fail; restored.
+getBrowserClassifier: its test failed because the module didn't exist, then passed.
+
+=== 3. REAL INFERENCE, OUR FULL PIPELINE (Node, opt-in live test) ===
+RUN_LIVE_MODEL=1 LIVE_IMAGE_DIR=<dir> npx vitest run fashionSigLipModel.live
+Photos: Wikimedia Commons, item only, no people: "Red-t-shirt-.jpg" (CC BY-SA 4.0), "White
+sneakers.jpg" (CC BY-SA 4.0, worn with jeans visible), "Black worn leather jacket detail 1.jpg"
+(CC0), plus the model card's hippo image. Kept in a local scratch folder, not committed.
+black-leather-jacket.jpg [2097 ms*] category=Outerwear (uncertain), color=Black (suggested), style=Jacket (uncertain), season=Autumn (uncertain), formality=Smart casual (uncertain)
+fashion-hippo.png [314 ms] category=Accessory (suggested), color=Blue (uncertain), style=Hat (suggested), season=Autumn (uncertain), formality=Casual (uncertain)
+red-t-shirt.jpg [63 ms] category=Top (suggested), color=Red (suggested), style=T-shirt (suggested), season=Summer (uncertain), formality=Casual (uncertain)
+white-sneakers.jpg [79 ms] category=Shoes (suggested), color=White (suggested), style=Sneakers (suggested), season=All-season (uncertain), formality=Casual (uncertain)
+* first image: includes loading the cached model and embedding the 54 prompts.
+
+=== 4. NEXT.JS 16 / TURBOPACK BUILD ===
+With a temporary local page that used getBrowserClassifier (deleted afterwards, never committed):
+next build (Turbopack) exit 0. Transformers.js appeared only in one 528 KB static worker chunk,
+not in page code. .next/server contained no Transformers.js or onnxruntime code. next.config.ts
+unchanged.
+
+=== 5. REAL BROWSER (headless Chrome 'next start', same temporary page) ===
+Run 1, fresh profile (downloads the model):
+  first photo 27.7 s (download plus model start), then 610, 618, 638 ms per photo.
+  Largest main-thread pause during the run: 51 ms. Browser storage afterwards: 208 MB in
+  Cache Storage "transformers-cache".
+  red-t-shirt: Top, Red, T-shirt suggested; Summer, Casual uncertain. The review form showed
+  Top, Red, T-shirt, Summer, Casual.
+  white-sneakers: Shoes, White, Sneakers suggested.
+  black-leather-jacket: Outerwear, Black suggested; Jacket uncertain.
+  fashion-hippo: Accessory, Hat suggested; color Green uncertain.
+Run 2, same profile (model from cache): first photo 12.7 s (starting the model and embedding the
+  prompts), then about 600 ms per photo. Largest main-thread pause: 30 ms.
+Run 3, fresh profile with huggingface.co, *.hf.co, and cdn.jsdelivr.net blocked by DNS: every
+  photo returned "unavailable" in 89 ms or less, which shows manual entry. Largest pause: 21 ms.
+  (A first attempt using DevTools URL blocking didn't block requests from the worker, so the
+  model downloaded; DNS blocking applies to workers too.)
+
+=== 6. FINAL CHECKS ===
+npm test:             218 passed, 1 skipped (the opt-in live test), 18 files
+npx tsc --noEmit:     exit 0 (rerun after rebuilding; the first run read stale .next types that
+                      still listed the deleted temporary page)
+npm run lint:         exit 0, no warnings (an unused test parameter was removed)
+npm run build:        exit 0, after removing the temporary page
+git diff --check:     exit 0
+npm audit --omit=dev: 0 vulnerabilities

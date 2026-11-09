@@ -1,0 +1,72 @@
+Issue #8 (US3) Checkpoint 4, part 1: dependency-free foundation for in-browser classification
+
+Scope: scoring math, the worker message protocol, and the main-thread worker adapter. No new
+dependency was installed, and classifier.worker.ts doesn't exist yet. No paid API or API key.
+
+Files:
+src/services/classification/zeroShotScoring.ts (+ test)
+src/services/classification/browser/workerProtocol.ts (+ test)
+src/services/classification/browser/createWorkerClassifier.ts (+ test)
+
+=== RED ===
+All three modules started as stubs that throw "Not implemented".
+ Test Files  3 failed (3)
+      Tests  45 failed | 1 passed (46)
+The passing test is a compile-time check that the adapter's type fits ZeroShotImageClassifier and
+that a real Worker fits WorkerLike. In a first red run, 10 rejection tests passed only because the
+stubs throw anything; they were tightened to check the specific reason before implementing.
+Later addition: a request whose postMessage throws (for example DataCloneError) leaked the raw
+error. The new test failed ("expected DOMException ... to be an instance of WorkerClassifierError"),
+then passed after the fix.
+
+=== GREEN ===
+New tests: 47 of 47 pass. All classification and review UI tests: 90 of 90 pass.
+npm test:         200 tests in 15 files pass
+npx tsc --noEmit: exit 0
+npm run lint:     exit 0
+npm run build:    exit 0
+git diff --check: exit 0
+
+=== WHAT THE ADAPTER GUARANTEES (each covered by a test) ===
+- Creates the worker on first use and reuses it; requests carry unique IDs, so concurrent
+  replies resolve the right request in any order.
+- Rejects with a WorkerClassifierError code: load_failed, inference_failed, invalid_response,
+  crashed, timeout, unavailable, disposed. classifyClothingImage turns any of them into
+  "unavailable", which offers manual entry. Codes are for diagnostics, never shown to users.
+- A crash, or a timeout, stops the worker and fails all its pending requests; the next call starts
+  a new worker. Late replies and replies from replaced workers are ignored.
+- Until a worker first answers it gets the longer loading timeout (default 300 s, covering the
+  one-time model download); afterwards each request gets 60 s. Both are untested starting values.
+- createBrowserClassifier returns null where Worker or WebAssembly is missing.
+
+=== PROPOSED FASHIONSIGLIP INTEGRATION (blocked on approval) ===
+Dependency: @huggingface/transformers, pinned to exactly 4.3.1 (Apache-2.0). Needs both partners'
+approval (AGENTS.md section 2). Its browser build imports only onnxruntime-web, so next.config.ts
+needs no changes, as long as the package is imported only inside the worker.
+
+New file src/services/classification/browser/classifier.worker.ts:
+1. On the first request, load Marqo/marqo-fashionSigLIP once: AutoTokenizer, AutoProcessor,
+   SiglipTextModel, and SiglipVisionModel (the model card's Transformers.js example). Quantized
+   download about 205 MB plus about 27 MB of ONNX Runtime WASM, kept in the browser cache.
+2. Embed the prompt labels once (padding: "max_length") and cache the embeddings for those labels.
+3. For each image: RawImage from the Blob or URL, processor, vision model, then
+   scoreLabels(imageEmbedding, labelEmbeddings, labels) from zeroShotScoring.ts.
+4. Reply { type: "result", id, scores }, or { type: "error", id, code } with load_failed or
+   inference_failed. Never post raw error details.
+
+Wiring for US2:
+  const classifier = createBrowserClassifier(
+    () => new Worker(new URL("./classifier.worker.ts", import.meta.url), { type: "module" }),
+  );
+  const result = await classifyClothingImage(file, classifier);
+This line belongs with the worker file, because Turbopack resolves the worker URL at build time.
+
+=== REMAINING WORK AND BLOCKERS ===
+1. Blocked: teammate approval to install @huggingface/transformers 4.3.1.
+2. Then: classifier.worker.ts and the browser-classifier factory above.
+3. Then: real-photo testing of FashionSigLIP against CLIP; tune CONFIDENT_MIN_SHARE (0.6),
+   CONFIDENT_MIN_MARGIN (0.2), the prompts, and the timeouts.
+4. Then: a browser check of first download, cache reuse, a responsive page, and manual entry when
+   the network is blocked; also confirm the server build doesn't include Transformers.js.
+5. Optional: a useClothingClassification hook that connects classifyClothingImage to
+   ClassificationReview for US2.
