@@ -29,6 +29,39 @@ const SAVE_STATUS_MESSAGES: Record<number, string> = {
   404: "We couldn't find that image. Please upload it again.",
 };
 
+// US4 (#9): loading, editing and deleting a saved item (DESIGN §6.1, wireframes 03 and 04).
+export const LOAD_WARDROBE_FAILED_MESSAGE = "We couldn't load your wardrobe. Try again.";
+export const LOAD_ITEM_FAILED_MESSAGE = "We couldn't load this item. Try again.";
+export const ITEM_GONE_MESSAGE = "We couldn't find this clothing item. It may have been deleted.";
+const UPDATE_FAILED_MESSAGE = "We couldn't save your changes. Try again.";
+const DELETE_FAILED_MESSAGE = "We couldn't delete this item. Try again.";
+
+const LOAD_STATUS_MESSAGES: Record<number, string> = {
+  401: SHARED_STATUS_MESSAGES[401],
+};
+
+const UPDATE_STATUS_MESSAGES: Record<number, string> = {
+  ...SHARED_STATUS_MESSAGES,
+  400: 'Review or correct the highlighted details before saving.',
+  404: ITEM_GONE_MESSAGE,
+};
+
+const DELETE_STATUS_MESSAGES: Record<number, string> = {
+  ...SHARED_STATUS_MESSAGES,
+};
+
+export function getLoadErrorMessage(status: number, fallback: string): string {
+  return LOAD_STATUS_MESSAGES[status] ?? fallback;
+}
+
+export function getUpdateErrorMessage(status: number): string {
+  return UPDATE_STATUS_MESSAGES[status] ?? UPDATE_FAILED_MESSAGE;
+}
+
+export function getDeleteErrorMessage(status: number): string {
+  return DELETE_STATUS_MESSAGES[status] ?? DELETE_FAILED_MESSAGE;
+}
+
 export function getUploadErrorMessage(status: number): string {
   return UPLOAD_STATUS_MESSAGES[status] ?? UPLOAD_FAILED_MESSAGE;
 }

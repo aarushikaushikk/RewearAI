@@ -31,7 +31,11 @@ export type RepositoryOperation =
   | 'session.revoke'
   | 'wardrobeItem.create'
   | 'wardrobeItem.findByImage'
-  | 'wardrobeItem.findUsedImageIds';
+  | 'wardrobeItem.findUsedImageIds'
+  | 'wardrobeItem.listByOwner'
+  | 'wardrobeItem.findByIdForOwner'
+  | 'wardrobeItem.updateForOwner'
+  | 'wardrobeItem.deleteForOwner';
 
 export type ErrorCategory =
   | 'connection'

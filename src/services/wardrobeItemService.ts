@@ -3,10 +3,14 @@ import { DuplicateImageError } from '@/lib/repositories/repositoryErrors';
 import { IWardrobeItemRepository } from '@/lib/repositories/wardrobeItemRepository';
 import { validateImageBytes } from '@/lib/validation/imageValidation';
 import {
+  ItemDetailsInput,
   NewItemInput,
+  toItemDetails,
   toNewWardrobeItem,
+  validateItemDetails,
   validateNewItemInput,
 } from '@/lib/validation/wardrobeValidation';
+import { ValidationResult } from '@/types/auth';
 import { WardrobeImage, WardrobeItemDto, WardrobeItemRecord } from '@/types/wardrobe';
 
 /** Marks uploads not yet saved to a wardrobe item, so cleanup can find abandoned ones. */
@@ -21,6 +25,8 @@ const BATCH_SIZE = 100;
 const UPLOAD_FAILED_MESSAGE = "Your image didn't upload. Please try again.";
 const SAVE_FAILED_MESSAGE = "We couldn't save this item. Try again.";
 const IMAGE_NOT_FOUND_MESSAGE = "We couldn't find that image. Please upload it again.";
+const ITEM_NOT_FOUND_MESSAGE = "We couldn't find that clothing item.";
+const DELETE_FAILED_MESSAGE = "We couldn't delete this item. Try again.";
 
 export class WardrobeError extends Error {
   constructor(
@@ -69,8 +75,20 @@ function batches<T>(items: T[]): T[][] {
 }
 
 // Logs fixed values only: image service errors can contain credentials.
-function logFailure(operation: 'image.upload' | 'image.find'): void {
+function logFailure(operation: 'image.upload' | 'image.find' | 'image.delete'): void {
   console.error('[wardrobe] operation failed', { operation });
+}
+
+function throwIfInvalid(validation: ValidationResult): void {
+  if (!validation.isValid) {
+    const [firstError] = Object.values(validation.errors);
+    throw new WardrobeError(firstError, 'VALIDATION_ERROR', 400);
+  }
+}
+
+// The same answer for another user's item as for a missing one, so IDs can't be probed.
+function itemNotFound(): WardrobeError {
+  return new WardrobeError(ITEM_NOT_FOUND_MESSAGE, 'ITEM_NOT_FOUND', 404);
 }
 
 export class WardrobeItemService {
@@ -103,11 +121,7 @@ export class WardrobeItemService {
    * same save returns the existing item instead of creating a duplicate.
    */
   async createItem(userId: string, input: NewItemInput): Promise<CreateItemResult> {
-    const validation = validateNewItemInput(input);
-    if (!validation.isValid) {
-      const [firstError] = Object.values(validation.errors);
-      throw new WardrobeError(firstError, 'VALIDATION_ERROR', 400);
-    }
+    throwIfInvalid(validateNewItemInput(input));
     const { publicId, ...details } = toNewWardrobeItem(input);
 
     // Same answer for another user's image as for a missing one, so IDs can't be probed.
@@ -140,6 +154,52 @@ export class WardrobeItemService {
       }
       return { item: toWardrobeItemDto(existing), created: false };
     }
+  }
+
+  /** The user's items, newest first (US4). */
+  async listItems(userId: string): Promise<WardrobeItemDto[]> {
+    const records = await this.itemRepo.listByOwner(userId);
+    return records.map(toWardrobeItemDto);
+  }
+
+  /** One of the user's items; another user's item is reported as not found. */
+  async getItem(userId: string, itemId: string): Promise<WardrobeItemDto> {
+    const record = await this.itemRepo.findByIdForOwner(userId, itemId);
+    if (!record) {
+      throw itemNotFound();
+    }
+    return toWardrobeItemDto(record);
+  }
+
+  /** Saves edited details with the Add Clothing rules. The image and availability don't change. */
+  async updateItem(userId: string, itemId: string, input: ItemDetailsInput): Promise<WardrobeItemDto> {
+    throwIfInvalid(validateItemDetails(input));
+    const record = await this.itemRepo.updateForOwner(userId, itemId, toItemDetails(input));
+    if (!record) {
+      throw itemNotFound();
+    }
+    return toWardrobeItemDto(record);
+  }
+
+  /**
+   * Deletes the item and its photo. The photo goes first: if that fails the item is
+   * kept and can be deleted again. If the record then fails, a retry finds the item
+   * and deleting the already-removed photo succeeds, so the retry finishes the job.
+   */
+  async deleteItem(userId: string, itemId: string): Promise<void> {
+    const record = await this.itemRepo.findByIdForOwner(userId, itemId);
+    if (!record) {
+      throw itemNotFound();
+    }
+
+    try {
+      await this.imageStore.delete([record.image.publicId]);
+    } catch {
+      logFailure('image.delete');
+      throw new WardrobeError(DELETE_FAILED_MESSAGE, 'DELETE_FAILED', 502);
+    }
+
+    await this.itemRepo.deleteForOwner(userId, itemId);
   }
 
   /**
