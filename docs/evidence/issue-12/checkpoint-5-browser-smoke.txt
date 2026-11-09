@@ -1,0 +1,119 @@
+Issue #12 (US7) Checkpoint 5: browser smoke test
+Branch: feature/12-occasion-outfit-generation (after d46c0b0)
+
+=== ENVIRONMENT ===
+- App: the real production build (`next build`, then `next start` through the existing
+  tests/helpers/nextApp.ts startApp) on a random 127.0.0.1 port.
+- Database: a temporary local MongoDB from tests/helpers/mongoTestServer.ts (a 127.0.0.1 URI
+  and a rewear_test_* database name are enforced); deleted afterwards. No Atlas.
+- Secrets: MONGODB_URI is set to the temporary server. GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
+  CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET and CRON_SECRET are passed
+  as empty strings, so Next.js can't load them from .env.local. .env.local wasn't read or
+  changed, and nothing was uploaded.
+- Browser: Google Chrome (installed locally), headless, driven over the DevTools protocol by
+  tests/helpers/chromeCdp.ts, which uses Node 24's built-in fetch and WebSocket (no new
+  dependency). It ran with a throwaway profile and background networking, component updates
+  and sync turned off.
+- External network: only res.cloudinary.com, fetched by the Next.js image optimizer.
+    https://res.cloudinary.com/demo/image/upload/sample.jpg -> 200 image/jpeg (109,669 bytes),
+      checked with curl first; used for the photos.
+    https://res.cloudinary.com/demo/image/upload/rewear-smoke-missing-9f3c.jpg -> 404, checked
+      first; used to test the placeholder.
+- Data (synthetic, created through the real WardrobeItem schema; users created through the real
+  sign-up API):
+    User A: Oxford shirt (Top, Smart casual), Chinos (Bottom, Smart casual, missing photo),
+      Loafers (Shoes, Smart casual), Linen tee (Top, Casual, Summer), Denim shorts (Bottom,
+      Casual, Summer), Wool coat (Outerwear, Smart casual, Winter), and Unavailable blazer
+      (Top, Smart casual, isAvailable false), which is A's newest top.
+    User B (newest overall): Silk gown (Dress, Formal), Hoodie (Top, Casual), Joggers (Bottom,
+      Casual). Generation prefers newer items, so a broken owner or availability filter would
+      pick the blazer or B's items; B's gown would also make "formal" succeed.
+    Insufficient case: User A owns no Formal items.
+
+=== FILES ADDED ===
+tests/helpers/chromeCdp.ts              minimal DevTools protocol client (opt-in browser tests)
+tests/smoke/outfitGeneration.smoke.ts   6 HTTP checks (always run by npm run test:smoke) plus
+                                        11 browser checks (only with SMOKE_CHROME_PATH set)
+docs/evidence/issue-12/screenshots/     6 screenshots (see below)
+
+Command used:
+  SMOKE_CHROME_PATH="C:/Program Files/Google/Chrome/Application/chrome.exe" \
+  SMOKE_SCREENSHOT_DIR=".../docs/evidence/issue-12/screenshots" npm run test:smoke
+
+=== RESULTS ===
+Run 1 (first run, US7 file only): 16 passed, 1 failed.
+  Failed: "has no unexpected console errors or failed application requests". There were 4
+  failed requests, all net::ERR_ABORTED on Next.js background prefetches (/home?_rsc=...,
+  /wardrobe/new?_rsc=...).
+  Investigation: the test now records Chrome's own `canceled` flag and the resource type. Every
+  aborted request is a canceled Fetch prefetch, and every existing route that had one canceled
+  also had successful 200 prefetches in the same run (/home 5, /wardrobe/new 6, /sign-in 3,
+  /sign-up 2, /outfits/create 2). Chrome cancels in-flight prefetches when the page navigates
+  away, so this is a test-environment effect, not a product bug. Only requests that Chrome
+  flags as canceled, with net::ERR_ABORTED and an _rsc prefetch URL, are set aside. Every other
+  failed request, error response and console error still fails the test.
+Run 2 (US7 file): 17 passed.
+Full smoke suite (npm run test:smoke, browser on): 3 files, 52 passed
+  (productionAuth 20, outfitGeneration 17, googleAuth 15).
+Without SMOKE_CHROME_PATH: 6 passed, 11 skipped (the default npm run test:smoke behaviour).
+
+Browser checks (all passed in runs 2 and 3):
+ 1. A signed-out visitor at /outfits/create is redirected to /sign-in.
+ 2. User A signs in through the real sign-in form, lands on /home, and opens /outfits/create
+    (one h1, "Create Outfit").
+ 3. The select offers Choose…, Work, Dinner, Weekend, Casual, Formal.
+ 4. Generate Outfit sends exactly one POST /api/outfits/generate, answered by the real API.
+ 5-6. Work shows Oxford shirt, Chinos, Loafers and Wool coat. The blazer and B's items never
+    appear (checked in the page text for Work and Formal, and in the API responses for all
+    five occasions).
+ 7. Names and roles (Top, Bottom, Shoes, Outerwear) render; focus moves to the result heading.
+ 8. The Oxford shirt <img> loads (complete, naturalWidth > 0). Its currentSrc is
+    /_next/image?url=https%3A%2F%2Fres.cloudinary.com%2Fdemo%2Fimage%2Fupload%2Fsample.jpg...,
+    and that response was 200 with an image MIME type.
+ 9. The missing Chinos photo (/_next/image answered 404) is replaced by "Image unavailable"
+    (role=img, "Image unavailable for A Chinos"); the name and role stay.
+10. Formal: "There aren't enough available items for a formal outfit yet." with View wardrobe
+    (/wardrobe) and Add clothing (/wardrobe/new).
+11. Changing the occasion from Work to Casual removes the outfit.
+12. With the request held by DevTools Fetch, three clicks in one script turn give one request;
+    the button is disabled with aria-busy, and the select is disabled; the outfit then appears.
+13. A 500 injected by DevTools Fetch shows "We couldn't generate an outfit. Try again." The
+    occasion stays Weekend, and Try again then gets the real weekend outfit (Linen tee, Denim
+    shorts, Loafers).
+14. After the sessions are deleted from the temporary database, Generate gets a 401, the alert
+    says the session has ended, and there is a Sign in link to /sign-in?reason=session-ended
+    with no Try again.
+15. No unexpected console errors or failed requests. Expected and reported: the missing demo
+    photo's 404s, the injected 500 and the 401. Reported as belonging to other stories: 404
+    prefetches of /wardrobe (US4, PR #38), /outfits/saved (US9) and /outfits/history (US10),
+    caused by the header links and the View wardrobe link.
+
+HTTP checks (all passed): /outfits/create redirects a visitor (307 to /sign-in); the API
+returns 401 without a session, 403 for a cross-site origin, and 400 when a userId is sent; each
+of the 5 occasions returns exactly the expected items, or insufficient for formal (reason
+no_suitable_items); no response contains blazer or User B names, publicId, ownerId or
+isAvailable.
+
+=== SCREENSHOTS (docs/evidence/issue-12/screenshots/) ===
+desktop-1280-occasion-selector.png   desktop-1280-recommendation.png   desktop-1280-insufficient.png
+mobile-375-occasion-selector.png     mobile-375-recommendation.png     mobile-375-insufficient.png
+They show only the fake user name "Smoke Tester A"; no credentials, cookies or tokens.
+
+=== LAYOUT ===
+1280 px: the select and Generate Outfit share one row; 4 items in 3 columns (2 rows); the
+  placeholder card is the same size as the photo cards; the recovery links sit side by side.
+375 px: the header collapses to Menu; the select and a full-width button stack; items are one
+  per row (4 rows); the recovery links are full width and stacked; no horizontal scroll
+  (scrollWidth <= innerWidth) on any of the three screens.
+The demo sample is landscape, so it is letterboxed in the 4:5 frames (object-contain), which
+  keeps the whole photo visible.
+
+=== OTHER CHECKS (same session) ===
+npm test 1177 passed (1 skipped); npm run test:db 367 passed; typecheck exit 0; lint exit 0;
+git diff --check exit 0; the new files have no trailing whitespace.
+
+=== CLEANUP ===
+No mongod processes, no smoke Chrome processes, and no rewear-smoke-chrome-* profile folders
+were left. A `next start -p 3123` server started on 2026-11-07, before this test, is still
+running on port 3123. It isn't from this smoke test (which uses random 127.0.0.1 ports) and
+was left as it is.
