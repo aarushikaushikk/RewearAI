@@ -1,0 +1,31 @@
+Issue #8 (US3) Checkpoint 3: classification review UI
+
+Scope: a reusable client component, ClassificationReview. No page, database write, Cloudinary
+upload, sign-in check, paid API, or Transformers.js.
+
+=== TEST TOOLING ===
+Added as devDependencies, at the versions US1's PR #33 already uses: @testing-library/react
+^16.3.3, @testing-library/user-event ^14.6.8, jsdom ^29.1.1. vitest.config.ts now includes
+*.test.tsx files. npm audit --omit=dev: 0 vulnerabilities. The full npm audit lists 11 dev-only
+findings (Vitest's tinypool and @vitest/mocker, and minimatch); the committed lockfile has the
+same 11, so these packages added none.
+
+=== RED: ClassificationReview was a stub that rendered nothing ===
+ Test Files  1 failed (1)
+      Tests  9 failed (9)
+Each failed because the expected image, field, button, or message was missing.
+
+=== GREEN ===
+The first run failed 8 of 9: the test's label lookup also matched a wrapper given role="group"
+and labelled by the field label. The wrapper role was removed, and the test now finds each status
+badge through the field's aria-describedby, which also checks it is announced with the field.
+Focused (component and classification services): 43 of 43 pass.
+npm test:         153 tests in 12 files pass
+npx tsc --noEmit: exit 0
+npm run lint:     exit 0
+npm run build:    exit 0
+git diff --check: exit 0
+
+=== REFACTOR ===
+The style rule from Checkpoint 1 is exported as normalizeStyle and reused by the form, so the
+40-character limit and control-character check live in one place. Checkpoint 1 tests still pass.

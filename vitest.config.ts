@@ -1,3 +1,4 @@
+
 import path from 'node:path';
 import { configDefaults, defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
@@ -14,7 +15,12 @@ export default defineConfig({
   test: {
     environment: 'node',
     globals: true,
-    include: ['src/**/*.test.ts', 'tests/**/*.test.ts', 'tests/**/*.test.tsx'],
+    include: [
+      'src/**/*.test.ts',
+      'src/**/*.test.tsx',
+      'tests/**/*.test.ts',
+      'tests/**/*.test.tsx',
+    ],
     // Real-database tests run separately through `npm run test:db`.
     exclude: [...configDefaults.exclude, 'tests/db/**'],
     environmentOptions: {},

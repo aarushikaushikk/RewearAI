@@ -1,0 +1,39 @@
+Issue #8 (US3) Checkpoint 2: free, in-browser classification (provider-independent part)
+
+Scope: no paid API, API key, or cloud billing. The model would run in the user's browser. Only the
+provider-independent code is built; the model package is waiting for team approval (AGENTS.md
+section 2: "Ask both partners before adding a major dependency"). Nothing was installed.
+
+=== PROPOSED DEPENDENCY (needs both partners' approval) ===
+Package:   @huggingface/transformers 4.3.2 (Transformers.js), Apache-2.0
+           Depends on onnxruntime-web (currently a dev build, 1.31.0-dev), plus sharp and
+           onnxruntime-node for Node. Those two must be kept out of the browser bundle.
+Model:     Xenova/clip-vit-base-patch32, MIT. Zero-shot image classification.
+           Quantized download about 154 MB, once per browser, then cached.
+           OpenAI's CLIP model card describes the model as intended for research.
+Alternative: Marqo/marqo-fashionSigLIP, Apache-2.0, trained on fashion images, about 205 MB
+           quantized. Not yet confirmed to load in Transformers.js.
+Browsers:  WebAssembly backend in current Chrome, Edge, Firefox, and Safari; WebGPU is optional.
+           Low-memory phones may fail to load the model; that returns "unavailable" and the user
+           enters details manually.
+Cost:      None per image. Model files are served free from Hugging Face's CDN (or could be
+           self-hosted in /public).
+
+=== RED: interpretZeroShotScores and classifyClothingImage were stubs that threw ===
+ Test Files  2 failed | 1 passed (3)
+      Tests  14 failed | 20 passed (34)
+All 14 new behavior tests failed with "Not implemented". The 20 passing were Checkpoint 1's 18 and
+2 checks on the prompt tables (unique prompts, every allowed value covered), which are data.
+
+=== GREEN ===
+Focused: 34 of 34 pass.
+npm test:         144 tests in 11 files pass
+npx tsc --noEmit: exit 0
+npm run lint:     exit 0
+npm run build:    exit 0
+git diff --check: exit 0
+
+=== NOT DONE (blocked on approval) ===
+- The Transformers.js adapter that implements ZeroShotImageClassifier, ideally in a Web Worker.
+- Next.js bundling settings for the package.
+- A check on real clothing photos to tune CONFIDENT_MIN_SHARE (0.6) and CONFIDENT_MIN_MARGIN (0.2).
