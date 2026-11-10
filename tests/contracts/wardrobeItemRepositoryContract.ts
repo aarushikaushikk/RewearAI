@@ -127,7 +127,6 @@ export function describeWardrobeItemRepositoryContract(
       it("returns only the owner's items, newest first", async () => {
         const first = await repo.create(itemFor(userA, 'u/a/1'));
         await repo.create(itemFor(userB, 'u/b/1'));
-        await new Promise((resolve) => setTimeout(resolve, 5));
         const second = await repo.create(itemFor(userA, 'u/a/2'));
 
         const items = await repo.listByOwner(userA);
@@ -136,10 +135,74 @@ export function describeWardrobeItemRepositoryContract(
         expect(items.every((item) => item.ownerId === userA)).toBe(true);
       });
 
-      it('returns an empty list for a user with no items', async () => {
+      it('returns an empty list for a user with no items or an ID that is not stored', async () => {
         await repo.create(itemFor(userA, 'u/a/1'));
 
         await expect(repo.listByOwner(userB)).resolves.toEqual([]);
+        await expect(repo.listByOwner('not-an-id')).resolves.toEqual([]);
+      });
+    });
+
+    describe('setAvailability', () => {
+      it('marks an item unavailable, then available again, and keeps each change', async () => {
+        const item = await repo.create(itemFor(userA, 'u/a/1'));
+
+        const unavailable = await repo.setAvailability(userA, item.id, false);
+        expect(unavailable).toMatchObject({ id: item.id, ownerId: userA, isAvailable: false });
+        expect((await repo.listByOwner(userA))[0].isAvailable).toBe(false);
+
+        const available = await repo.setAvailability(userA, item.id, true);
+        expect(available).toMatchObject({ id: item.id, isAvailable: true });
+        expect((await repo.listByOwner(userA))[0].isAvailable).toBe(true);
+      });
+
+      it('gives the same result when an update is repeated', async () => {
+        const item = await repo.create(itemFor(userA, 'u/a/1'));
+
+        await repo.setAvailability(userA, item.id, false);
+        const repeated = await repo.setAvailability(userA, item.id, false);
+
+        expect(repeated?.isAvailable).toBe(false);
+        expect(await repo.listByOwner(userA)).toHaveLength(1);
+      });
+
+      it("returns null and changes nothing for another user's item", async () => {
+        const item = await repo.create(itemFor(userA, 'u/a/1'));
+
+        await expect(repo.setAvailability(userB, item.id, false)).resolves.toBeNull();
+        expect((await repo.listByOwner(userA))[0].isAvailable).toBe(true);
+      });
+
+      it('returns null for an unknown or malformed item ID, or a malformed owner', async () => {
+        const item = await repo.create(itemFor(userA, 'u/a/1'));
+
+        await expect(repo.setAvailability(userA, '64b0000000000000000000ff', false)).resolves.toBeNull();
+        await expect(repo.setAvailability(userA, 'not-an-id', false)).resolves.toBeNull();
+        await expect(repo.setAvailability('not-an-id', item.id, false)).resolves.toBeNull();
+        expect((await repo.listByOwner(userA))[0].isAvailable).toBe(true);
+      });
+    });
+
+    describe('listAvailableByOwner', () => {
+      it('leaves out an unavailable item, and includes it again once it is available', async () => {
+        const shirt = await repo.create(itemFor(userA, 'u/a/1'));
+        const coat = await repo.create(itemFor(userA, 'u/a/2'));
+
+        await repo.setAvailability(userA, shirt.id, false);
+        expect((await repo.listAvailableByOwner(userA)).map((item) => item.id)).toEqual([coat.id]);
+
+        await repo.setAvailability(userA, shirt.id, true);
+        expect((await repo.listAvailableByOwner(userA)).map((item) => item.id)).toEqual([
+          coat.id,
+          shirt.id,
+        ]);
+      });
+
+      it("never includes another user's items", async () => {
+        await repo.create(itemFor(userB, 'u/b/1'));
+
+        await expect(repo.listAvailableByOwner(userA)).resolves.toEqual([]);
+        await expect(repo.listAvailableByOwner('not-an-id')).resolves.toEqual([]);
       });
     });
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  parseAvailabilityPayload,
   parseItemDetailsPayload,
   parseNewItemPayload,
   toItemDetails,
@@ -105,6 +106,26 @@ describe('toNewWardrobeItem', () => {
       season: 'Summer',
       formality: 'Smart casual',
     });
+  });
+});
+
+describe('parseAvailabilityPayload', () => {
+  it.each([true, false])('accepts { isAvailable: %s }', (isAvailable) => {
+    expect(parseAvailabilityPayload({ isAvailable })).toEqual({ isAvailable });
+  });
+
+  it.each([
+    ['nothing', undefined],
+    ['null', null],
+    ['an array', [true]],
+    ['a bare boolean', false],
+    ['an empty object', {}],
+    ['the string "false"', { isAvailable: 'false' }],
+    ['a number', { isAvailable: 0 }],
+    ['null availability', { isAvailable: null }],
+    ['an extra field such as an owner', { isAvailable: false, owner: 'someone-else' }],
+  ])('rejects %s', (_label, body) => {
+    expect(parseAvailabilityPayload(body)).toBeNull();
   });
 });
 

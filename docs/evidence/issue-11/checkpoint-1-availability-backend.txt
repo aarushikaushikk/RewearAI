@@ -1,0 +1,44 @@
+Issue #11 (US6) Checkpoint 1: availability backend and API
+Branch: feature/11-update-availability (from main at 0c609b2)
+
+Scope: strict { isAvailable: boolean } validation; repository listByOwner, listAvailableByOwner,
+setAvailability (MongoDB and in-memory); service listItems, listAvailableItems, setAvailability;
+PATCH /api/wardrobe/[id]/availability. No UI, no outfit logic, and no changes to models, auth,
+or files touched by US3 PR #34.
+
+=== TDD ===
+RED (new methods were stubs that threw; the route file delegated to a stub handler):
+  npx vitest run <validation, contracts, service, routes>
+    Test Files  4 failed (4)
+         Tests  37 failed | 130 passed (167)     (all 37 failures are new tests)
+  npm run test:db -- tests/db/mongoWardrobeItemRepository.test.ts
+    Tests  13 failed | 15 passed (28)            (all 13 failures are new tests)
+  (The first database red run also failed one existing test: an injected driver failure leaked
+  because the spy was restored only when its test passed. Fixed by restoring spies in afterEach.)
+GREEN: 167 of 167 and 28 of 28 on the first implementation run.
+Mutation checks (each restored afterwards):
+  M1 owner removed from the MongoDB update filter -> "returns null and changes nothing for
+     another user's item" failed.
+  M2 isAvailable filter removed from listAvailableByOwner -> "leaves out an unavailable item,
+     and includes it again once it is available" failed.
+  M3 extra payload fields allowed -> the validation test and the route's 400 test both failed.
+
+=== SECURITY BEHAVIOUR COVERED ===
+- The CSRF origin check runs first (403), including through the real route's PATCH export.
+- The session decides the owner (401 without one). The owner is part of the database filter, so
+  another user's item is never matched or changed.
+- Another user's item and a missing item give the same 404 "We couldn't find that item.", so
+  item IDs can't be probed.
+- Malformed owner and item IDs return before any query is made.
+- The body must be exactly { isAvailable: boolean }. Strings such as "false", numbers, null and
+  extra fields such as an owner get a 400, with nothing changed.
+- Outages give a 503 with a safe message. Driver errors give a 500 with a generic message. Logs
+  and responses contain no driver details (host, credentials, raw error text).
+
+=== FINAL CHECKS ===
+npm test:           965 passed, 55 files (37 new)
+npm run test:db:    374 passed, 13 files (13 new), on the isolated temporary MongoDB server only
+npm run typecheck:  exit 0
+npm run lint:       exit 0, no warnings
+npm run build:      exit 0; route listed as dynamic: /api/wardrobe/[id]/availability
+git diff --check:   exit 0

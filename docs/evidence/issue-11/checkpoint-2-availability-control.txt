@@ -1,0 +1,43 @@
+Issue #11 (US6) Checkpoint 2: reusable AvailabilityControl component
+Branch: feature/11-update-availability (after f41a7fa)
+
+Scope: src/components/wardrobe/AvailabilityControl.tsx and its tests. It calls the existing
+PATCH /api/wardrobe/[id]/availability. No page, no backend change, and no files touched by US3
+PR #34.
+
+=== TDD ===
+RED (component was a stub returning null):
+  Test Files  1 failed (1)
+       Tests  12 failed (12)
+GREEN: 12 of 12 on the first implementation run.
+Mutation checks (each restored afterwards):
+  M1 in-flight request guard removed: at first, every test still passed. The repeated-click test
+     used fireEvent, which re-renders after each click, so the disabled button alone blocked the
+     extra clicks. The test now sends three clicks in one act() batch, before React re-renders
+     (as a fast double click can), then clicks the disabled button too. With M1: 1 failed
+     ("sends one request however many times the button is pressed while saving").
+  M2 status changed before the server answers: 8 failed (the old status shown while saving, and
+     every failure test that expects the previous status to stay).
+
+=== BEHAVIOUR COVERED (12 tests) ===
+- Status shown as text ("Available"/"Unavailable"); a symbol is added but is hidden from screen
+  readers, so status is never conveyed by color alone.
+- The button's accessible name includes the item: "Mark unavailable: White Button-down".
+- Available to unavailable and back: PATCH to the URL-encoded item ID with
+  { isAvailable: <new value> } and a JSON content type.
+- While saving: the button reads "Saving…" and is disabled with aria-busy; the old status stays.
+- On success: the status comes from the server's response, a polite status region announces
+  "<item> marked unavailable." and onChange receives the updated item.
+- On failure: the previous status stays; an alert explains, in the app's own words, a 401, 403,
+  404, 503 or other error, a network failure, or a success response without a usable item.
+  Server error text is never shown. A retry clears the error.
+- Repeated clicks while saving send one request.
+- A new isAvailable prop from the parent replaces the shown status.
+
+=== FINAL CHECKS ===
+Focused:            12 passed
+npm test:           977 passed, 56 files (12 new)
+npm run typecheck:  exit 0
+npm run lint:       exit 0, no warnings
+npm run build:      exit 0
+git diff --check:   exit 0 (new files checked separately: no trailing whitespace)

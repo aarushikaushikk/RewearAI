@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import { ClothingDetail } from '@/components/wardrobe/ClothingDetail';
@@ -18,6 +18,7 @@ const URL = '/api/wardrobe/item_1';
 const GET = `GET ${URL}`;
 const PATCH = `PATCH ${URL}`;
 const DELETE = `DELETE ${URL}`;
+const AVAILABILITY = `PATCH ${URL}/availability`;
 const loaded = (item = ITEM) => ({ status: 200, body: { success: true, data: item } });
 
 type User = ReturnType<typeof userEvent.setup>;
@@ -34,7 +35,7 @@ beforeEach(() => {
 
 afterEach(cleanup);
 
-// Wireframe 04, without the availability toggle, which is #11.
+// Wireframe 04, including the availability toggle from US6 (#11).
 describe('ClothingDetail', () => {
   describe('viewing', () => {
     it('shows a loading state while the item loads', () => {
@@ -58,7 +59,8 @@ describe('ClothingDetail', () => {
       expect(screen.getByLabelText(/^style/i)).toHaveValue('Classic');
       expect(screen.getByLabelText(/^season/i)).toHaveValue('All-season');
       expect(screen.getByLabelText(/^formality/i)).toHaveValue('Smart casual');
-      expect(screen.getByText('Available')).toBeInTheDocument();
+      expect(screen.getByRole('group', { name: 'Availability' })).not.toHaveTextContent('Unavailable');
+      expect(screen.getByRole('button', { name: 'Mark unavailable: White Oxford Shirt' })).toBeInTheDocument();
     });
 
     it('marks Name optional and the other details required, as on Add Clothing', async () => {
@@ -241,6 +243,79 @@ describe('ClothingDetail', () => {
       expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
       expect(screen.getByRole('heading', { level: 1, name: 'White Oxford Shirt' })).toBeInTheDocument();
       expect(push).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('availability (US6)', () => {
+    const availability = () => screen.getByRole('group', { name: 'Availability' });
+    const saved = (isAvailable: boolean) => ({
+      status: 200,
+      body: { success: true, data: { ...ITEM, isAvailable, updatedAt: '2026-11-09T10:00:00.000Z' } },
+    });
+
+    it('marks the item unavailable through the availability API, keeping unsaved edits', async () => {
+      const user = userEvent.setup();
+      const fetchMock = mockRoutes({ [GET]: [loaded()], [AVAILABILITY]: [saved(false)] });
+      render(<ClothingDetail itemId="item_1" />);
+      await screen.findByRole('heading', { level: 1, name: 'White Oxford Shirt' });
+      expect(availability()).not.toHaveTextContent('Unavailable');
+
+      await user.clear(screen.getByLabelText(/^style/i));
+      await user.type(screen.getByLabelText(/^style/i), 'Oxford');
+      await user.click(screen.getByRole('button', { name: 'Mark unavailable: White Oxford Shirt' }));
+
+      expect(await screen.findByRole('button', { name: 'Mark available: White Oxford Shirt' })).toBeInTheDocument();
+      expect(availability()).toHaveTextContent('Unavailable');
+      expect(screen.getByText('White Oxford Shirt marked unavailable.')).toBeInTheDocument();
+      expect(screen.getByLabelText(/^style/i)).toHaveValue('Oxford');
+      const [, init] = fetchMock.mock.calls.find(([url]) => url === '/api/wardrobe/item_1/availability')!;
+      expect(init).toMatchObject({ method: 'PATCH', headers: { Origin: window.location.origin } });
+      expect(JSON.parse(init!.body as string)).toEqual({ isAvailable: false });
+    });
+
+    it('shows an unavailable item as unavailable when the page is opened again', async () => {
+      mockRoutes({ [GET]: [loaded(itemDto({ id: 'item_1', isAvailable: false }))] });
+
+      render(<ClothingDetail itemId="item_1" />);
+
+      expect(await screen.findByRole('button', { name: 'Mark available: White Oxford Shirt' })).toBeInTheDocument();
+      expect(availability()).toHaveTextContent('Unavailable');
+    });
+
+    it.each([
+      [500, "We couldn't update availability. Try again."],
+      [404, "We couldn't find this clothing item. It may have been deleted."],
+      [401, 'Your session has ended. Sign in again to continue.'],
+    ])('keeps the saved status and explains a %i failure', async (status, message) => {
+      const user = userEvent.setup();
+      mockRoutes({ [GET]: [loaded()], [AVAILABILITY]: [{ status }] });
+      render(<ClothingDetail itemId="item_1" />);
+
+      await user.click(await screen.findByRole('button', { name: 'Mark unavailable: White Oxford Shirt' }));
+
+      expect(await within(availability()).findByRole('alert')).toHaveTextContent(message);
+      expect(availability()).not.toHaveTextContent('Unavailable');
+      expect(screen.getByRole('button', { name: 'Mark unavailable: White Oxford Shirt' })).toBeEnabled();
+    });
+
+    it('keeps the new status when details are saved afterwards', async () => {
+      const user = userEvent.setup();
+      mockRoutes({
+        [GET]: [loaded()],
+        [AVAILABILITY]: [saved(false)],
+        [PATCH]: [{ status: 200, body: { success: true, data: { ...ITEM, style: 'Oxford', isAvailable: false } } }],
+      });
+      render(<ClothingDetail itemId="item_1" />);
+      await user.click(await screen.findByRole('button', { name: 'Mark unavailable: White Oxford Shirt' }));
+      await screen.findByRole('button', { name: 'Mark available: White Oxford Shirt' });
+
+      await user.clear(screen.getByLabelText(/^style/i));
+      await user.type(screen.getByLabelText(/^style/i), 'Oxford');
+      await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+      expect(await screen.findByText('Changes saved.')).toBeInTheDocument();
+      expect(availability()).toHaveTextContent('Unavailable');
+      expect(screen.getByRole('button', { name: 'Mark available: White Oxford Shirt' })).toBeInTheDocument();
     });
   });
 });

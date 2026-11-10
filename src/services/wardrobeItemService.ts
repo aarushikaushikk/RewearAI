@@ -162,6 +162,14 @@ export class WardrobeItemService {
     return records.map(toWardrobeItemDto);
   }
 
+  /**
+   * `userId`'s available items, newest first. New outfit suggestions (US7) must draw only
+   * from this list, so unavailable clothing is never recommended.
+   */
+  async listAvailableItems(userId: string): Promise<WardrobeItemDto[]> {
+    return (await this.itemRepo.listAvailableByOwner(userId)).map(toWardrobeItemDto);
+  }
+
   /** One of the user's items; another user's item is reported as not found. */
   async getItem(userId: string, itemId: string): Promise<WardrobeItemDto> {
     const record = await this.itemRepo.findByIdForOwner(userId, itemId);
@@ -175,6 +183,18 @@ export class WardrobeItemService {
   async updateItem(userId: string, itemId: string, input: ItemDetailsInput): Promise<WardrobeItemDto> {
     throwIfInvalid(validateItemDetails(input));
     const record = await this.itemRepo.updateForOwner(userId, itemId, toItemDetails(input));
+    if (!record) {
+      throw itemNotFound();
+    }
+    return toWardrobeItemDto(record);
+  }
+
+  /**
+   * Marks one of `userId`'s items available or unavailable (US6). Repeating an update gives
+   * the same result. Another user's item gets the same 404 as a missing one.
+   */
+  async setAvailability(userId: string, itemId: string, isAvailable: boolean): Promise<WardrobeItemDto> {
+    const record = await this.itemRepo.setAvailability(userId, itemId, isAvailable);
     if (!record) {
       throw itemNotFound();
     }

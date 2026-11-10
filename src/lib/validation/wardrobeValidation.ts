@@ -122,6 +122,21 @@ export function validateItemDetails(input: ItemDetailsInput): ValidationResult {
   return { isValid: Object.keys(errors).length === 0, errors };
 }
 
+/**
+ * Accepts exactly `{ isAvailable: boolean }`. Anything else, including a string such as
+ * "false" or an extra field such as an owner, is rejected rather than coerced or dropped.
+ */
+export function parseAvailabilityPayload(body: unknown): { isAvailable: boolean } | null {
+  if (!isRecord(body)) {
+    return null;
+  }
+  const keys = Object.keys(body);
+  if (keys.length !== 1 || keys[0] !== 'isAvailable' || typeof body.isAvailable !== 'boolean') {
+    return null;
+  }
+  return { isAvailable: body.isAvailable };
+}
+
 /** Converts input that passed validateNewItemInput into a typed, trimmed item. */
 export function toNewWardrobeItem(input: NewItemInput): NewWardrobeItem {
   return { publicId: input.publicId.trim(), ...toItemDetails(input) };

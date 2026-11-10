@@ -33,8 +33,10 @@ export type RepositoryOperation =
   | 'wardrobeItem.findByImage'
   | 'wardrobeItem.findUsedImageIds'
   | 'wardrobeItem.listByOwner'
+  | 'wardrobeItem.listAvailableByOwner'
   | 'wardrobeItem.findByIdForOwner'
   | 'wardrobeItem.updateForOwner'
+  | 'wardrobeItem.setAvailability'
   | 'wardrobeItem.deleteForOwner';
 
 export type ErrorCategory =
