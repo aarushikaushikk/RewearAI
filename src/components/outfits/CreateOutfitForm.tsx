@@ -10,6 +10,7 @@ import {
   SIGN_IN_SESSION_ENDED_PATH,
 } from '@/components/outfits/outfitDisplay';
 import { OutfitItemImage } from '@/components/outfits/OutfitItemImage';
+import { SaveOutfitButton } from '@/components/outfits/SaveOutfitButton';
 import { Alert } from '@/components/ui/Alert';
 import { PrimaryButton } from '@/components/ui/PrimaryButton';
 import { SelectField } from '@/components/ui/SelectField';
@@ -96,7 +97,8 @@ function viewFor(data: unknown, requested: Occasion): ViewState {
 
 /**
  * Create Outfit (DESIGN §5.6, wireframe 08): choose an occasion, generate, and review the
- * recommended items. Save, Mark as worn, Try another and feedback belong to later stories.
+ * recommended items, and save the outfit (US9). Mark as worn, Try another and feedback
+ * belong to later stories.
  */
 export function CreateOutfitForm() {
   const [selected, setSelected] = useState('');
@@ -262,6 +264,8 @@ export function CreateOutfitForm() {
               </li>
             ))}
           </ul>
+          {/* Generating again unmounts this section, so each new outfit starts unsaved. */}
+          <SaveOutfitButton occasion={view.outfit.occasion} itemIds={view.outfit.items.map((item) => item.id)} />
         </section>
       )}
     </div>
