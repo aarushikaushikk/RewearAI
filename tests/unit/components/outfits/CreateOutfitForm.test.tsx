@@ -257,6 +257,44 @@ describe('CreateOutfitForm', () => {
     expect(screen.queryByRole('heading', { name: /Your outfit for/ })).not.toBeInTheDocument();
   });
 
+  it('offers Save outfit for the generated outfit, saving its occasion and items', async () => {
+    const fetchMock = mockFetch(success(OUTFIT), reply(201, { success: true, data: { id: 'outfit_1' } }));
+    render(<CreateOutfitForm />);
+    await generateFor(user, 'Work');
+
+    await user.click(await screen.findByRole('button', { name: 'Save outfit' }));
+
+    expect(fetchMock.mock.calls[1][0]).toBe('/api/outfits/saved');
+    expect(sentBody(fetchMock, 1)).toEqual({ occasion: 'work', itemIds: ['item_shirt', 'item_chinos'] });
+    expect(await screen.findByText('Outfit saved.')).toBeInTheDocument();
+  });
+
+  it('keeps the outfit on screen when saving fails', async () => {
+    mockFetch(success(OUTFIT), reply(500));
+    render(<CreateOutfitForm />);
+    await generateFor(user, 'Work');
+
+    await user.click(await screen.findByRole('button', { name: 'Save outfit' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent("We couldn't save your outfit. Try again.");
+    expect(screen.getByRole('heading', { name: 'Your outfit for Work' })).toBeInTheDocument();
+    expect(screen.getByText('Linen shirt')).toBeInTheDocument();
+  });
+
+  it('offers to save a newly generated outfit afresh', async () => {
+    const other = { ...OUTFIT, occasion: 'casual' as const };
+    mockFetch(success(OUTFIT), reply(201, { success: true, data: { id: 'outfit_1' } }), success(other));
+    render(<CreateOutfitForm />);
+    await generateFor(user, 'Work');
+    await user.click(await screen.findByRole('button', { name: 'Save outfit' }));
+    await screen.findByText('Outfit saved.');
+
+    await generateFor(user, 'Casual');
+
+    expect(await screen.findByRole('button', { name: 'Save outfit' })).toBeEnabled();
+    expect(screen.queryByText('Outfit saved.')).not.toBeInTheDocument();
+  });
+
   describe('robustness (final review fixes)', () => {
     const PLACEHOLDER = 'Image unavailable for Linen shirt';
 
