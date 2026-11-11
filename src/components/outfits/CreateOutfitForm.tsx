@@ -3,6 +3,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { NETWORK_ERROR_MESSAGE } from '@/components/auth/authFormErrors';
+import {
+  displayName,
+  OCCASION_LABELS,
+  SECONDARY_ACTION,
+  SIGN_IN_SESSION_ENDED_PATH,
+} from '@/components/outfits/outfitDisplay';
 import { OutfitItemImage } from '@/components/outfits/OutfitItemImage';
 import { Alert } from '@/components/ui/Alert';
 import { PrimaryButton } from '@/components/ui/PrimaryButton';
@@ -27,14 +33,6 @@ type ViewState =
   | { status: 'insufficient'; occasion: Occasion }
   | { status: 'error'; message: string; sessionEnded?: boolean };
 
-const OCCASION_LABELS: Record<Occasion, string> = {
-  work: 'Work',
-  dinner: 'Dinner',
-  weekend: 'Weekend',
-  casual: 'Casual',
-  formal: 'Formal',
-};
-
 const ROLE_LABELS: Record<OutfitRole, string> = {
   top: 'Top',
   bottom: 'Bottom',
@@ -55,19 +53,8 @@ const STATUS_MESSAGES: Record<number, string> = {
   503: 'Service temporarily unavailable. Please try again later.',
 };
 
-// Same as SIGN_IN_SESSION_ENDED_PATH, which lives in a server-only module; a test keeps them in sync.
-const SIGN_IN_SESSION_ENDED_PATH = '/sign-in?reason=session-ended';
-
-const SECONDARY_ACTION =
-  'inline-flex min-h-11 items-center justify-center rounded-xl border border-text-muted bg-surface px-4 font-medium text-text hover:bg-background focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2';
-
 const occasionFromLabel = (label: string): Occasion | undefined =>
   OCCASIONS.find((occasion) => OCCASION_LABELS[occasion] === label);
-
-/** The item's name, or its color and style when it has none (as on the Add Clothing card). */
-function displayName(item: Pick<OutfitItemDto, 'name' | 'color' | 'style'>): string {
-  return item.name ?? `${item.color} ${item.style}`;
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
