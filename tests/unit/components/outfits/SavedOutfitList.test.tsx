@@ -154,7 +154,7 @@ describe('SavedOutfitList', () => {
 
     await user.click(within(card('Dinner outfit')).getByRole('button', { name: 'Remove saved' }));
 
-    const dialog = screen.getByRole('dialog', { name: 'Remove this saved outfit?' });
+    const dialog = screen.getByRole('alertdialog', { name: 'Remove this saved outfit?' });
     expect(dialog).toHaveTextContent('Its clothing stays in your wardrobe.');
     await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
     expect(fetchMock).toHaveBeenCalledTimes(1);
