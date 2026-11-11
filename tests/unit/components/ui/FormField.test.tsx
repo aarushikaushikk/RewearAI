@@ -106,4 +106,37 @@ describe('FormField', () => {
     // The class must include something that enforces min-h-[44px] or min-h-11
     expect(input.className).toMatch(/min-h/);
   });
+
+  describe('warning state (US11)', () => {
+    const props = { id: 'style', label: 'Style', type: 'text' as const, value: 'Jacket', onChange: () => {} };
+    const HINT = 'Needs review. Confirm or change this suggestion.';
+
+    it('keeps the default look when no warning is set', () => {
+      render(<FormField {...props} hint={HINT} />);
+      const input = screen.getByLabelText('Style');
+      expect(input).toHaveClass('border-text-muted', 'bg-surface');
+      expect(input.className).not.toMatch(/warning/);
+      expect(screen.getByText(HINT)).toHaveClass('text-text-muted');
+    });
+
+    it('highlights the input and its hint in the warning colors, and keeps the hint as its description', () => {
+      render(<FormField {...props} hint={HINT} warning />);
+      const input = screen.getByLabelText('Style');
+      expect(input).toHaveClass('border-warning', 'bg-warning-soft');
+      expect(input).not.toHaveClass('border-text-muted');
+      expect(input).not.toHaveClass('bg-surface');
+      expect(input).not.toHaveAttribute('aria-invalid');
+      expect(input).toHaveAccessibleDescription(HINT);
+      expect(screen.getByText(HINT)).toHaveClass('text-warning');
+    });
+
+    it('shows a validation error instead of the warning', () => {
+      render(<FormField {...props} hint={HINT} warning error="Confirm or change this value." />);
+      const input = screen.getByLabelText('Style');
+      expect(input).toHaveClass('border-danger');
+      expect(input.className).not.toMatch(/warning/);
+      expect(input).toHaveAttribute('aria-invalid', 'true');
+      expect(input).toHaveAccessibleDescription('Confirm or change this value.');
+    });
+  });
 });

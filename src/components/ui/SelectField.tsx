@@ -11,6 +11,8 @@ export interface SelectFieldProps {
   error?: string;
   /** Help text beneath the select; an error replaces it, as in FormField. */
   hint?: string;
+  /** Highlights the select and hint in the warning colors; an error takes precedence. */
+  warning?: boolean;
   disabled?: boolean;
   /** Shown while no value is chosen. */
   placeholder?: string;
@@ -30,6 +32,7 @@ export function SelectField({
   optional,
   error,
   hint,
+  warning,
   disabled,
   placeholder = 'Choose…',
 }: SelectFieldProps) {
@@ -55,11 +58,15 @@ export function SelectField({
         aria-describedby={describedBy}
         className={[
           'w-full min-h-11 rounded-xl border px-3 py-2 text-base',
-          'bg-surface text-text',
+          'text-text',
           'focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary',
           'disabled:opacity-50 disabled:cursor-not-allowed',
           // The muted text color keeps input boundaries at 3:1 contrast or better.
-          error ? 'border-danger focus:ring-danger' : 'border-text-muted',
+          error
+            ? 'bg-surface border-danger focus:ring-danger'
+            : warning
+              ? 'bg-warning-soft border-warning'
+              : 'bg-surface border-text-muted',
         ].join(' ')}
       >
         <option value="">{placeholder}</option>
@@ -76,7 +83,7 @@ export function SelectField({
         </p>
       ) : (
         hint && (
-          <p id={hintId} className="text-sm text-text-muted mt-0.5">
+          <p id={hintId} className={`text-sm mt-0.5 ${warning ? 'text-warning' : 'text-text-muted'}`}>
             {hint}
           </p>
         )

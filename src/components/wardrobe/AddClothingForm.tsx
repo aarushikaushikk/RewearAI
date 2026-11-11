@@ -68,6 +68,7 @@ const ANALYSIS_FAILED_MESSAGE = "We couldn't analyze this image. You can retry o
 const NOT_CLOTHING_MESSAGE = "This photo doesn't look like a clothing item. You can enter the details manually.";
 const UNCERTAIN_MESSAGE = "We aren't confident about these details. Please review them before saving.";
 const SUGGESTED_MESSAGE = "We've filled in details suggested from your photo. Check each one before saving.";
+const REVIEW_BEFORE_SAVE_MESSAGE = 'Review or correct the highlighted details before saving.';
 
 const SECONDARY_BUTTON =
   'inline-flex min-h-11 items-center justify-center rounded-xl border border-text-muted bg-surface px-4 text-sm font-medium text-text hover:bg-background focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed';
@@ -88,6 +89,8 @@ export function AddClothingForm() {
   const [analysis, setAnalysis] = useState<AnalysisState>({ status: 'idle' });
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
+  // Set when a save was blocked by unreviewed suggestions; the message shows while any remain.
+  const [reviewBlocked, setReviewBlocked] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [savedItem, setSavedItem] = useState<WardrobeItemDto | null>(null);
   // Ignores the response for a photo the user has since replaced.
@@ -211,7 +214,9 @@ export function AddClothingForm() {
     const input = { ...details, publicId: upload.image?.publicId ?? '' };
     const validation = validateNewItemInput(input);
     // US2's validation messages come first; an otherwise valid uncertain value still needs review.
-    const errors: Record<string, string> = { ...reviewErrors(fields), ...validation.errors };
+    const unreviewed = reviewErrors(fields);
+    setReviewBlocked(Object.keys(unreviewed).length > 0);
+    const errors: Record<string, string> = { ...unreviewed, ...validation.errors };
     if (Object.keys(errors).length > 0) {
       setFieldErrors(errors);
       focusFirstInvalidField(errors);
@@ -332,6 +337,8 @@ export function AddClothingForm() {
           />
         )}
 
+        {reviewBlocked && hasUnreviewed(fields) && <Alert variant="error" message={REVIEW_BEFORE_SAVE_MESSAGE} />}
+
         <AnalysisNotice
           analysis={analysis}
           hasUnreviewed={hasUnreviewed(fields)}
@@ -352,6 +359,7 @@ export function AddClothingForm() {
               required
               error={fieldErrors.category}
               hint={reviewHint(fields.category)}
+              warning={!fields.category.reviewed}
               disabled={isSaving}
             />
             <ConfirmSuggestion field="category" state={fields.category} disabled={isSaving} onChange={setConfirmed} />
@@ -366,6 +374,7 @@ export function AddClothingForm() {
               required
               error={fieldErrors.color}
               hint={reviewHint(fields.color)}
+              warning={!fields.color.reviewed}
               disabled={isSaving}
             />
             <ConfirmSuggestion field="color" state={fields.color} disabled={isSaving} onChange={setConfirmed} />
@@ -380,6 +389,7 @@ export function AddClothingForm() {
               required
               error={fieldErrors.style}
               hint={reviewHint(fields.style)}
+              warning={!fields.style.reviewed}
               disabled={isSaving}
               placeholder="e.g. Button-down"
             />
@@ -395,6 +405,7 @@ export function AddClothingForm() {
               required
               error={fieldErrors.season}
               hint={reviewHint(fields.season)}
+              warning={!fields.season.reviewed}
               disabled={isSaving}
             />
             <ConfirmSuggestion field="season" state={fields.season} disabled={isSaving} onChange={setConfirmed} />
@@ -409,6 +420,7 @@ export function AddClothingForm() {
               required
               error={fieldErrors.formality}
               hint={reviewHint(fields.formality)}
+              warning={!fields.formality.reviewed}
               disabled={isSaving}
             />
             <ConfirmSuggestion

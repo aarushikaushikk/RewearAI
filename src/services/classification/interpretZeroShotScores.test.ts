@@ -8,7 +8,11 @@ import {
   GARMENT_PROMPTS,
   SEASON_PROMPTS,
 } from "./clothingLabels";
-import { interpretZeroShotScores } from "./interpretZeroShotScores";
+import {
+  CONFIDENT_MIN_MARGIN,
+  CONFIDENT_MIN_SHARE,
+  interpretZeroShotScores,
+} from "./interpretZeroShotScores";
 
 /** Gives the named prompts their scores and spreads `rest` evenly over every other prompt. */
 function scores(chosen: Record<string, number>, rest = 0): LabelScore[] {
@@ -31,6 +35,11 @@ const FACE = "a photo of a person's face";
 describe("clothing prompt tables", () => {
   it("has unique prompts so one model call can be split by group", () => {
     expect(new Set(ALL_PROMPTS).size).toBe(ALL_PROMPTS.length);
+  });
+
+  it("gives each garment style one category, so a style can be checked against the category", () => {
+    const styles = GARMENT_PROMPTS.map((g) => g.style);
+    expect(new Set(styles).size).toBe(styles.length);
   });
 
   it("covers every allowed category, color, season, and formality", () => {
@@ -94,5 +103,65 @@ describe("interpretZeroShotScores", () => {
 
   it("gives no clothing verdict when there are no usable garment scores", () => {
     expect(interpretZeroShotScores([]).isClothing).toBeUndefined();
+  });
+});
+
+describe("interpretZeroShotScores: category and style agreement (US11)", () => {
+  const JACKET = "a photo of a jacket";
+  const BLAZER = "a photo of a blazer";
+  const SHIRT = "a photo of a button-down shirt";
+  const SWEATER = "a photo of a sweater";
+  const HOODIE = "a photo of a hoodie";
+
+  // Tops win as a category (0.65 of garment scores), but the single best garment is a jacket.
+  const TOPS_WIN_JACKET_LEADS = {
+    [JACKET]: 0.3,
+    [BLAZER]: 0.05,
+    [TSHIRT]: 0.17,
+    [SHIRT]: 0.16,
+    [SWEATER]: 0.16,
+    [HOODIE]: 0.16,
+  };
+
+  it("flags a category that would be confident on its own when the style belongs to another category", () => {
+    const raw = interpretZeroShotScores(scores(TOPS_WIN_JACKET_LEADS));
+    expect(raw.style).toEqual({ value: "Jacket", confidence: "low" });
+    expect(raw.category).toEqual({ value: "Top", confidence: "low" });
+  });
+
+  it("keeps a conflicting category flagged when it was already uncertain", () => {
+    const raw = interpretZeroShotScores(
+      scores({ [JACKET]: 0.3, [BLAZER]: 0.15, [TSHIRT]: 0.2, [SHIRT]: 0.2, [SWEATER]: 0.15 }),
+    );
+    expect(raw.category).toEqual({ value: "Top", confidence: "low" });
+    expect(raw.style).toEqual({ value: "Jacket", confidence: "low" });
+  });
+
+  it("keeps a confident category when the uncertain style belongs to it", () => {
+    const raw = interpretZeroShotScores(scores({ [JEANS]: 0.35, [TROUSERS]: 0.3, [TSHIRT]: 0.05 }));
+    expect(raw.style).toEqual({ value: "Jeans", confidence: "low" });
+    expect(raw.category).toEqual({ value: "Bottom", confidence: "high" });
+  });
+
+  it("keeps every clear garment winner confident and consistent with its own category", () => {
+    for (const garment of GARMENT_PROMPTS) {
+      const raw = interpretZeroShotScores(scores({ [garment.prompt]: 0.9 }, 0.1));
+      expect(raw.category, garment.prompt).toEqual({ value: garment.category, confidence: "high" });
+      expect(raw.style, garment.prompt).toEqual({ value: garment.style, confidence: "high" });
+    }
+  });
+
+  it("leaves color, season, and formality unchanged when category and style conflict", () => {
+    const raw = interpretZeroShotScores(
+      scores({ ...TOPS_WIN_JACKET_LEADS, [NAVY]: 0.9, [WINTER]: 0.9, [CASUAL]: 0.9 }),
+    );
+    expect(raw.color).toEqual({ value: "Navy", confidence: "high" });
+    expect(raw.season).toEqual({ value: "Winter", confidence: "low" });
+    expect(raw.formality).toEqual({ value: "Casual", confidence: "low" });
+  });
+
+  it("keeps the confidence rule's thresholds unchanged", () => {
+    expect(CONFIDENT_MIN_SHARE).toBe(0.6);
+    expect(CONFIDENT_MIN_MARGIN).toBe(0.2);
   });
 });

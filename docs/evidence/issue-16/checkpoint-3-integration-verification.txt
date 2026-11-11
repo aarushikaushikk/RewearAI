@@ -1,0 +1,70 @@
+US11 Classification Uncertainty (#16), Checkpoint 3: integration verification on updated main
+Branch: feature/16-classification-uncertainty-clean (from origin/main a8628a8, after US5 PR #40).
+Date: 2026-11-11. US11 changes are uncommitted, transferred by patch from 059689f + 335da8e.
+No Git operations that change the repository were run. No code or test files changed in this
+checkpoint; this evidence file is the only new file.
+
+=== TRANSFER CHECK (git diff 335da8e -- <file>) ===
+Identical to the original US11 commits:
+  src/services/classification/interpretZeroShotScores.ts (+ .test.ts)
+  src/services/classification/reviewFields.ts (+ .test.ts)
+  src/components/ui/SelectField.tsx, tests/unit/components/ui/SelectField.test.tsx
+FormField.tsx: the only difference from 335da8e is US5's `type: ... | 'search'`, which is kept.
+AddClothingForm.tsx vs main: only the US11 lines (reviewBlocked state, review-before-save Alert,
+`warning` props on the five detail fields). Upload, classification, retry, not-clothing,
+manual-entry and the US4 saved-item display name (itemDisplayName) are unchanged.
+No US6 (PR #41) or US7 (PR #39) code is included.
+
+=== INTEGRATION DEFECTS ===
+None found. No fixes were needed.
+
+=== FOCUSED TESTS ===
+npx vitest run src/services/classification tests/unit/components/ui tests/unit/components/wardrobe
+ Test Files  18 passed | 1 skipped (19)
+      Tests  232 passed | 1 skipped (233)
+Includes the US3 classification tests, US11 uncertain-details tests, FormField/SelectField warning
+tests, and the US4/US5 wardrobe component tests.
+Skipped: fashionSigLipModel.live.test.ts (needs RUN_LIVE_MODEL and the Hugging Face model; by design).
+
+=== FULL CHECKS ===
+npm test:          Test Files 71 passed | 1 skipped (72); Tests 1214 passed | 1 skipped (1215); exit 0
+npm run test:db:   first run:  Test Files 1 failed | 12 passed (13); Tests 1 failed | 377 passed (378)
+                     tests/db/mongoTestServerFailure.test.ts > cleaning up after failures >
+                     never uses or prints a URI from the shell when a run ends with crash
+                     Error: EPERM, Permission denied: ...\AppData\Local\Temp\mongo-mem-benKzg
+                     at removeCrashedServerFiles (tests/helpers/mongoTestServer.ts:158)
+                   That file alone: 4 passed (4).
+                   second full run: Test Files 13 passed (13); Tests 378 passed (378); exit 0
+                   Assessment: an environment issue, not a US11 defect. On Windows, the deliberately
+                   crashed mongod still held its temp folder when cleanup ran. US11 does not touch
+                   tests/db or tests/helpers. The disk was almost full at the time (see below).
+npm run typecheck: exit 0
+npm run lint:      exit 0
+npm run build:     exit 0; every /api route shows as ƒ (auth/*, cron/cleanup-uploads, uploads,
+                   wardrobe, wardrobe/[itemId])
+test:smoke not run: US11 changes no auth or route code (AGENTS.md section 10 asks for it on those).
+
+=== US4 / US5 COMPATIBILITY (from the tests above) ===
+US4 view/edit/delete and US5 search/filter tests pass in npm test and test:db alongside US11.
+FormField `type="search"` (used by US5's wardrobe search) is preserved and type-checked.
+
+=== BROWSER VERIFICATION ===
+Not performed; blocked. AddClothingForm calls getBrowserClassifier() directly (no test seam), so
+the review UI only appears after the real FashionSigLIP model downloads from Hugging Face. The
+photo upload also goes to Cloudinary. Both need permission. A fake-classifier browser run would
+need new test-only code and Playwright, which the repo doesn't have yet (no e2e/ folder or
+playwright config), so it is outside this checkpoint.
+Still unverified in a real browser: how the warning highlight looks, how the review alert is
+announced by a real screen reader, and the end-to-end save with a real photo. These are covered
+only by jsdom component tests and the token contrast figures in Checkpoint 2.
+
+=== ENVIRONMENT NOTE ===
+Free space on C: was 3.6 GB at the start and 1.5 GB after npm test, then stayed at 1.5 GB through
+test:db, typecheck, lint and build. Something outside these commands may be using the disk.
+
+=== REMAINING / RISKS ===
+- Carried over from Checkpoints 1-2: thresholds are provisional; non-clothing photos can still be
+  confident; a touched field keeps its earlier hint after a retry; field errors stay until the
+  next save attempt.
+- Browser and real-model verification still to do (see above).
+- mongoTestServerFailure crash-cleanup test can fail with EPERM on Windows (pre-existing harness).
