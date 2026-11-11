@@ -3,7 +3,7 @@ import React from 'react';
 export interface FormFieldProps {
   id: string;
   label: string;
-  type: 'text' | 'email' | 'password';
+  type: 'text' | 'email' | 'password' | 'search';
   value: string;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   required?: boolean;
