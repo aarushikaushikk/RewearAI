@@ -1,0 +1,65 @@
+Issue #12 (US7) Checkpoint 1: outfit generation logic
+Branch: feature/12-occasion-outfit-generation (from main at cdb4d69)
+
+Scope: a pure function, src/services/outfits/generateOutfit.ts, and its tests. No API, database
+source, UI, persistence, dependency, or change to existing files. Independent of US4 PR #38 and
+US6.
+
+Enums checked before coding (src/types/wardrobe.ts, src/types/outfit.ts):
+  categories Top, Bottom, Outerwear, Dress, Shoes, Accessory
+  seasons    Spring, Summer, Autumn, Winter, All-season
+  formality  Casual, Smart casual, Formal
+  occasions  work, dinner, weekend, casual, formal
+
+PROVISIONAL rules (approved for this checkpoint, pending teammate review):
+  core Top + Bottom or one Dress; Shoes optional and preferred; at most one Outerwear and one
+  Accessory, added when suitable; formality by occasion (work and dinner: Smart casual or
+  Formal; weekend: Casual or Smart casual; casual: Casual; formal: Formal); no mixing of
+  different specific seasons, with All-season fitting anything; only the user's own available
+  items, each used once; an explicit insufficient result when no outfit can be made.
+
+=== TDD ===
+RED (generateOutfit threw; OCCASION_FORMALITIES was empty):
+  Test Files  1 failed (1)
+       Tests  38 failed (38)
+GREEN: 38 of 38 on the first implementation run, and again after the refactors.
+Mutation checks (each restored afterwards):
+  M1 owner check removed                  -> 3 failed
+  M2 availability check removed           -> 4 failed
+  M3 season compatibility removed         -> 3 failed
+  M4 shoe preference removed              -> 1 failed
+  M5 duplicate-ID check removed           -> 1 failed
+  M6 season buckets replaced by scanning every bottom for each top -> 1 failed
+     (bounded-work test). The first version of this check survived, for two reasons: the
+     mutation hit only the All-season path, which already uses the full list, and the
+     generator cached each item's season, so the test's read counter couldn't see the extra
+     work. The generator now reads season from the item every time, and the re-run mutation
+     is caught.
+
+=== TESTS (38) ===
+occasions: the approved mapping; for each of the 5 occasions, only allowed formalities are
+  used even when disallowed items come first, and an insufficient result when only other
+  formalities exist; an unknown occasion throws RangeError.
+structure: Top + Bottom; a Dress alone; never a Dress with a Top or Bottom; a top alone, a
+  bottom alone, or only extras is insufficient; an empty wardrobe is insufficient; shoes,
+  outerwear and accessory are added in a fixed order, one of each; extras are left out when
+  unsuitable; a core that suitable shoes fit is preferred; still an outfit when no shoes fit.
+seasons: different specific seasons are never paired; All-season pairs with any season, and the
+  shared season is reported; the next compatible bottom is used; extras must match the season
+  set by the pieces before them.
+ownership/availability: another user's items are never used, even to complete an outfit;
+  unavailable items are excluded, and used again once available; another user's or unavailable
+  extras are left out.
+integrity/determinism: the input objects are returned unchanged (nothing invented); no item
+  appears twice, and duplicate IDs count as one; the same input always gives the same outfit;
+  earlier items in the input are preferred; on 601-item wardrobes, work stays linear (fewer
+  than 20 × n season reads; trying every pair would take about 180,000).
+
+=== FINAL CHECKS ===
+Focused:            38 passed
+npm test:           1083 passed, 1 skipped (opt-in live model test), 66 files (38 new)
+npm run build:      exit 0
+npm run typecheck:  exit 0 (it failed once before the build, on stale .next types from the US6
+                    branch's build that referenced US6's route; the build regenerated them)
+npm run lint:       exit 0, no warnings
+git diff --check:   exit 0 (new files checked separately: no trailing whitespace)

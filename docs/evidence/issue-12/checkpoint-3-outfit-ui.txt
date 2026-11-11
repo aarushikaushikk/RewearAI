@@ -1,0 +1,63 @@
+Issue #12 (US7) Checkpoint 3: Create Outfit page and recommendation UI
+Branch: feature/12-occasion-outfit-generation (after 76fea4a)
+
+Scope: /outfits/create (src/app/outfits/create/page.tsx) and
+src/components/outfits/CreateOutfitForm.tsx, using the existing POST /api/outfits/generate.
+Reuses SelectField, PrimaryButton, Alert, AppHeader, next/image and the existing tokens. No
+backend, algorithm, schema, dependency, US4 or US6 change. No Save, Mark as worn, Try another,
+feedback or explanation controls (US8, US9, US10, US13, US14).
+
+=== TDD ===
+RED (the component and page were stubs returning null):
+  Test Files  2 failed (2)
+       Tests  22 failed (22)
+GREEN: 22 of 22 on the first implementation run.
+Mutation checks (each restored afterwards):
+  M1 in-flight request guard removed                  -> 1 failed (three clicks in one act()
+                                                          batch must send one request)
+  M2 result kept when the occasion changes            -> 3 failed (outfit, insufficient, error)
+  M3 an answer for another occasion accepted          -> 1 failed
+  M4 an extra field (userId) sent in the request body -> 10 failed
+  M5 unnamed-item fallback replaced with fixed text   -> 1 failed
+
+=== TESTS (22) ===
+CreateOutfitForm (20):
+- A required "Occasion (Required)" select with Choose… plus Work, Dinner, Weekend, Casual and
+  Formal; Generate Outfit is the only button; no results at first.
+- With no occasion: "Choose an occasion to continue.", aria-invalid, focus on the select, and
+  no request.
+- For each of the 5 occasions: POST /api/outfits/generate, JSON content type, a body of exactly
+  { occasion: "<lowercase value>" }, and "Your outfit for <Label>".
+- Items appear in a list named "Items in this outfit", each with its saved photo (next/image
+  src contains the Cloudinary URL), a readable name and a role label. Unnamed items show color
+  and style ("Navy Chinos"). All six roles have readable labels. Focus moves to the result
+  heading.
+- While loading: Generate shows "Loading…" and is disabled with the select; three clicks in one
+  batch send one request.
+- Insufficient: "There aren't enough available items for a formal outfit yet." with View
+  wardrobe (/wardrobe) and Add clothing (/wardrobe/new); no item list.
+- Errors (401, 503, 500, network, a success response without a usable outfit): the app's own
+  message in an alert, never server text; the occasion stays selected; Try again resends the
+  same occasion and shows the outfit.
+- Choosing another occasion clears a shown outfit, an insufficient message or an error.
+- An answer for a different occasion than requested is treated as an error, never shown under
+  the wrong occasion.
+Page (2): a visitor without a session is sent to /sign-in; signed in, there is one h1 "Create
+  Outfit", main#main-content, the form, and the header marks Create Outfit as the current page.
+
+Responsive: the form stacks on mobile and is one row from sm up; items are 1, 2 and 3 columns
+(sm, lg) with 4:5 photo frames and 44 px minimum touch targets. jsdom has no layout, so this
+was checked in code only, not in a browser.
+
+=== FINAL CHECKS ===
+Focused:            22 passed
+npm test:           1161 passed, 1 skipped (opt-in live model test), 71 files (22 new)
+npm run build:      exit 0; /outfits/create and /api/outfits/generate listed as dynamic
+npm run typecheck:  exit 0
+npm run lint:       exit 0, no warnings
+git diff --check:   exit 0 (4 untracked paths checked separately: no trailing whitespace)
+
+=== NOT VERIFIED HERE ===
+The signed-in page wasn't run in a real browser, because sign-in needs the real MongoDB Atlas
+database and Cloudinary photos. A manual check on a preview or local run with real data is
+still needed.

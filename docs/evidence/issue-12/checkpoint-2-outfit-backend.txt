@@ -1,0 +1,53 @@
+Issue #12 (US7) Checkpoint 2: outfit backend, service and API
+Branch: feature/12-occasion-outfit-generation (after 76846e3)
+
+Scope: POST /api/outfits/generate; OutfitRecommendationService (calls generateOutfit, the only
+copy of the outfit rules); a temporary MongoDB source of the user's available items; strict
+{ occasion } validation; response types. No UI, persistence, schema change or dependency. No
+US4 or US6 code changed, and no shared wardrobe repository or service file changed.
+
+=== TDD ===
+RED (new modules were stubs that threw; the route file delegated to the stub handler):
+  npx vitest run <outfitValidation, outfitRecommendationService, outfitRoutes>
+    Test Files  3 failed (3)
+         Tests  56 failed (56)
+  npm run test:db -- tests/db/mongoAvailableWardrobeItems.test.ts
+    Test Files  1 failed (1)
+         Tests  6 failed (6)
+GREEN: 94 of 94 focused tests (the 56 new plus Checkpoint 1's 38) and 6 of 6 database tests,
+on the first implementation run.
+Mutation checks (each restored afterwards):
+  M1 owner removed from the MongoDB filter                -> 3 database tests failed
+  M2 isAvailable removed from the MongoDB filter          -> 2 database tests failed
+  M3 extra payload fields allowed                         -> 6 failed
+  M4 CSRF check skipped                                   -> 3 failed
+  M5 service trusts the source (forces owner and available on whatever it returns) -> 1 failed
+     ("still excludes another user's or unavailable items if a source wrongly returns them")
+
+=== SECURITY BEHAVIOUR COVERED ===
+- The CSRF origin check runs first: a cross-site request or one without Origin or Referer gets
+  a 403 before the session or wardrobe is read; also tested through the real route's POST export.
+- Without a session, or with a signed-out one, the answer is 401 and no wardrobe is read.
+- The owner comes only from the session. The body must be exactly { occasion }: userId, ownerId
+  and itemIds are rejected with 400 before any wardrobe read. The source is called once, with
+  the session user's ID.
+- The occasion must exactly match one of OCCASIONS. Missing, empty, differently cased, padded,
+  unsupported or non-string values get 400 "Choose an occasion to continue."; a malformed body
+  gets 400 "Invalid request payload".
+- The MongoDB query is one find filtered by { owner, isAvailable: true } (checked with
+  recordQueries). A malformed owner ID returns nothing without a query.
+- Defence in depth: generateOutfit filters by owner and availability again.
+- Responses contain only display fields: no ownerId, image publicId, isAvailable or timestamps.
+  Another user's item IDs never appear.
+- Failures: a database outage gives 503 "The outfit service is temporarily unavailable. Please
+  try again later."; an unexpected error gives 500 "Internal server error". Logs contain only
+  the error's name, and no driver details reach logs or errors.
+
+=== FINAL CHECKS ===
+Focused:            94 passed; database 6 passed
+npm test:           1139 passed, 1 skipped (opt-in live model test), 69 files (56 new)
+npm run test:db:    367 passed, 14 files (6 new), on the isolated temporary MongoDB server only
+npm run build:      exit 0; route listed as dynamic: /api/outfits/generate
+npm run typecheck:  exit 0
+npm run lint:       exit 0, no warnings
+git diff --check:   exit 0 (11 untracked files checked separately: no trailing whitespace)

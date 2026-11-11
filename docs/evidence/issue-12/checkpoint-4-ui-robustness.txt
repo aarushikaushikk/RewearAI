@@ -1,0 +1,63 @@
+Issue #12 (US7) Checkpoint 4: UI robustness fixes from the final review
+Branch: feature/12-occasion-outfit-generation (after 7f7d837)
+
+Scope: US7 UI only.
+  New:      src/components/outfits/OutfitItemImage.tsx
+  Changed:  src/components/outfits/CreateOutfitForm.tsx
+            tests/unit/components/outfits/CreateOutfitForm.test.tsx
+No algorithm, MongoDB source, API, auth, next.config.ts, schema or dependency change. No
+/wardrobe page.
+
+Fixes:
+1. Role check: Object.hasOwn(ROLE_LABELS, role) replaces `role in ROLE_LABELS`, so inherited
+   names (toString, constructor, __proto__, hasOwnProperty) are rejected.
+2. Image URLs: an image is passed to next/image only when it is https on res.cloudinary.com,
+   with no port or credentials. That host matches images.remotePatterns, and a test keeps the
+   two in sync; the allowed host list is unchanged. Any other URL shows the placeholder instead
+   of reaching next/image. An item with a missing or unusable image is still shown, rather than
+   rejecting the whole outfit.
+3. Placeholder: "Image unavailable" (role="img", named "Image unavailable for <item name>") for
+   a missing or unsupported URL, or when the photo fails to load (next/image onError). The
+   item's name and role stay visible. A new URL resets the failed state.
+4. 401: the alert keeps "Your session has ended. Sign in again to continue." and offers a
+   Sign in link to /sign-in?reason=session-ended instead of Try again. That path matches
+   SIGN_IN_SESSION_ENDED_PATH, which a test checks.
+
+=== TDD ===
+RED (OutfitItemImage was a stub; the form was unchanged):
+  Test Files  1 failed (1)
+       Tests  17 failed | 19 passed (36)
+  (The 401 case moved out of the shared "Try again" test into the new Sign in test, because
+  its expected action changed from Try again to Sign in: 20 existing tests became 19.)
+GREEN: 36 of 36 component tests and 2 of 2 page tests, on the first implementation run.
+Mutation checks (each restored afterwards):
+  M1 back to `role in ROLE_LABELS`                       -> 4 failed
+  M2 any parsed URL passed to next/image                 -> 4 failed (http, other host,
+     look-alike host, javascript:)
+  M2b a URL that fails to parse passed through           -> 2 failed (protocol-relative,
+     not a URL); an empty URL is also caught by the component's own check
+  M3 host matched with includes() instead of equality    -> 1 failed (look-alike host)
+  M4 onError removed                                     -> 1 failed (load failure)
+  M5 no Sign in on 401                                   -> 1 failed
+
+=== NEW TESTS (17) ===
+- 4 inherited-property roles are rejected with the generic error and no list.
+- 7 unsupported URLs (http, another host, look-alike host, protocol-relative, javascript:,
+  not a URL, empty) show the placeholder: no <img> with that URL, the name and role are kept,
+  and other items keep their photos.
+- 3 missing-image shapes (none, no url, non-string url) show the placeholder.
+- A photo that fails to load is replaced by the placeholder; the name and role are kept.
+- ALLOWED_IMAGE_HOST equals next.config.ts images.remotePatterns.
+- 401: the alert, a Sign in link to SIGN_IN_SESSION_ENDED_PATH, no Try again, the occasion
+  kept, one request.
+
+=== FINAL CHECKS ===
+Focused:            36 component + 2 page tests passed
+npm test:           1177 passed, 1 skipped, 71 files. The first full run reported 10 failures
+                    in 8 files while the machine was heavily loaded (test collection took 262 s,
+                    against about 55 to 90 s normally). The failing test names weren't kept.
+                    Two reruns straight after were clean: 1177 passed both times.
+npm run build:      exit 0
+npm run typecheck:  exit 0
+npm run lint:       exit 0, no warnings
+git diff --check:   exit 0 (the new file was checked separately: no trailing whitespace)
