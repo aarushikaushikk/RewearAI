@@ -7,6 +7,7 @@ import {
 } from '@/services/wardrobeItemService';
 import { RepositoryUnavailableError } from '@/lib/repositories/repositoryErrors';
 import { USER_IDS } from '../../contracts/fixtures';
+import { itemFor as newItem } from '../../contracts/wardrobeItemRepositoryContract';
 import { MemoryImageStore } from '../../mocks/memoryImageStore';
 import { MemoryWardrobeItemRepository } from '../../mocks/memoryWardrobeItemRepository';
 import { GIF_BYTES, JPEG_BYTES } from '../../helpers/imageBytes';
@@ -409,5 +410,85 @@ describe('WardrobeItemService', () => {
 
       expect(deleteSpy.mock.calls.map(([ids]) => ids.length)).toEqual([100, 50]);
     });
+  });
+});
+
+describe('WardrobeItemService availability (US6)', () => {
+  let repo: MemoryWardrobeItemRepository;
+  let service: WardrobeItemService;
+
+  beforeEach(() => {
+    repo = new MemoryWardrobeItemRepository();
+    service = new WardrobeItemService(repo, new MemoryImageStore());
+  });
+
+  function itemFor(ownerId: string, n: number) {
+    return repo.create(newItem(ownerId, `rewear/users/${ownerId}/item-${n}`));
+  }
+
+  it("lists only the user's items, as client-safe DTOs", async () => {
+    const mine = await itemFor(ALEX, 1);
+    await itemFor(SAM, 2);
+
+    const items = await service.listItems(ALEX);
+
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ id: mine.id, isAvailable: true });
+    expect(items[0]).not.toHaveProperty('ownerId');
+    expect(typeof items[0].createdAt).toBe('string');
+  });
+
+  it('marks an item unavailable and back to available, returning the updated item', async () => {
+    const item = await itemFor(ALEX, 1);
+
+    await expect(service.setAvailability(ALEX, item.id, false)).resolves.toMatchObject({
+      id: item.id,
+      isAvailable: false,
+    });
+    await expect(service.setAvailability(ALEX, item.id, true)).resolves.toMatchObject({
+      id: item.id,
+      isAvailable: true,
+    });
+  });
+
+  it('excludes an unavailable item from available items until it is marked available again', async () => {
+    const shirt = await itemFor(ALEX, 1);
+    const coat = await itemFor(ALEX, 2);
+
+    await service.setAvailability(ALEX, shirt.id, false);
+    expect((await service.listAvailableItems(ALEX)).map((item) => item.id)).toEqual([coat.id]);
+    expect(await service.listItems(ALEX)).toHaveLength(2);
+
+    await service.setAvailability(ALEX, shirt.id, true);
+    expect((await service.listAvailableItems(ALEX)).map((item) => item.id).sort()).toEqual(
+      [coat.id, shirt.id].sort(),
+    );
+  });
+
+  it("gives the same 404 for another user's item as for a missing one, and changes nothing", async () => {
+    const samsItem = await itemFor(SAM, 1);
+
+    const forOther = await rejection(service.setAvailability(ALEX, samsItem.id, false));
+    const forMissing = await rejection(service.setAvailability(ALEX, 'item_999', false));
+
+    for (const error of [forOther, forMissing]) {
+      expect(error).toMatchObject({
+        code: 'ITEM_NOT_FOUND',
+        statusCode: 404,
+        message: "We couldn't find that clothing item.",
+      });
+    }
+    expect((await service.listItems(SAM))[0].isAvailable).toBe(true);
+  });
+
+  it('passes a database outage through for the handler to report', async () => {
+    const item = await itemFor(ALEX, 1);
+    vi.spyOn(repo, 'setAvailability').mockRejectedValue(new RepositoryUnavailableError());
+    vi.spyOn(repo, 'listByOwner').mockRejectedValue(new RepositoryUnavailableError());
+
+    await expect(service.setAvailability(ALEX, item.id, false)).rejects.toBeInstanceOf(
+      RepositoryUnavailableError,
+    );
+    await expect(service.listItems(ALEX)).rejects.toBeInstanceOf(RepositoryUnavailableError);
   });
 });

@@ -1,8 +1,13 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import mongoose from 'mongoose';
 import { connectToDatabase } from '@/lib/db';
 import { WardrobeItem } from '@/models/WardrobeItem';
 import { MongoWardrobeItemRepository } from '@/lib/repositories/mongoWardrobeItemRepository';
-import { DuplicateImageError, RepositoryError } from '@/lib/repositories/repositoryErrors';
+import {
+  DuplicateImageError,
+  RepositoryError,
+  RepositoryUnavailableError,
+} from '@/lib/repositories/repositoryErrors';
 import { WardrobeItemService } from '@/services/wardrobeItemService';
 import {
   describeWardrobeItemRepositoryContract,
@@ -22,6 +27,7 @@ import {
 } from '../helpers/mongoTestServer';
 
 const [ALEX, SAM] = USER_IDS;
+const { Collection, MongoNetworkError } = mongoose.mongo;
 
 let server: MongoTestServer;
 
@@ -98,6 +104,71 @@ describe('MongoWardrobeItemRepository on a real database', () => {
 
   it('returns null rather than querying for an owner that is not a stored ID', async () => {
     await expect(repo.findByImage('not-an-id', 'u/a/1')).resolves.toBeNull();
+  });
+
+  describe('availability (US6)', () => {
+    const DRIVER_DETAIL = 'connect ECONNREFUSED 127.0.0.1:27017 rewear-user:s3cr3t';
+
+    // Restores spies even when an assertion fails, so an injected failure can't leak.
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('stores the change in the database, scoped to the owner', async () => {
+      const item = await repo.create(itemFor(ALEX, 'u/a/1'));
+
+      await repo.setAvailability(ALEX, item.id, false);
+
+      const stored = await WardrobeItem.collection.findOne({ 'image.publicId': 'u/a/1' });
+      expect(stored?.isAvailable).toBe(false);
+      expect(stored?.owner.toString()).toBe(ALEX);
+    });
+
+    it('keeps an availability change after reconnecting, and leaves the item out of available items', async () => {
+      const shirt = await repo.create(itemFor(ALEX, 'u/a/1'));
+      const coat = await repo.create(itemFor(ALEX, 'u/a/2'));
+      await repo.setAvailability(ALEX, shirt.id, false);
+
+      await disconnectTestClient();
+
+      const reconnected = new MongoWardrobeItemRepository();
+      expect(await reconnected.findByIdForOwner(ALEX, shirt.id)).toMatchObject({ isAvailable: false });
+      expect((await reconnected.listAvailableByOwner(ALEX)).map((item) => item.id)).toEqual([coat.id]);
+      expect(await reconnected.listByOwner(ALEX)).toHaveLength(2);
+    });
+
+    it('answers a malformed owner or item ID without querying', async () => {
+      const find = vi.spyOn(WardrobeItem, 'find');
+      const update = vi.spyOn(WardrobeItem, 'findOneAndUpdate');
+
+      await expect(repo.listByOwner('not-an-id')).resolves.toEqual([]);
+      await expect(repo.listAvailableByOwner('not-an-id')).resolves.toEqual([]);
+      await expect(repo.setAvailability(ALEX, 'not-an-id', false)).resolves.toBeNull();
+
+      expect(find).not.toHaveBeenCalled();
+      expect(update).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['setAvailability', 'findOneAndUpdate', (r: MongoWardrobeItemRepository) => r.setAvailability(ALEX, SAM, false)],
+      ['listByOwner', 'find', (r: MongoWardrobeItemRepository) => r.listByOwner(ALEX)],
+      ['listAvailableByOwner', 'find', (r: MongoWardrobeItemRepository) => r.listAvailableByOwner(ALEX)],
+    ] as const)(
+      '%s reports a network failure as unavailable, logging nothing from the driver',
+      async (_name, driverMethod, run) => {
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+        vi.spyOn(Collection.prototype, driverMethod).mockImplementation(() => {
+          throw new MongoNetworkError(DRIVER_DETAIL);
+        });
+
+        const error = await errorFrom(() => run(repo));
+
+        expect(error).toBeInstanceOf(RepositoryUnavailableError);
+        expect(JSON.stringify([String(error), consoleError.mock.calls])).not.toMatch(
+          /s3cr3t|127\.0\.0\.1|ECONNREFUSED/,
+        );
+      },
+    );
   });
 
   // US4 (#9)

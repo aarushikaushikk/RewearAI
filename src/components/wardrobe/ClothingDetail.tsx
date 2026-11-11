@@ -9,6 +9,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { FormField } from '@/components/ui/FormField';
 import { PrimaryButton } from '@/components/ui/PrimaryButton';
 import { SelectField } from '@/components/ui/SelectField';
+import { AvailabilityControl } from '@/components/wardrobe/AvailabilityControl';
 import {
   focusFirstInvalidField,
   getDeleteErrorMessage,
@@ -53,8 +54,8 @@ function itemUrl(itemId: string): string {
 /**
  * Clothing Detail / Edit (DESIGN §5.5, wireframe 04, US4). Loads one of the
  * user's items, saves edited details with the Add Clothing rules, and deletes
- * the item and its photo after confirmation. Availability is shown here; changing
- * it is US6 (#11).
+ * the item and its photo after confirmation. Availability is changed separately
+ * with US6's AvailabilityControl (#11).
  */
 export function ClothingDetail({ itemId }: { itemId: string }) {
   const [state, setState] = useState<LoadState>({ status: 'loading' });
@@ -300,19 +301,22 @@ function ClothingEditor({ initialItem }: { initialItem: WardrobeItemDto }) {
           />
         </div>
 
-        <p className="flex items-center gap-3 text-base text-text">
-          <span className="font-medium">Availability</span>
-          <span
-            className={[
-              'inline-flex items-center rounded-full border px-3 py-0.5 text-sm',
-              item.isAvailable
-                ? 'border-primary bg-primary-soft text-primary'
-                : 'border-text-muted bg-surface text-text-muted',
-            ].join(' ')}
-          >
-            {item.isAvailable ? 'Available' : 'Unavailable'}
+        <div
+          role="group"
+          aria-labelledby="availability-label"
+          className="flex flex-col gap-2 text-base text-text sm:flex-row sm:items-start sm:gap-3"
+        >
+          <span id="availability-label" className="font-medium sm:min-h-11 sm:leading-[2.75rem]">
+            Availability
           </span>
-        </p>
+          {/* Saved on its own through the US6 API; unsaved detail edits above are left as they are. */}
+          <AvailabilityControl
+            itemId={item.id}
+            itemLabel={name}
+            isAvailable={item.isAvailable}
+            onChange={setItem}
+          />
+        </div>
 
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
           <button

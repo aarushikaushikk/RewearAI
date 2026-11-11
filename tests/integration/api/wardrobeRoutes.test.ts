@@ -5,9 +5,11 @@ import {
   handleDeleteItem,
   handleGetItem,
   handleListItems,
+  handleSetAvailability,
   handleUpdateItem,
   handleUploadImage,
 } from '@/lib/wardrobe/wardrobeHandlers';
+import { PATCH as patchAvailabilityRoute } from '@/app/api/wardrobe/[itemId]/availability/route';
 import { AuthService } from '@/services/authService';
 import { WardrobeItemService } from '@/services/wardrobeItemService';
 import { SESSION_COOKIE_NAME } from '@/lib/auth/cookieConfig';
@@ -57,6 +59,18 @@ function uploadRequest(options: { cookie?: string; origin?: string | null; file?
 function createRequest(body: unknown, options: { cookie?: string; origin?: string | null } = {}) {
   return new Request(`${ORIGIN}/api/wardrobe`, {
     method: 'POST',
+    headers: { ...headers(options.cookie, options.origin), 'Content-Type': 'application/json' },
+    body: typeof body === 'string' ? body : JSON.stringify(body),
+  });
+}
+
+function availabilityRequest(
+  itemId: string,
+  body: unknown,
+  options: { cookie?: string; origin?: string | null } = {},
+) {
+  return new Request(`${ORIGIN}/api/wardrobe/${itemId}/availability`, {
+    method: 'PATCH',
     headers: { ...headers(options.cookie, options.origin), 'Content-Type': 'application/json' },
     body: typeof body === 'string' ? body : JSON.stringify(body),
   });
@@ -608,6 +622,128 @@ describe('Wardrobe API routes', () => {
 
       expect(res.status).toBe(401);
       expect(imageStore.has(item.image.publicId)).toBe(true);
+    });
+  });
+
+  describe('PATCH /api/wardrobe/[itemId]/availability', () => {
+    async function savedItemId(user: { cookie: string }): Promise<string> {
+      return (await saveItemAs(user)).id;
+    }
+
+    async function setAvailability(user: { cookie: string }, itemId: string, body: unknown) {
+      return handleSetAvailability(availabilityRequest(itemId, body, { cookie: user.cookie }), itemId, deps);
+    }
+
+    async function storedAvailability(ownerId: string): Promise<boolean[]> {
+      return (await itemRepo.listByOwner(ownerId)).map((item) => item.isAvailable);
+    }
+
+    it('marks the item unavailable and back to available, answering 200 with the item', async () => {
+      const itemId = await savedItemId(alex);
+
+      const off = await setAvailability(alex, itemId, { isAvailable: false });
+      expect(off.status).toBe(200);
+      expect(await off.json()).toMatchObject({ success: true, data: { id: itemId, isAvailable: false } });
+      expect(await storedAvailability(alex.id)).toEqual([false]);
+
+      const on = await setAvailability(alex, itemId, { isAvailable: true });
+      expect(on.status).toBe(200);
+      expect((await on.json()).data.isAvailable).toBe(true);
+      expect(await storedAvailability(alex.id)).toEqual([true]);
+    });
+
+    it('answers a repeated update with the same result', async () => {
+      const itemId = await savedItemId(alex);
+
+      await setAvailability(alex, itemId, { isAvailable: false });
+      const repeated = await setAvailability(alex, itemId, { isAvailable: false });
+
+      expect(repeated.status).toBe(200);
+      expect((await repeated.json()).data.isAvailable).toBe(false);
+    });
+
+    it("returns 404 for another user's item, and leaves it unchanged", async () => {
+      const samsItem = await savedItemId(sam);
+
+      const res = await setAvailability(alex, samsItem, { isAvailable: false });
+
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({ success: false, error: "We couldn't find that clothing item." });
+      expect(await storedAvailability(sam.id)).toEqual([true]);
+    });
+
+    it('returns the same 404 for an item that does not exist', async () => {
+      const res = await setAvailability(alex, 'item_999', { isAvailable: false });
+
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({ success: false, error: "We couldn't find that clothing item." });
+    });
+
+    it.each([
+      ['not json'],
+      ['{}'],
+      ['{"isAvailable":"false"}'],
+      ['{"isAvailable":false,"owner":"someone-else"}'],
+    ])('returns 400 for the invalid body %s, and changes nothing', async (body) => {
+      const itemId = await savedItemId(alex);
+
+      const res = await setAvailability(alex, itemId, body);
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ success: false, error: 'Invalid request payload' });
+      expect(await storedAvailability(alex.id)).toEqual([true]);
+    });
+
+    it('rejects a cross-site request with 403, and changes nothing', async () => {
+      const itemId = await savedItemId(alex);
+
+      const res = await handleSetAvailability(
+        availabilityRequest(itemId, { isAvailable: false }, { cookie: alex.cookie, origin: 'https://evil.example' }),
+        itemId,
+        deps,
+      );
+
+      expect(res.status).toBe(403);
+      expect(await storedAvailability(alex.id)).toEqual([true]);
+    });
+
+    it('returns 401 without a session, and changes nothing', async () => {
+      const itemId = await savedItemId(alex);
+
+      const res = await handleSetAvailability(availabilityRequest(itemId, { isAvailable: false }), itemId, deps);
+
+      expect(res.status).toBe(401);
+      expect(await storedAvailability(alex.id)).toEqual([true]);
+    });
+
+    it('returns 503 with a safe message when the database is unavailable', async () => {
+      const itemId = await savedItemId(alex);
+      vi.spyOn(itemRepo, 'setAvailability').mockRejectedValue(new RepositoryUnavailableError());
+
+      const res = await setAvailability(alex, itemId, { isAvailable: false });
+
+      expect(res.status).toBe(503);
+      expect(JSON.stringify(await res.json())).not.toMatch(/mongo|repository/i);
+    });
+
+    it('returns 500 with a generic message for an unexpected failure', async () => {
+      const itemId = await savedItemId(alex);
+      vi.spyOn(itemRepo, 'setAvailability').mockRejectedValue(new Error('driver detail 10.0.0.5'));
+
+      const res = await setAvailability(alex, itemId, { isAvailable: false });
+
+      expect(res.status).toBe(500);
+      expect(await res.json()).toEqual({ success: false, error: 'Internal server error' });
+      expect(JSON.stringify(consoleError.mock.calls)).not.toContain('10.0.0.5');
+    });
+
+    it('is wired to the route: the PATCH export checks the origin before anything else', async () => {
+      const res = await patchAvailabilityRoute(
+        availabilityRequest('item_1', { isAvailable: false }, { origin: 'https://evil.example' }),
+        { params: Promise.resolve({ itemId: 'item_1' }) },
+      );
+
+      expect(res.status).toBe(403);
     });
   });
 

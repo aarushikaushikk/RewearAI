@@ -81,6 +81,19 @@ export class MongoWardrobeItemRepository implements IWardrobeItemRepository {
     });
   }
 
+  async listAvailableByOwner(ownerId: string): Promise<WardrobeItemRecord[]> {
+    if (!isObjectIdString(ownerId)) {
+      return [];
+    }
+    return withDatabase('wardrobeItem.listAvailableByOwner', async () => {
+      // Same order as listByOwner; only available items may appear in new outfit suggestions.
+      const items = await WardrobeItem.find({ owner: ownerId, isAvailable: true })
+        .sort({ createdAt: -1, _id: -1 })
+        .lean();
+      return items.map((item) => toRecord(item as StoredItem));
+    });
+  }
+
   async findByIdForOwner(ownerId: string, itemId: string): Promise<WardrobeItemRecord | null> {
     if (!isObjectIdString(ownerId) || !isObjectIdString(itemId)) {
       return null;
@@ -107,6 +120,25 @@ export class MongoWardrobeItemRepository implements IWardrobeItemRepository {
           $set: { category, color, style, season, formality, ...(name ? { name } : {}) },
           ...(name ? {} : { $unset: { name: 1 } }),
         },
+        { returnDocument: 'after', runValidators: true },
+      ).lean();
+      return item ? toRecord(item as StoredItem) : null;
+    });
+  }
+
+  async setAvailability(
+    ownerId: string,
+    itemId: string,
+    isAvailable: boolean,
+  ): Promise<WardrobeItemRecord | null> {
+    if (!isObjectIdString(ownerId) || !isObjectIdString(itemId)) {
+      return null;
+    }
+    return withDatabase('wardrobeItem.setAvailability', async () => {
+      // The owner is part of the filter, so another user's item is never matched or changed.
+      const item = await WardrobeItem.findOneAndUpdate(
+        { _id: itemId, owner: ownerId },
+        { $set: { isAvailable } },
         { returnDocument: 'after', runValidators: true },
       ).lean();
       return item ? toRecord(item as StoredItem) : null;

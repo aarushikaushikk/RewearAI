@@ -6,7 +6,11 @@ import { validateCsrfOrigin } from '@/lib/auth/csrf';
 import { requireAuth } from '@/lib/auth/sessionHelper';
 import { RepositoryUnavailableError } from '@/lib/repositories/repositoryErrors';
 import { getProductionWardrobeItemService } from '@/lib/wardrobe/getWardrobeItemService';
-import { parseItemDetailsPayload, parseNewItemPayload } from '@/lib/validation/wardrobeValidation';
+import {
+  parseAvailabilityPayload,
+  parseItemDetailsPayload,
+  parseNewItemPayload,
+} from '@/lib/validation/wardrobeValidation';
 import { MAX_IMAGE_BYTES, MAX_IMAGE_LABEL } from '@/types/upload';
 
 export interface WardrobeHandlerDeps {
@@ -154,6 +158,36 @@ export async function handleUpdateItem(
     return NextResponse.json({ success: true, data: item });
   } catch (err) {
     return failureResponse(err, 'update');
+  }
+}
+
+/** PATCH /api/wardrobe/[itemId]/availability with `{ isAvailable: boolean }` (US6). */
+export async function handleSetAvailability(
+  req: Request,
+  itemId: string,
+  deps?: WardrobeHandlerDeps,
+): Promise<Response> {
+  // 1. Strict CSRF Protection
+  if (!validateCsrfOrigin(req)) {
+    return csrfFailure();
+  }
+
+  try {
+    // 2. Authenticate; only the session decides whose item can change
+    const { user } = await requireAuth(req, deps?.authService);
+
+    // 3. Reject anything but exactly { isAvailable: boolean }
+    const input = parseAvailabilityPayload(await req.json().catch(() => undefined));
+    if (!input) {
+      return errorResponse(INVALID_PAYLOAD_ERROR, 400);
+    }
+
+    // 4. Update; a missing item and another user's item both answer 404
+    const wardrobeService = deps?.wardrobeService || getProductionWardrobeItemService();
+    const item = await wardrobeService.setAvailability(user.id, itemId, input.isAvailable);
+    return NextResponse.json({ success: true, data: item });
+  } catch (err) {
+    return failureResponse(err, 'availability');
   }
 }
 
