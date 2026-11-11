@@ -46,3 +46,12 @@ export interface OutfitItemDto {
 export type OutfitRecommendationDto =
   | { status: "ok"; occasion: Occasion; season: Season; items: OutfitItemDto[] }
   | { status: "insufficient"; occasion: Occasion; reason: InsufficientReason };
+
+/** A saved outfit as stored (US9): references to the user's wardrobe items, never copies. */
+export interface SavedOutfitRecord {
+  id: string;
+  ownerId: string;
+  occasion: Occasion;
+  itemIds: string[];
+  savedAt: Date;
+}
