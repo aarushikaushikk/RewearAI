@@ -538,5 +538,146 @@ describe('AddClothingForm', () => {
       expect(screen.getByLabelText(/^category/i)).toHaveValue('');
       expect(screen.queryByText('Suggested from your photo.')).not.toBeInTheDocument();
     });
+
+    describe('uncertain details (US11, wireframes 06 and 07)', () => {
+      const REVIEW_MESSAGE = 'Review or correct the highlighted details before saving.';
+      const NEEDS_REVIEW = 'Needs review. Confirm or change this suggestion.';
+      const UNCERTAIN_STYLE: ClassificationResult = {
+        ...UNCERTAIN,
+        suggestions: { ...UNCERTAIN.suggestions, style: { status: 'uncertain', value: 'Button-down' } },
+        fieldsNeedingReview: ['color', 'style', 'season', 'formality'],
+      };
+      const FIELDS = [/^category/i, /^color/i, /^style/i, /^season/i, /^formality/i];
+      const field = (name: RegExp) => screen.getByLabelText(name);
+      const isHighlighted = (name: RegExp) => field(name).classList.contains('border-warning');
+
+      it('highlights only the uncertain details still awaiting review, alongside their text and checkboxes', async () => {
+        const user = userEvent.setup();
+        classify.mockResolvedValue(UNCERTAIN_STYLE);
+        mockRoutes({ '/api/uploads': [{ status: 201, body: { success: true, data: IMAGE } }] });
+        render(<AddClothingForm />);
+        await uploadAndContinue(user);
+        await screen.findByText(UNCERTAIN_BANNER);
+
+        expect(FIELDS.map(isHighlighted)).toEqual([false, true, true, true, false]);
+        // Color is never the only signal: each highlighted field also has text and a checkbox.
+        expect(field(/^color/i)).toHaveAccessibleDescription(NEEDS_REVIEW);
+        expect(field(/^style/i)).toHaveAccessibleDescription(NEEDS_REVIEW);
+        expect(screen.getAllByRole('checkbox')).toHaveLength(3);
+
+        // Accepting a suggestion clears its highlight; unticking it brings the highlight back.
+        await user.click(screen.getByRole('checkbox', { name: 'White is correct' }));
+        expect(isHighlighted(/^color/i)).toBe(false);
+        expect(field(/^color/i)).toHaveAccessibleDescription('Reviewed.');
+        await user.click(screen.getByRole('checkbox', { name: 'White is correct' }));
+        expect(isHighlighted(/^color/i)).toBe(true);
+
+        // Rejecting a suggestion by choosing or typing another value also clears it.
+        await user.selectOptions(field(/^season/i), 'Winter');
+        await user.clear(field(/^style/i));
+        await user.type(field(/^style/i), 'Oxford');
+        expect(isHighlighted(/^season/i)).toBe(false);
+        expect(isHighlighted(/^style/i)).toBe(false);
+      });
+
+      it('explains a save blocked by unreviewed details, keeping field errors and focus on the first one', async () => {
+        const user = userEvent.setup();
+        classify.mockResolvedValue(UNCERTAIN);
+        const fetchMock = mockRoutes({
+          '/api/uploads': [{ status: 201, body: { success: true, data: IMAGE } }],
+          '/api/wardrobe': [{ status: 201, body: { success: true, data: SAVED_ITEM } }],
+        });
+        render(<AddClothingForm />);
+        await uploadAndContinue(user);
+        await screen.findByText(UNCERTAIN_BANNER);
+        expect(screen.queryByText(REVIEW_MESSAGE)).not.toBeInTheDocument();
+
+        await user.click(screen.getByRole('button', { name: 'Confirm and save' }));
+
+        expect(screen.getByText(REVIEW_MESSAGE).closest('[role="alert"]')).not.toBeNull();
+        expect(screen.getAllByText('Confirm or change this value.')).toHaveLength(2);
+        expect(screen.getByText('Choose a formality.')).toBeInTheDocument();
+        expect(field(/^color/i)).toHaveFocus();
+        expect(field(/^color/i)).toHaveAttribute('aria-invalid', 'true');
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+
+        // The message stays until every uncertain detail is reviewed, even if one is still missing.
+        await user.click(screen.getByRole('checkbox', { name: 'White is correct' }));
+        expect(screen.getByText(REVIEW_MESSAGE)).toBeInTheDocument();
+        await user.selectOptions(field(/^season/i), 'Winter');
+        expect(screen.queryByText(REVIEW_MESSAGE)).not.toBeInTheDocument();
+
+        await user.click(screen.getByRole('button', { name: 'Confirm and save' }));
+        expect(screen.queryByText(REVIEW_MESSAGE)).not.toBeInTheDocument();
+        expect(screen.getByText('Choose a formality.')).toBeInTheDocument();
+        expect(field(/^formality/i)).toHaveFocus();
+
+        await user.selectOptions(field(/^formality/i), 'Casual');
+        await user.click(screen.getByRole('button', { name: 'Confirm and save' }));
+        expect(await screen.findByText('Saved to your wardrobe.')).toBeInTheDocument();
+        expect(savedBody(fetchMock)).toMatchObject({ color: 'White', season: 'Winter', formality: 'Casual' });
+      });
+
+      it('does not ask for a review when the save is blocked only by empty fields', async () => {
+        const user = userEvent.setup();
+        const fetchMock = mockRoutes({ '/api/uploads': [{ status: 201, body: { success: true, data: IMAGE } }] });
+        render(<AddClothingForm />);
+        await uploadAndContinue(user);
+
+        await user.click(screen.getByRole('button', { name: 'Confirm and save' }));
+
+        expect(screen.getByText('Choose a category.')).toBeInTheDocument();
+        expect(field(/^category/i)).toHaveFocus();
+        expect(screen.queryByText(REVIEW_MESSAGE)).not.toBeInTheDocument();
+        expect(FIELDS.some(isHighlighted)).toBe(false);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+      });
+
+      it('waits for a blocked save before asking to review suggestions that arrive later', async () => {
+        const user = userEvent.setup();
+        const pending = deferred<ClassificationResult>();
+        classify.mockReturnValue(pending.promise);
+        mockRoutes({ '/api/uploads': [{ status: 201, body: { success: true, data: IMAGE } }] });
+        render(<AddClothingForm />);
+        await uploadAndContinue(user);
+
+        // Saved while the analysis is still running, so only empty fields block it.
+        await user.click(screen.getByRole('button', { name: 'Confirm and save' }));
+        await act(async () => pending.resolve(UNCERTAIN));
+
+        expect(await screen.findByText(UNCERTAIN_BANNER)).toBeInTheDocument();
+        expect(screen.queryByText(REVIEW_MESSAGE)).not.toBeInTheDocument();
+        await user.click(screen.getByRole('button', { name: 'Confirm and save' }));
+        expect(screen.getByText(REVIEW_MESSAGE)).toBeInTheDocument();
+      });
+
+      it('starts the next item without the previous review message', async () => {
+        const user = userEvent.setup();
+        classify.mockResolvedValue(UNCERTAIN);
+        mockRoutes({
+          '/api/uploads': [
+            { status: 201, body: { success: true, data: IMAGE } },
+            { status: 201, body: { success: true, data: IMAGE } },
+          ],
+          '/api/wardrobe': [{ status: 201, body: { success: true, data: SAVED_ITEM } }],
+        });
+        render(<AddClothingForm />);
+        await uploadAndContinue(user);
+        await screen.findByText(UNCERTAIN_BANNER);
+        await user.click(screen.getByRole('button', { name: 'Confirm and save' }));
+        expect(screen.getByText(REVIEW_MESSAGE)).toBeInTheDocument();
+
+        await user.click(screen.getByRole('checkbox', { name: 'White is correct' }));
+        await user.click(screen.getByRole('checkbox', { name: 'Summer is correct' }));
+        await user.selectOptions(field(/^formality/i), 'Casual');
+        await user.click(screen.getByRole('button', { name: 'Confirm and save' }));
+        await user.click(await screen.findByRole('button', { name: 'Add another item' }));
+
+        await uploadAndContinue(user);
+        await screen.findByText(UNCERTAIN_BANNER);
+        expect(isHighlighted(/^color/i)).toBe(true);
+        expect(screen.queryByText(REVIEW_MESSAGE)).not.toBeInTheDocument();
+      });
+    });
   });
 });

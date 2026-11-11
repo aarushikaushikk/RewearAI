@@ -10,6 +10,8 @@ export interface FormFieldProps {
   optional?: boolean;
   error?: string;
   hint?: string;
+  /** Highlights the input and hint in the warning colors; an error takes precedence. */
+  warning?: boolean;
   autoComplete?: string;
   disabled?: boolean;
   placeholder?: string;
@@ -29,6 +31,7 @@ export function FormField({
   optional,
   error,
   hint,
+  warning,
   autoComplete,
   disabled,
   placeholder,
@@ -62,11 +65,15 @@ export function FormField({
         aria-describedby={describedBy}
         className={[
           'w-full min-h-11 rounded-xl border px-3 py-2 text-base',
-          'bg-surface text-text placeholder:text-text-muted',
+          'text-text placeholder:text-text-muted',
           'focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary',
           'disabled:opacity-50 disabled:cursor-not-allowed',
           // The muted text color keeps input boundaries at 3:1 contrast or better.
-          error ? 'border-danger focus:ring-danger' : 'border-text-muted',
+          error
+            ? 'bg-surface border-danger focus:ring-danger'
+            : warning
+              ? 'bg-warning-soft border-warning'
+              : 'bg-surface border-text-muted',
         ].join(' ')}
       />
 
@@ -76,7 +83,7 @@ export function FormField({
         </p>
       ) : (
         hint && (
-          <p id={hintId} className="text-sm text-text-muted mt-0.5">
+          <p id={hintId} className={`text-sm mt-0.5 ${warning ? 'text-warning' : 'text-text-muted'}`}>
             {hint}
           </p>
         )

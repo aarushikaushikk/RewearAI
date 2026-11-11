@@ -1,0 +1,100 @@
+US11 Classification Uncertainty (#16), Checkpoint 2: uncertainty UI and save validation feedback
+Branch: feature/16-classification-uncertainty (after Checkpoint 1, 059689f). Date: 2026-11-09.
+No Git operations were run. No dependencies, thresholds, classification code, auth, schemas, API
+routes, repositories, US6 or US7 code changed. The saved-item display name (changed by US4 PR #38)
+was not touched.
+
+=== FILES CHANGED ===
+src/components/ui/SelectField.tsx                      optional `warning` prop
+src/components/ui/FormField.tsx                        optional `warning` prop
+src/components/wardrobe/AddClothingForm.tsx            highlights unreviewed fields; review message
+tests/unit/components/ui/SelectField.test.tsx          +3 tests
+tests/unit/components/ui/FormField.test.tsx            +3 tests
+tests/unit/components/wardrobe/AddClothingForm.test.tsx  +5 tests (new block inside the US3
+                                                       classification section, away from the one
+                                                       line US4 changes)
+
+=== BEHAVIOUR ===
+Before: an uncertain suggestion was marked only by grey hint text ("Needs review. Confirm or change
+this suggestion.") and its "<value> is correct" checkbox. A save blocked by unreviewed suggestions
+showed field errors only.
+After:
+- A field whose suggestion still awaits review (review state `reviewed: false`) gets a
+  warning border and fill (border-warning, bg-warning-soft) and warning-colored hint text. The hint
+  text and checkbox are unchanged, so color is never the only signal.
+- Confirming, changing, or typing a different value clears the highlight; unticking brings it back.
+- Confident, missing, invalid, and manual fields keep the default look.
+- A validation error always takes precedence: danger border, aria-invalid, and the error message,
+  exactly as before. `warning` does not set aria-invalid.
+- Clicking "Confirm and save" while suggestions are unreviewed now also shows, above the analysis
+  notice, an error alert: "Review or correct the highlighted details before saving." It does not
+  take focus; focus still goes to the first invalid field. It disappears once every uncertain
+  detail is reviewed. It is not shown when only empty fields block the save, and not for
+  suggestions that arrive after a save that was blocked only by empty fields.
+- Failure, retry, not-clothing, and manual-entry behaviour unchanged (existing tests pass).
+- With `warning` unset, both components render the same classes as before (bg-surface,
+  border-text-muted, text-text-muted hint), confirmed by tests.
+
+Contrast (WCAG 2.1, computed from the design tokens):
+  warning hint text on white 6.02:1; warning border vs white 6.02:1; vs its own fill 5.56:1;
+  body text on warning-soft 13.65:1; placeholder on warning-soft 5.63:1; focus ring 7.29:1.
+Layout unchanged: no new elements in the field grid, so the existing 1-column (mobile) / 2-column
+(sm and up) layout is unaffected.
+
+=== RED ===
+   × FormField > warning state (US11) > highlights the input and its hint in the warning colors, and keeps the hint as its description
+   × SelectField > warning state (US11) > highlights the select and its hint in the warning colors, and keeps the hint as its description
+   × AddClothingForm > ... > uncertain details (US11) > highlights only the uncertain details still awaiting review, alongside their text and checkboxes
+   × AddClothingForm > ... > uncertain details (US11) > explains a save blocked by unreviewed details, keeping field errors and focus on the first one
+   × AddClothingForm > ... > uncertain details (US11) > starts the next item without the previous review message
+Error: expect(element).toHaveClass("border-warning bg-warning-soft")      (x2)
+AssertionError: expected [ false, false, false, false, false ] to deeply equal [ false, true, true, true, false ]
+TestingLibraryElementError: Unable to find an element with the text: Review or correct the highlighted details before saving.   (x2)
+ Tests  5 failed | 43 passed (48)
+Passing at once (guards): default look unchanged (x2), error takes precedence (x2), and "does not
+ask for a review when the save is blocked only by empty fields".
+
+=== GREEN ===
+Focused (field components, Add Clothing form, classification services):
+ Test Files  14 passed | 1 skipped (15)
+      Tests  186 passed | 1 skipped (187)   first green run
+      Tests  187 passed | 1 skipped (188)   after the follow-up test below
+
+=== MUTATION CHECKS (each restored and verified with cmp) ===
+M1 highlight follows status, not review state:      caught (highlight test)
+M2 message ignores whether anything is unreviewed:  caught (blocked-save test)
+M3 reset() no longer clears the flag:               survived -> the line was dead (reset only runs
+                                                    after a successful save, which already cleared
+                                                    the flag); removed. A matching dead line in
+                                                    handleSelect was removed for the same reason.
+M4 message shown on any blocked save:               survived -> missing test. Added "waits for a
+                                                    blocked save before asking to review suggestions
+                                                    that arrive later"; M4 now fails 2 tests.
+M5 SelectField warning overrides error:             survived -> `&& !error` was redundant (the error
+                                                    branch is chosen first and the hint is hidden
+                                                    with an error); removed from both components.
+M6 FormField hint not recolored:                    caught
+
+=== PROCESS NOTE ===
+Running Prettier on the three test files reformatted ~800 unrelated lines. Those files were restored
+from HEAD (they held only this checkpoint's additions) and the additions were reapplied by hand,
+so the diff contains only the new tests. CRLF line endings were checked on every changed file.
+
+=== FULL CHECKS ===
+npm test:          64 files passed, 1 skipped; 1070 passed, 1 skipped
+npm run build:     exit 0; every /api route shows as ƒ
+npm run typecheck: exit 0
+npm run lint:      exit 0
+git diff --check:  exit 0
+
+=== REMAINING / RISKS ===
+- Not checked in a real browser: the review UI only appears with classifier output, which needs
+  the Hugging Face model download (not approved for this checkpoint). Styling is verified through
+  classes and computed token contrast only; screenshots could use a fake classifier in Checkpoint 3.
+- After a blocked save, a reviewed field keeps its "Confirm or change this value." error until the
+  next save attempt (existing US2/US3 behaviour); the banner clears as soon as review is complete.
+- On a blocked save, screen readers may hear the new alert and the field errors (all role="alert"),
+  as with the existing field errors.
+- AddClothingForm.tsx and its test file are also changed by US4 PR #38, in different places
+  (an import and the saved-item label; one alt-text assertion). Expect a clean merge, but rerun
+  the tests after merging.

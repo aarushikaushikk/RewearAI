@@ -40,7 +40,9 @@ export function emptyReviewFields(): ReviewFields {
 export function applySuggestions(fields: ReviewFields, suggestions: ClassificationSuggestions): ReviewFields {
   return mapFields((f) => {
     const current = fields[f];
-    if (current.edited) return { ...current, status: "manual", suggested: undefined, reviewed: true };
+    // A field the user touched keeps its value and review state, so an unticked
+    // uncertain value can't become accepted just because a new analysis arrived.
+    if (current.edited) return current;
     const s = suggestions[f];
     if (s.status === "suggested" || s.status === "uncertain") {
       return { value: s.value, status: s.status, suggested: s.value, reviewed: s.status === "suggested", edited: false };

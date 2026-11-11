@@ -59,4 +59,37 @@ describe('SelectField', () => {
     expect(screen.getByLabelText('Season')).toHaveAccessibleDescription('Choose a season.');
     expect(screen.queryByText('Suggested from your photo.')).not.toBeInTheDocument();
   });
+
+  describe('warning state (US11)', () => {
+    const props = { id: 'season', label: 'Season', value: 'Summer', options: SEASONS, onChange: () => {} };
+    const HINT = 'Needs review. Confirm or change this suggestion.';
+
+    it('keeps the default look when no warning is set', () => {
+      render(<SelectField {...props} hint={HINT} />);
+      const select = screen.getByLabelText('Season');
+      expect(select).toHaveClass('border-text-muted', 'bg-surface');
+      expect(select.className).not.toMatch(/warning/);
+      expect(screen.getByText(HINT)).toHaveClass('text-text-muted');
+    });
+
+    it('highlights the select and its hint in the warning colors, and keeps the hint as its description', () => {
+      render(<SelectField {...props} hint={HINT} warning />);
+      const select = screen.getByLabelText('Season');
+      expect(select).toHaveClass('border-warning', 'bg-warning-soft');
+      expect(select).not.toHaveClass('border-text-muted');
+      expect(select).not.toHaveClass('bg-surface');
+      expect(select).not.toHaveAttribute('aria-invalid');
+      expect(select).toHaveAccessibleDescription(HINT);
+      expect(screen.getByText(HINT)).toHaveClass('text-warning');
+    });
+
+    it('shows a validation error instead of the warning', () => {
+      render(<SelectField {...props} hint={HINT} warning error="Confirm or change this value." />);
+      const select = screen.getByLabelText('Season');
+      expect(select).toHaveClass('border-danger');
+      expect(select.className).not.toMatch(/warning/);
+      expect(select).toHaveAttribute('aria-invalid', 'true');
+      expect(select).toHaveAccessibleDescription('Confirm or change this value.');
+    });
+  });
 });

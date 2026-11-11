@@ -15,6 +15,7 @@ export const CONFIDENT_MIN_SHARE = 0.6;
 export const CONFIDENT_MIN_MARGIN = 0.2;
 
 const GARMENTS = new Map(GARMENT_PROMPTS.map((g) => [g.prompt, g]));
+const STYLE_CATEGORIES = new Map(GARMENT_PROMPTS.map((g) => [g.style, g.category]));
 const NOT_CLOTHING = new Set(NOT_CLOTHING_PROMPTS);
 
 /** Adds up scores by value; returns the leader and whether it clearly won. */
@@ -36,6 +37,19 @@ function pickLeader(entries: readonly [value: string, score: number][]): RawFiel
 /** Season and formality describe how clothing is used, which a photo can't settle. */
 function capAtLow(field: RawFieldSuggestion | undefined): RawFieldSuggestion | undefined {
   return field && { ...field, confidence: "low" };
+}
+
+/**
+ * A category that disagrees with the leading style (Top with Jacket) isn't reliable either.
+ * Only the category needs lowering: a confident style holds over half of the garment score,
+ * so its own category leads and the two agree; a disagreeing style is therefore already low.
+ */
+function checkAgainstStyle(
+  category: RawFieldSuggestion | undefined,
+  style: RawFieldSuggestion | undefined,
+): RawFieldSuggestion | undefined {
+  if (!category || !style) return category;
+  return STYLE_CATEGORIES.get(style.value as string) === category.value ? category : capAtLow(category);
 }
 
 function scoresFor<T>(usable: readonly LabelScore[], prompts: ReadonlyMap<string, T>) {
@@ -64,10 +78,11 @@ export function interpretZeroShotScores(scores: readonly LabelScore[]): RawClass
 
   if (garmentTotal + notClothingTotal <= 0) return {};
 
+  const style = pickLeader(garmentScores.map((g) => [g.garment.style, g.score]));
   return {
     isClothing: garmentTotal > notClothingTotal,
-    category: pickLeader(garmentScores.map((g) => [g.garment.category, g.score])),
-    style: pickLeader(garmentScores.map((g) => [g.garment.style, g.score])),
+    category: checkAgainstStyle(pickLeader(garmentScores.map((g) => [g.garment.category, g.score])), style),
+    style,
     color: pickLeader(scoresFor(usable, COLOR_PROMPTS)),
     season: capAtLow(pickLeader(scoresFor(usable, SEASON_PROMPTS))),
     formality: capAtLow(pickLeader(scoresFor(usable, FORMALITY_PROMPTS))),

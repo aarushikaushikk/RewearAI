@@ -1,0 +1,78 @@
+US11 Classification Uncertainty (#16), Checkpoint 1: classification consistency and review rules
+Branch: feature/16-classification-uncertainty (from origin/main cdb4d69). Date: 2026-11-09.
+No Git operations were run. No dependencies, schemas, auth, Cloudinary, repositories, API routes,
+or UI files changed. No file changed by US4 PR #38 was touched.
+
+=== FILES CHANGED ===
+src/services/classification/interpretZeroShotScores.ts       category/style agreement check
+src/services/classification/reviewFields.ts                  edited fields keep their review state
+src/services/classification/interpretZeroShotScores.test.ts  +7 tests
+src/services/classification/reviewFields.test.ts             +7 tests
+
+=== RULES ===
+1. Category/style disagreement. A style -> category map is built from GARMENT_PROMPTS in
+   clothingLabels.ts (each style appears once; a new test enforces this). After both leaders are
+   picked, if the style's own category isn't the suggested category, the category's confidence is
+   set to "low", so normalizeClassification reports it "uncertain" and it must be reviewed.
+   Only the category is lowered: a confident style holds >= 0.6 of the garment score, so its own
+   category (>= 0.6) must lead and they agree. A disagreeing style is therefore always already low.
+2. Retried analysis. applySuggestions now returns a field the user touched (edited) unchanged.
+   Before, it reset such a field to reviewed: true. A user who unticked an uncertain value, or
+   changed a value back to the uncertain suggestion, would then have it accepted by a later
+   result without confirming it. In the current UI a second result arrives only through
+   "Retry analysis", which is shown only after a failed analysis, so this path wasn't reachable.
+   The fix is a safeguard for the review rule.
+
+Unchanged: CONFIDENT_MIN_SHARE = 0.6 and CONFIDENT_MIN_MARGIN = 0.2 (a test now pins both); season
+and formality are still always low; the statuses suggested/uncertain/missing/invalid; classifier
+failure and manual-entry paths (existing tests pass unchanged).
+
+=== RED ===
+npx vitest run interpretZeroShotScores.test.ts reviewFields.test.ts
+   × review fields > when a retried analysis returns new suggestions > keeps an uncertain value the user unticked still unreviewed, instead of accepting it
+   × review fields > when a retried analysis returns new suggestions > keeps an uncertain value the user changed back to the suggestion still unreviewed
+   × review fields > blocks saving a conflicting category from real scores until the user reviews it
+   × interpretZeroShotScores: category and style agreement (US11) > flags a category that would be confident on its own when the style belongs to another category
+AssertionError: expected { value: 'Top', confidence: 'high' } to deeply equal { value: 'Top', confidence: 'low' }
+AssertionError: expected { …(2) } to deeply equal { …(2) }   (the unticked color was missing from reviewErrors after the retry)
+AssertionError: expected undefined to be 'Confirm or change this value.'
+AssertionError: expected [ 'style', 'season', 'formality' ] to include 'category'
+ Tests  4 failed | 27 passed (31)
+
+The other new tests passed at once. They lock in behaviour that already existed (tests asked for
+by the checkpoint): unticking re-blocks, changing a value reviews it, a confirmed value survives a
+retry, edited values survive a retry, consistent suggestions keep their confidence, other fields are
+unaffected by a conflict, and the thresholds are unchanged. The style-uniqueness table test was
+added during GREEN, because the map relies on it.
+
+=== GREEN ===
+First run after the fix: 1 failure, a mistake in my test. The retry's uncertain style replaces an
+untouched field, so style also needs review; the expectation was corrected to include it (stricter,
+not weaker).
+npx vitest run src/services/classification tests/unit/components/wardrobe/AddClothingForm.test.tsx
+ Test Files  10 passed | 1 skipped (11)
+      Tests  142 passed | 1 skipped (143)
+
+=== MUTATION CHECKS (each restored and verified with cmp) ===
+M1 always lower the category:            8 tests failed (including the new consistency tests)
+M2 the check never fires:                2 tests failed (the conflict unit test and the full-pipeline test)
+M3 edited field keeps review state but
+   is reset to "manual" (old handling):  1 test failed (unticked value after retry)
+
+=== FULL CHECKS ===
+npm test:          64 files passed, 1 skipped; 1059 passed, 1 skipped
+npm run build:     exit 0; every /api route shows as ƒ
+npm run typecheck: exit 0 (after the build)
+npm run lint:      exit 0
+git diff --check:  exit 0
+
+=== REMAINING / RISKS ===
+- Non-clothing photos can still be suggested with high confidence (the hippo case from US3); out of
+  scope for this checkpoint.
+- The thresholds remain provisional (US3 checked them on 4 photos); team agreement on what counts
+  as uncertain is still open (DESIGN.md checklist).
+- After a retry, a touched field keeps its earlier status and hint (e.g. "Reviewed."), which
+  refers to the first analysis of the same photo.
+- Form-level guard against saving unreviewed fields is covered by the existing AddClothingForm
+  test "marks uncertain and missing suggestions and blocks saving until they are reviewed"; that
+  file was left alone because US4 changes it.
