@@ -154,6 +154,25 @@ describe('US7 outfit generation on the production build (HTTP)', () => {
   });
 });
 
+const UNSAFE_CHARS: Record<string, string> = {
+  '<': '\\u003C',
+  '>': '\\u003E',
+  '/': '\\u002F',
+  '\\': '\\\\',
+  '\b': '\\b',
+  '\f': '\\f',
+  '\n': '\\n',
+  '\r': '\\r',
+  '\t': '\\t',
+  '\0': '\\0',
+  '\u2028': '\\u2028',
+  '\u2029': '\\u2029',
+};
+
+/** A string as a JavaScript literal that is safe to place inside code evaluated in the page. */
+const jsString = (value: string) =>
+  JSON.stringify(value).replace(/[<>\b\f\n\r\t\0\u2028\u2029]/g, (c) => UNSAFE_CHARS[c]);
+
 describe.runIf(CHROME_PATH)('US7 Create Outfit in a real browser', () => {
   let chrome: RunningChrome;
   let page: CdpPage;
@@ -196,20 +215,20 @@ describe.runIf(CHROME_PATH)('US7 Create Outfit in a real browser', () => {
       `${label} to hydrate`,
     );
   const findButton = (name: string) =>
-    `[...document.querySelectorAll('button')].find((b) => b.textContent.trim() === ${JSON.stringify(name)})`;
+    `[...document.querySelectorAll('button')].find((b) => b.textContent.trim() === ${jsString(name)})`;
   const setOccasion = async (label: string) => {
     await waitForHydration(`document.getElementById('occasion')`, 'the occasion select');
     await page.evaluate(`(() => {
       const select = document.getElementById('occasion');
-      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(select, ${JSON.stringify(label)});
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(select, ${jsString(label)});
       select.dispatchEvent(new Event('change', { bubbles: true }));
     })()`);
   };
   const fill = async (id: string, value: string) => {
-    await waitForHydration(`document.getElementById(${JSON.stringify(id)})`, `the ${id} field`);
+    await waitForHydration(`document.getElementById(${jsString(id)})`, `the ${id} field`);
     await page.evaluate(`(() => {
-      const input = document.getElementById(${JSON.stringify(id)});
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, ${JSON.stringify(value)});
+      const input = document.getElementById(${jsString(id)});
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, ${jsString(value)});
       input.dispatchEvent(new Event('input', { bubbles: true }));
     })()`);
   };
@@ -217,7 +236,7 @@ describe.runIf(CHROME_PATH)('US7 Create Outfit in a real browser', () => {
     await waitForHydration(findButton(name), `the ${name} button`);
     await page.evaluate(`(() => {
       const button = ${findButton(name)};
-      if (!button) throw new Error('No button named ' + ${JSON.stringify(name)});
+      if (!button) throw new Error('No button named ' + ${jsString(name)});
       for (let i = 0; i < ${times}; i++) button.click();
     })()`);
   };
