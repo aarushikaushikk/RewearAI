@@ -188,24 +188,39 @@ describe.runIf(CHROME_PATH)('US7 Create Outfit in a real browser', () => {
     await page.waitFor(`document.readyState === 'complete'`, `${route} to load`);
   };
   const bodyText = () => page.evaluate<string>('document.body.innerText');
-  const setOccasion = (label: string) =>
-    page.evaluate(`(() => {
+  // Input before hydration is lost, and a click submits the form natively, so wait until React
+  // has attached its props to the element. Slow CI runners hydrate well after `load`.
+  const waitForHydration = (element: string, label: string) =>
+    page.waitFor(
+      `(() => { const el = ${element}; return !!el && Object.keys(el).some((k) => k.startsWith('__reactProps$')); })()`,
+      `${label} to hydrate`,
+    );
+  const findButton = (name: string) =>
+    `[...document.querySelectorAll('button')].find((b) => b.textContent.trim() === ${JSON.stringify(name)})`;
+  const setOccasion = async (label: string) => {
+    await waitForHydration(`document.getElementById('occasion')`, 'the occasion select');
+    await page.evaluate(`(() => {
       const select = document.getElementById('occasion');
       Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(select, ${JSON.stringify(label)});
       select.dispatchEvent(new Event('change', { bubbles: true }));
     })()`);
-  const fill = (id: string, value: string) =>
-    page.evaluate(`(() => {
+  };
+  const fill = async (id: string, value: string) => {
+    await waitForHydration(`document.getElementById(${JSON.stringify(id)})`, `the ${id} field`);
+    await page.evaluate(`(() => {
       const input = document.getElementById(${JSON.stringify(id)});
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, ${JSON.stringify(value)});
       input.dispatchEvent(new Event('input', { bubbles: true }));
     })()`);
-  const clickButton = (name: string, times = 1) =>
-    page.evaluate(`(() => {
-      const button = [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === ${JSON.stringify(name)});
+  };
+  const clickButton = async (name: string, times = 1) => {
+    await waitForHydration(findButton(name), `the ${name} button`);
+    await page.evaluate(`(() => {
+      const button = ${findButton(name)};
       if (!button) throw new Error('No button named ' + ${JSON.stringify(name)});
       for (let i = 0; i < ${times}; i++) button.click();
     })()`);
+  };
   const outfitNames = () =>
     page.evaluate<string[]>(
       `[...document.querySelectorAll('ul[aria-label="Items in this outfit"] li p.font-semibold')].map((p) => p.textContent)`,
