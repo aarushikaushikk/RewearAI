@@ -38,7 +38,7 @@ function failureResponse(err: unknown): Response {
   return errorResponse('Internal server error', 500);
 }
 
-/** POST /api/outfits/generate with exactly `{ occasion }`. Nothing is saved (US9). */
+/** POST /api/outfits/generate with `{ occasion, shown? }`. Nothing is saved (US9). */
 export async function handleGenerateOutfit(req: Request, deps?: OutfitHandlerDeps): Promise<Response> {
   // 1. Strict CSRF Protection
   if (!validateCsrfOrigin(req)) {
@@ -49,15 +49,15 @@ export async function handleGenerateOutfit(req: Request, deps?: OutfitHandlerDep
     // 2. Authenticate; whose wardrobe is used comes only from the session
     const { user } = await requireAuth(req, deps?.authService);
 
-    // 3. Accept exactly { occasion }, with no user or item IDs
+    // 3. Accept { occasion, shown? }, with no user ID; shown IDs only rule combinations out
     const input = parseGenerateOutfitPayload(await req.json().catch(() => undefined));
     if (!input.ok) {
       return errorResponse(input.error, 400);
     }
 
-    // 4. Generate; an insufficient wardrobe is a normal 200 result, not an error
+    // 4. Generate; an insufficient wardrobe or no alternative is a normal 200 result, not an error
     const outfitService = deps?.outfitService || getProductionOutfitRecommendationService();
-    const recommendation = await outfitService.generate(user.id, input.occasion);
+    const recommendation = await outfitService.generate(user.id, input.occasion, input.shown);
     return NextResponse.json({ success: true, data: recommendation });
   } catch (err) {
     return failureResponse(err);

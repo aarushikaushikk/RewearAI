@@ -12,18 +12,23 @@ export interface AvailableWardrobeItemSource {
 }
 
 /**
- * US7: recommends an outfit for an occasion from the user's own available clothing. All
- * outfit rules live in generateOutfit; this service only loads candidates and shapes the
- * response. Nothing is saved (US9).
+ * US7: recommends an outfit for an occasion from the user's own available clothing, and with
+ * `shown` (US8) an alternative to outfits already shown. All outfit rules live in
+ * generateOutfit; this service only loads candidates and shapes the response. Nothing is
+ * saved (US9).
  */
 export class OutfitRecommendationService {
   constructor(private items: AvailableWardrobeItemSource) {}
 
-  async generate(userId: string, occasion: Occasion): Promise<OutfitRecommendationDto> {
+  async generate(
+    userId: string,
+    occasion: Occasion,
+    shown: readonly (readonly string[])[] = [],
+  ): Promise<OutfitRecommendationDto> {
     const candidates = await this.items.listAvailableByOwner(userId);
     // generateOutfit filters by owner and availability again, so a faulty source can't leak items.
-    const result = generateOutfit({ userId, occasion, items: candidates });
-    if (result.status === 'insufficient') {
+    const result = generateOutfit({ userId, occasion, items: candidates, shown });
+    if (result.status !== 'ok') {
       return result;
     }
     return {

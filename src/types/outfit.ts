@@ -42,10 +42,14 @@ export interface OutfitItemDto {
   formality: Formality;
 }
 
-/** Response data for POST /api/outfits/generate. Generated outfits are not saved (US9). */
+/**
+ * Response data for POST /api/outfits/generate. Generated outfits are not saved (US9).
+ * `no_alternative` means every valid combination was among the outfits already shown (US8).
+ */
 export type OutfitRecommendationDto =
   | { status: "ok"; occasion: Occasion; season: Season; items: OutfitItemDto[] }
-  | { status: "insufficient"; occasion: Occasion; reason: InsufficientReason };
+  | { status: "insufficient"; occasion: Occasion; reason: InsufficientReason }
+  | { status: "no_alternative"; occasion: Occasion };
 
 /** A saved outfit as stored (US9): references to the user's wardrobe items, never copies. */
 export interface SavedOutfitRecord {
