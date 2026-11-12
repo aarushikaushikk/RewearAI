@@ -1,6 +1,6 @@
 # Issue #14 (User Story 9: Saved Outfits): evidence
 
-Users can save a generated outfit from Create Outfit, see their saved outfits on `/outfits/saved` (wireframe 10), and remove one after confirming. A saved outfit stores references to the user's own wardrobe items, never copies. An item deleted since saving shows as "Item removed from your wardrobe" and is never replaced. One manual browser run used a production build against a throwaway in-memory MongoDB, with six seeded items that use the Cloudinary demo photo as a placeholder. **Nothing ran against Atlas or on Vercel.**
+Users can save a generated outfit from Create Outfit, see their saved outfits on `/outfits/saved` (wireframe 10), and remove one after confirming. A saved outfit stores references to the user's own wardrobe items, never copies. An item deleted since saving shows as "Item removed from your wardrobe" and is never replaced. Screenshots come from a local `next dev` run of this branch using the team's `.env.local`, which means the real MongoDB Atlas database and Cloudinary images. They use the team's existing **Test User** account and its illustrated wardrobe. An earlier run against a throwaway in-memory MongoDB checked the same flow, including that a repeated save adds no second record. Nothing ran on Vercel.
 
 ## Design decisions applied
 
@@ -16,22 +16,29 @@ Users can save a generated outfit from Create Outfit, see their saved outfits on
 
 | Criterion | Tests | Browser |
 |---|---|---|
-| The user can save an outfit recommendation | `SaveOutfitButton.test.tsx`, `CreateOutfitForm.test.tsx`, `savedOutfitRoutes.test.ts` (POST) | `create-outfit-saved-800.jpg`: **Saved** with "Outfit saved. View saved outfits" |
-| A saved outfit retains its specific wardrobe items | `savedOutfitService.test.ts`, repository contract (memory and MongoDB) | `saved-list-800.jpg`; `missing-item-800.jpg` after deleting Loafers |
-| The user can view previously saved outfits | `savedOutfitsPage.test.tsx`, `SavedOutfitList.test.tsx`, GET route tests | `saved-list-800.jpg`: newest first; `empty-state-800.jpg` |
-| The user can remove a saved outfit | `SavedOutfitList.test.tsx` (confirm, cancel, retry), DELETE route tests (incl. another user's outfit → 404) | `remove-confirm-800.jpg`, `removed-800.jpg`; still removed after reload |
+| The user can save an outfit recommendation | `SaveOutfitButton.test.tsx`, `CreateOutfitForm.test.tsx`, `savedOutfitRoutes.test.ts` (POST) | `create-outfit-saved-1280.jpg`: **Saved** with "Outfit saved. View saved outfits" |
+| A saved outfit retains its specific wardrobe items | `savedOutfitService.test.ts`, repository contract (memory and MongoDB) | `saved-list-1280.jpg`: each card shows its own items; the Dinner card shows "Item removed from your wardrobe" for its deleted shoes |
+| The user can view previously saved outfits | `savedOutfitsPage.test.tsx`, `SavedOutfitList.test.tsx`, GET route tests | `saved-list-1280.jpg`: newest first; `empty-state-1280.jpg` |
+| The user can remove a saved outfit | `SavedOutfitList.test.tsx` (confirm, cancel, retry), DELETE route tests (incl. another user's outfit → 404) | `remove-confirm-1280.jpg`, `removed-1280.jpg`; still removed after reload |
 
 Mobile (375 px): one column, no horizontal scroll (`scrollWidth` 375), and Remove saved is visible without hover (`mobile-375.jpg`). Wireframe reference: `wireframe-10-reference.png`.
 
-## Browser run (2026-11-11)
+## Browser runs (2026-11-11)
 
-1. A signed-out visit to `/outfits/saved` redirects to `/sign-in`.
-2. After sign-in, the page shows "No saved outfits yet" with **Create an outfit**.
-3. Work outfit (Oxford shirt, Chinos, Loafers) → **Save outfit** → **Saved**. Generating again gives a fresh **Save outfit** button. Saving the same Work outfit again left **one** Work record in the database.
-4. Casual outfit saved. `/outfits/saved` lists Casual, then Work, each with its own item photos and "Saved Nov 11".
-5. Loafers deleted from the database → the Work card shows "Item removed from your wardrobe" in its place.
-6. **Remove saved** opens an `alertdialog` with focus on **Cancel**; Escape closes it. Confirming removes the Casual card and shows "Saved outfit removed." The card stays gone after reload.
-7. Requests: `GET /api/outfits/saved` 200, `DELETE /api/outfits/saved/:id` 200, images through `/_next/image` 200. The only 404 is the header's prefetch of `/outfits/history`, which is #15 (US10) and not built yet.
+**Screenshots: `next dev` with `.env.local` (Atlas and Cloudinary), Test User, 1280 px and 375 px**
+
+1. Work outfit (Camel Shirt Dress, Black Pointed Heels, Brown Suede Jacket, Red Satin Clutch) and Casual outfit (Navy Striped Day Dress, Navy Canvas Sneakers, Yellow Rain Jacket, Beige Canvas Cap) saved from Create Outfit → **Saved** with "Outfit saved. View saved outfits" (`create-outfit-saved-1280.jpg`).
+2. Missing item, with none of Test User's own clothes deleted: a temporary copy of Black Pointed Heels was uploaded, a Dinner outfit (Purple Silk Blouse, Black Pencil Skirt, the copy) was saved through `POST /api/outfits/saved`, and then only the copy was deleted. The Dinner card shows "Item removed from your wardrobe" in its place (`saved-list-1280.jpg`).
+3. **Remove saved** on Casual opens the confirmation with focus on **Cancel** (`remove-confirm-1280.jpg`). Confirming removes the card and shows "Saved outfit removed." (`removed-1280.jpg`).
+4. 375 px: one column, `scrollWidth` 375 (`mobile-375.jpg`).
+5. Clean-up: the Dinner and Work outfits were removed afterwards, so Test User's Saved Outfits is empty again, as it was before the run (`empty-state-1280.jpg`).
+
+**Earlier check: production build with a throwaway in-memory MongoDB**
+
+- A signed-out visit to `/outfits/saved` redirects to `/sign-in`.
+- Saving the same Work outfit twice left **one** Work record in the database. Generating again gives a fresh **Save outfit** button.
+- Escape closes the remove confirmation, and a removed outfit stays gone after reload.
+- Requests: `GET /api/outfits/saved` 200, `DELETE /api/outfits/saved/:id` 200. The only 404 is the header's prefetch of `/outfits/history`, which is #15 (US10) and not built yet.
 
 ## Results
 
