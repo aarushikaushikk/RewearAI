@@ -23,6 +23,7 @@ jobs:
   lint-typecheck:
     name: Lint and typecheck
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -37,6 +38,7 @@ jobs:
     name: Unit and integration tests
     needs: lint-typecheck
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -44,12 +46,18 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
       - run: npm ci
-      - run: npm test
+      - name: Run tests
+        shell: bash
+        run: npm test 2>&1 | tee test-output.txt
+      - name: Summarize
+        if: always()
+        run: bash scripts/writeTestSummary.sh "Unit and integration tests" test-output.txt
 
   db-tests:
     name: Database tests
     needs: lint-typecheck
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -61,15 +69,22 @@ jobs:
           path: ~/.cache/mongodb-binaries
           key: mongodb-binaries-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
       - run: npm ci
-      - run: npm run test:db
+      - name: Run tests
+        shell: bash
+        run: npm run test:db 2>&1 | tee test-output.txt
+      - name: Summarize
+        if: always()
+        run: bash scripts/writeTestSummary.sh "Database tests" test-output.txt
 
   build-smoke:
     name: Production build and smoke tests
     needs: [unit-integration, db-tests]
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     env:
       # Turns on the real-browser checks in tests/smoke/outfitGeneration.smoke.ts.
       SMOKE_CHROME_PATH: /usr/bin/google-chrome
+      SMOKE_SCREENSHOT_DIR: smoke-screenshots
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -99,10 +114,24 @@ jobs:
             exit 1
           fi
           echo "All $(printf '%s\n' "$routes" | wc -l | tr -d ' ') /api routes are dynamic."
+      - name: Summarize
+        if: always()
+        run: bash scripts/writeTestSummary.sh "Production smoke tests" build-output.txt
+      - name: Upload diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: smoke-diagnostics
+          path: |
+            build-output.txt
+            smoke-screenshots/
+          if-no-files-found: ignore
+          retention-days: 7
 
   security:
     name: Security scanning
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
       pull-requests: read
@@ -122,7 +151,7 @@ jobs:
         with:
           fail-on-severity: high
       - name: Scan for committed secrets
-        uses: gitleaks/gitleaks-action@v3
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -131,6 +160,7 @@ jobs:
     if: github.event_name == 'pull_request'
     needs: [build-smoke, security]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
       pull-requests: write
@@ -167,6 +197,16 @@ jobs:
           echo "alias_url=https://$PREVIEW_DOMAIN" >> "$GITHUB_OUTPUT"
       - name: Check the deployed app responds
         run: bash scripts/checkDeployment.sh "https://$PREVIEW_DOMAIN"
+      - name: Summarize
+        env:
+          DEPLOY_URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          {
+            echo "### Preview deployed"
+            echo "- Sign in here: https://$PREVIEW_DOMAIN"
+            echo "- This exact deployment: $DEPLOY_URL"
+            echo "- Environment: Preview, database \`rewear\`"
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Comment the preview URL on the PR
         uses: actions/github-script@v9
         env:
@@ -199,6 +239,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [build-smoke, security]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     concurrency:
       group: deploy-production
       cancel-in-progress: false
@@ -226,9 +267,21 @@ jobs:
       - run: npx --yes "$VERCEL_CLI" pull --yes --environment=production --token="$VERCEL_TOKEN"
       - run: npx --yes "$VERCEL_CLI" build --prod --token="$VERCEL_TOKEN"
       - name: Deploy and point the production domain at it
+        id: deploy
         run: |
           url=$(npx --yes "$VERCEL_CLI" deploy --prebuilt --prod --token="$VERCEL_TOKEN")
           # APP_ORIGIN for Production is this fixed domain, so it can't drift from Vercel's default.
           bash scripts/setVercelAlias.sh "$url" "${PRODUCTION_URL#https://}"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
       - name: Check the deployed app responds
         run: bash scripts/checkDeployment.sh "$PRODUCTION_URL"
+      - name: Summarize
+        env:
+          DEPLOY_URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          {
+            echo "### Production deployed"
+            echo "- Live at: $PRODUCTION_URL"
+            echo "- This exact deployment: $DEPLOY_URL"
+            echo "- Environment: Production, database \`rewear-prod\`"
+          } >> "$GITHUB_STEP_SUMMARY"

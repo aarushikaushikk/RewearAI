@@ -34,6 +34,14 @@ flowchart LR
 
 [Dependabot](../.github/dependabot.yml) opens weekly PRs for npm and GitHub Actions updates. Major versions are ignored, because AGENTS.md requires both partners to agree to those.
 
+The third-party gitleaks action is pinned to a full commit SHA, with its version in a comment, because a tag can be moved to different code. Dependabot updates the pin. GitHub's own `actions/*` use version tags.
+
+## Reading a run
+
+- **Summary:** each run's page (Actions → the run) lists the test counts for each suite and, after a deploy, its URL and database.
+- **Diagnostics:** if the build and smoke tests fail, the run has a `smoke-diagnostics` artifact (kept for 7 days) with the full build output and the browser screenshots taken so far.
+- **Timeouts:** every job has a `timeout-minutes` limit (10–20 minutes), so a hung browser or database stops in minutes instead of GitHub's 6-hour default.
+
 ## Environments
 
 | Environment | Where it runs | Config | Database |
