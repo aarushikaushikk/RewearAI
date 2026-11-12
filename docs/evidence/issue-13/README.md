@@ -2,9 +2,7 @@
 
 **Try another** on Create Outfit asks for a different combination from the user's own available clothes. An alternative only has to differ by at least one item. It prefers pieces that haven't been shown yet, so repeated requests mix and match across the wardrobe instead of returning the same clothes. When every combination has been shown, the page says "There isn't another suitable combination right now." and keeps the current outfit (DESIGN §5.6).
 
-Screenshots:
-- **`desktop-1280-try-another.jpg`:** the seeded evidence account (`test@example.com`, 106 illustrated wardrobe items) on the local dev server (`next dev`, MongoDB Atlas and Cloudinary from `.env.local`), driven by headless Chrome. The "N" badge is the Next.js dev-mode indicator.
-- **`desktop-1280-no-alternative.jpg`, `mobile-375-no-alternative.jpg`:** the automated smoke test on the production build (`next start`) with a throwaway in-memory MongoDB and a small synthetic wardrobe that uses the Cloudinary demo photo as a placeholder. The test account has too many combinations to run out, so the no-alternative state comes from this run.
+All three screenshots use the seeded evidence account (`test@example.com`, 106 illustrated wardrobe items) on the local dev server (`next dev`, MongoDB Atlas and Cloudinary from `.env.local`), driven by headless Chrome. The "N" badge is the Next.js dev-mode indicator. The automated smoke test also covers these flows on the production build (`next start`) with a throwaway in-memory MongoDB (below).
 
 Nothing ran on Vercel.
 
@@ -28,7 +26,7 @@ Nothing ran on Vercel.
 | The application avoids repeatedly returning the exact same outfit when alternatives exist | `generateOutfit.test.ts` "offers every distinct combination once, then says there is no alternative", "matches shown outfits regardless of item order"; `CreateOutfitForm.test.tsx` "sends every outfit shown so far…" | Test account: 3 Work outfits in a row with no item repeated; smoke run: each outfit checked against all earlier ones |
 | If no suitable alternative exists, the application clearly tells the user | `CreateOutfitForm.test.tsx` "says when there is no other combination, keeping the current outfit"; `outfitRecommendationService.test.ts` | `desktop-1280-no-alternative.jpg`, `mobile-375-no-alternative.jpg` |
 
-Mobile (375 px): one column, no horizontal scroll (`scrollWidth <= innerWidth`) on both the test account and the smoke run. In the smoke run, User A has one Work combination, so Try another shows the message and keeps that outfit (`mobile-375-no-alternative.jpg`).
+Mobile (375 px): one column, no horizontal scroll (`scrollWidth <= innerWidth`), and Try another shows the message under the kept outfit (`mobile-375-no-alternative.jpg`).
 
 ## Test account run (2026-11-11, local dev server)
 
@@ -38,7 +36,9 @@ Signed in as `test@example.com` through the real sign-in form, chose **Work**, a
 2. Blush Slip Dress, Red Stiletto Heels, White Linen Blazer, Black Dress Watch (`desktop-1280-try-another.jpg`)
 3. Purple Cocktail Dress, Beige Driving Loafers, Black Tuxedo Jacket, Brown Leather Strap Watch
 
-At 375 px, a fresh **Generate Outfit** started over at outfit 1, and **Try another** gave outfit 2 again. That's expected: the shown list resets on Generate Outfit. No account data was changed, and nothing was saved.
+At 375 px, a fresh **Generate Outfit** started over at outfit 1, and **Try another** gave outfit 2 again. That's expected: the shown list resets on Generate Outfit.
+
+**No alternative:** with 106 items the account never runs out of combinations. For this capture, 22 Formal items were temporarily marked unavailable through `PATCH /api/wardrobe/[itemId]/availability`. That left one All-season Formal outfit: Little Black Dress, Black Pointed Heels, Black Tuxedo Jacket, Red Satin Clutch. **Formal** → **Generate Outfit** → **Try another** showed "There isn't another suitable combination right now." with that outfit kept on screen, at 1280 px (`desktop-1280-no-alternative.jpg`) and 375 px (`mobile-375-no-alternative.jpg`). The same 22 items were then set back to available, and the account was confirmed at 106 items, 0 unavailable. Nothing was saved.
 
 ## Smoke run (2026-11-11, `tests/smoke/outfitGeneration.smoke.ts`)
 
@@ -48,7 +48,7 @@ Run with `SMOKE_CHROME_PATH` set to Chrome and `SMOKE_SCREENSHOT_DIR` set: 22 of
 2. **Try another** → Oxford shirt + Chinos + Loafers + Wool coat.
 3. **Try another** → Linen tee + Chinos + Loafers.
 4. **Try another** → Oxford shirt + Denim shorts + Loafers.
-5. **Try another** → "There isn't another suitable combination right now." Outfit 4 stays on screen with **Save outfit** (`desktop-1280-no-alternative.jpg`).
+5. **Try another** → "There isn't another suitable combination right now." Outfit 4 stays on screen with **Save outfit**.
 6. Each press sent exactly one `POST /api/outfits/generate`. The unavailable blazer and User B's items never appeared. There were no unexpected console errors or failed requests.
 
 Oxford shirt + Chinos + Loafers without the coat isn't offered: that only drops a piece that fits, so it isn't a new outfit.
@@ -66,7 +66,6 @@ Oxford shirt + Chinos + Loafers without the coat isn't offered: that only drops 
 
 ## Out of scope / not verified
 
-- The no-alternative screenshots use the synthetic smoke wardrobe, not the test account. Reaching that state on the test account would mean marking most of its items unavailable, so its data was left unchanged.
 - Shown outfits live in the page, so a refresh or a new **Generate Outfit** starts over, and the first outfit for an occasion is the same each time (US7). Remembering across sessions would fit with outfit history (#15). Partner sign-off is pending.
 - Only the last 20 shown outfits are sent, so in a very large wardrobe an older one can come back after 20 requests.
 - The outfit rules are still provisional (DESIGN "Outfit algorithm" open item).
