@@ -14,6 +14,7 @@ import { SaveOutfitButton } from '@/components/outfits/SaveOutfitButton';
 import { Alert } from '@/components/ui/Alert';
 import { PrimaryButton } from '@/components/ui/PrimaryButton';
 import { SelectField } from '@/components/ui/SelectField';
+import { MAX_SHOWN_OUTFITS } from '@/lib/validation/outfitValidation';
 import {
   OCCASIONS,
   type Occasion,
@@ -34,6 +35,14 @@ type ViewState =
   | { status: 'insufficient'; occasion: Occasion }
   | { status: 'error'; message: string; sessionEnded?: boolean };
 
+type ErrorState = Extract<ViewState, { status: 'error' }>;
+
+/** A server answer: a view, or that every combination has been shown (US8). */
+type Answer = ViewState | { status: 'no_alternative' };
+
+/** Try another (US8): the current outfit stays on screen through every state. */
+type AnotherState = { status: 'idle' } | { status: 'loading' } | { status: 'none' } | ErrorState;
+
 const ROLE_LABELS: Record<OutfitRole, string> = {
   top: 'Top',
   bottom: 'Bottom',
@@ -45,6 +54,7 @@ const ROLE_LABELS: Record<OutfitRole, string> = {
 
 const CHOOSE_OCCASION_MESSAGE = 'Choose an occasion to continue.';
 const GENERATE_FAILED_MESSAGE = "We couldn't generate an outfit. Try again.";
+const NO_ALTERNATIVE_MESSAGE = "There isn't another suitable combination right now.";
 
 // Messages are chosen here, never taken from the response, so server text can't reach the user.
 const STATUS_MESSAGES: Record<number, string> = {
@@ -82,12 +92,15 @@ function isOutfitItem(value: unknown): value is ShownItem {
 }
 
 /** Accepts only a well-formed answer for the occasion that was requested. */
-function viewFor(data: unknown, requested: Occasion): ViewState {
+function answerFor(data: unknown, requested: Occasion): Answer {
   if (!isRecord(data) || data.occasion !== requested) {
     return { status: 'error', message: GENERATE_FAILED_MESSAGE };
   }
   if (data.status === 'insufficient') {
     return { status: 'insufficient', occasion: requested };
+  }
+  if (data.status === 'no_alternative') {
+    return { status: 'no_alternative' };
   }
   if (data.status === 'ok' && Array.isArray(data.items) && data.items.length > 0 && data.items.every(isOutfitItem)) {
     return { status: 'ok', outfit: data as GeneratedOutfit };
@@ -95,19 +108,45 @@ function viewFor(data: unknown, requested: Occasion): ViewState {
   return { status: 'error', message: GENERATE_FAILED_MESSAGE };
 }
 
+/** Asks for an outfit; with `shown` (US8), for one that isn't among those outfits. */
+async function requestOutfit(body: { occasion: Occasion; shown?: string[][] }): Promise<Answer> {
+  try {
+    const response = await fetch('/api/outfits/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: window.location.origin },
+      body: JSON.stringify(body),
+    });
+    if (response.ok) {
+      const json = (await response.json().catch(() => null)) as { data?: unknown } | null;
+      return answerFor(json?.data, body.occasion);
+    }
+    return {
+      status: 'error',
+      message: STATUS_MESSAGES[response.status] ?? GENERATE_FAILED_MESSAGE,
+      sessionEnded: response.status === 401,
+    };
+  } catch {
+    return { status: 'error', message: NETWORK_ERROR_MESSAGE };
+  }
+}
+
 /**
- * Create Outfit (DESIGN §5.6, wireframe 08): choose an occasion, generate, and review the
- * recommended items, and save the outfit (US9). Mark as worn, Try another and feedback
- * belong to later stories.
+ * Create Outfit (DESIGN §5.6, wireframe 08): choose an occasion, generate, review the
+ * recommended items, try another combination (US8), and save the outfit (US9). Mark as worn
+ * and feedback belong to later stories.
  */
 export function CreateOutfitForm() {
   const [selected, setSelected] = useState('');
   const [fieldError, setFieldError] = useState<string | undefined>();
   const [view, setView] = useState<ViewState>({ status: 'idle' });
+  const [another, setAnother] = useState<AnotherState>({ status: 'idle' });
   // Blocks a second request before React re-renders the disabled button.
   const inFlight = useRef(false);
+  // Item IDs of the outfits shown since Generate Outfit, sent so Try another doesn't repeat them.
+  const shown = useRef<string[][]>([]);
   const resultHeading = useRef<HTMLHeadingElement>(null);
   const isLoading = view.status === 'loading';
+  const isBusy = isLoading || another.status === 'loading';
 
   // Moves keyboard and screen reader users to the new outfit.
   useEffect(() => {
@@ -116,36 +155,51 @@ export function CreateOutfitForm() {
     }
   }, [view]);
 
+  function show(next: ViewState) {
+    if (next.status === 'ok') {
+      shown.current = [...shown.current, next.outfit.items.map((item) => item.id)].slice(-MAX_SHOWN_OUTFITS);
+    }
+    setView(next);
+  }
+
+  function forgetShown() {
+    shown.current = [];
+    setAnother({ status: 'idle' });
+  }
+
   async function generate(occasion: Occasion) {
     if (inFlight.current) {
       return;
     }
     inFlight.current = true;
+    forgetShown();
     setView({ status: 'loading' });
 
-    let next: ViewState;
-    try {
-      const response = await fetch('/api/outfits/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Origin: window.location.origin },
-        body: JSON.stringify({ occasion }),
-      });
-      if (response.ok) {
-        const body = (await response.json().catch(() => null)) as { data?: unknown } | null;
-        next = viewFor(body?.data, occasion);
-      } else {
-        next = {
-          status: 'error',
-          message: STATUS_MESSAGES[response.status] ?? GENERATE_FAILED_MESSAGE,
-          sessionEnded: response.status === 401,
-        };
-      }
-    } catch {
-      next = { status: 'error', message: NETWORK_ERROR_MESSAGE };
-    }
+    const answer = await requestOutfit({ occasion });
 
     inFlight.current = false;
-    setView(next);
+    // Nothing was shown yet, so "no alternative" can only be a faulty answer.
+    show(answer.status === 'no_alternative' ? { status: 'error', message: GENERATE_FAILED_MESSAGE } : answer);
+  }
+
+  async function tryAnother(occasion: Occasion) {
+    if (inFlight.current) {
+      return;
+    }
+    inFlight.current = true;
+    setAnother({ status: 'loading' });
+
+    const answer = await requestOutfit({ occasion, shown: shown.current });
+
+    inFlight.current = false;
+    if (answer.status === 'no_alternative') {
+      setAnother({ status: 'none' });
+    } else if (answer.status === 'error') {
+      setAnother(answer);
+    } else {
+      setAnother({ status: 'idle' });
+      show(answer);
+    }
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -164,6 +218,7 @@ export function CreateOutfitForm() {
     setSelected(label);
     setFieldError(undefined);
     // A result for the previous occasion would be misleading next to the new choice.
+    forgetShown();
     setView({ status: 'idle' });
   }
 
@@ -186,12 +241,12 @@ export function CreateOutfitForm() {
             onChange={handleOccasionChange}
             required
             error={fieldError}
-            disabled={isLoading}
+            disabled={isBusy}
           />
         </div>
         {/* Aligns the button with the select, below its label, on wider screens. */}
         <div className="sm:pt-6">
-          <PrimaryButton isLoading={isLoading} className="sm:w-auto">
+          <PrimaryButton isLoading={isLoading} disabled={isBusy} className="sm:w-auto">
             Generate Outfit
           </PrimaryButton>
         </div>
@@ -264,8 +319,38 @@ export function CreateOutfitForm() {
               </li>
             ))}
           </ul>
-          {/* Generating again unmounts this section, so each new outfit starts unsaved. */}
-          <SaveOutfitButton occasion={view.outfit.occasion} itemIds={view.outfit.items.map((item) => item.id)} />
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+            <button
+              type="button"
+              onClick={() => void tryAnother(view.outfit.occasion)}
+              disabled={another.status === 'loading'}
+              aria-busy={another.status === 'loading' || undefined}
+              className={`${SECONDARY_ACTION} self-start disabled:cursor-not-allowed disabled:opacity-60`}
+            >
+              Try another
+            </button>
+            {/* Keyed by its items, so each new outfit starts unsaved. */}
+            <SaveOutfitButton
+              key={view.outfit.items.map((item) => item.id).join()}
+              occasion={view.outfit.occasion}
+              itemIds={view.outfit.items.map((item) => item.id)}
+            />
+          </div>
+          {another.status === 'none' && (
+            <p role="status" className="text-text">
+              {NO_ALTERNATIVE_MESSAGE}
+            </p>
+          )}
+          {another.status === 'error' && (
+            <div className="flex flex-col gap-3">
+              <Alert variant="error" message={another.message} focusOnMount />
+              {another.sessionEnded && (
+                <Link href={SIGN_IN_SESSION_ENDED_PATH} className={`${SECONDARY_ACTION} self-start`}>
+                  Sign in
+                </Link>
+              )}
+            </div>
+          )}
         </section>
       )}
     </div>
