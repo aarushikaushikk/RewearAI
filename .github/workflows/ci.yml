@@ -88,10 +88,17 @@ jobs:
       # AGENTS.md section 7: a prerendered /api route would serve stale data.
       - name: Check every /api route is dynamic
         run: |
-          if grep -E '/api/' build-output.txt | grep -vE 'ƒ /api/'; then
+          # Only the build's route table, whose lines start with a tree character.
+          routes=$(grep -E '^(┌|├|└|│) .*/api/' build-output.txt || true)
+          if [ -z "$routes" ]; then
+            echo "::error::No /api routes found in the build output."
+            exit 1
+          fi
+          if printf '%s\n' "$routes" | grep -vE 'ƒ /api/'; then
             echo "::error::The routes above are not dynamic. Call await connection() in their GET handler."
             exit 1
           fi
+          echo "All $(printf '%s\n' "$routes" | wc -l | tr -d ' ') /api routes are dynamic."
 
   security:
     name: Security scanning
