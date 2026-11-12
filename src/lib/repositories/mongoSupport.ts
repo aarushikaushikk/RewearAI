@@ -38,7 +38,10 @@ export type RepositoryOperation =
   | 'wardrobeItem.findByIdForOwner'
   | 'wardrobeItem.updateForOwner'
   | 'wardrobeItem.setAvailability'
-  | 'wardrobeItem.deleteForOwner';
+  | 'wardrobeItem.deleteForOwner'
+  | 'outfitHistory.findOrCreateOutfit'
+  | 'outfitHistory.recordWorn'
+  | 'outfitHistory.listByOwner';
 
 export type ErrorCategory =
   | 'connection'

@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { NETWORK_ERROR_MESSAGE } from '@/components/auth/authFormErrors';
+import { MarkAsWornButton } from '@/components/outfits/MarkAsWornButton';
 import { OutfitItemImage } from '@/components/outfits/OutfitItemImage';
 import { Alert } from '@/components/ui/Alert';
 import { PrimaryButton } from '@/components/ui/PrimaryButton';
@@ -109,7 +110,8 @@ function viewFor(data: unknown, requested: Occasion): ViewState {
 
 /**
  * Create Outfit (DESIGN §5.6, wireframe 08): choose an occasion, generate, and review the
- * recommended items. Save, Mark as worn, Try another and feedback belong to later stories.
+ * recommended items, and mark them as worn (US10). Save, Try another and feedback belong to
+ * later stories.
  */
 export function CreateOutfitForm() {
   const [selected, setSelected] = useState('');
@@ -275,6 +277,7 @@ export function CreateOutfitForm() {
               </li>
             ))}
           </ul>
+          <MarkAsWornButton itemIds={view.outfit.items.map((item) => item.id)} occasion={view.outfit.occasion} />
         </section>
       )}
     </div>

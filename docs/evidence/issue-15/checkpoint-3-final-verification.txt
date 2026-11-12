@@ -1,0 +1,59 @@
+US10 (#15) Outfit History - Checkpoint 3: final verification
+Branch: feature/15-outfit-history (base origin/main 90a9e1c). Dates: 2026-11-11 to 2026-11-12.
+No PR #43 code used. Only shared production file: src/components/outfits/CreateOutfitForm.tsx.
+
+CHECKPOINT 3A (after restart)
+  npx tsc --noEmit: exit 0.  npm run lint (whole project): exit 0.
+  npx vitest run --maxWorkers=2 --no-file-parallelism:
+    Test Files 88 passed | 1 skipped (89); Tests 1614 passed | 1 skipped (1615).
+    The skip is the live FashionSigLIP model test (skipped by design).
+  npm run test:db: Test Files 15 passed (15); Tests 427 passed (427).
+  No mongod processes or mongo-mem-*/mdb-* folders left afterwards.
+
+CHECKPOINT 3B
+  npm run build: exit 0. Route table includes
+    ƒ /api/outfits/history   ƒ /outfits/history   (dynamic, as required)
+    All /api routes ƒ; /wardrobe/[itemId] ◐ as before US10. No export errors.
+  New smoke file tests/smoke/outfitHistory.smoke.ts (16 tests), alone: 16/16.
+  npm run test:smoke (rebuilds, then all smoke files, real Chrome via
+    SMOKE_CHROME_PATH): Test Files 4 passed (4); Tests 68 passed (68):
+    productionAuth 20, outfitHistory 16, outfitGeneration 17, googleAuth 15.
+  Isolation: temporary local MongoDB only; Cloudinary settings blank; synthetic
+    users history-a/b/c@example.com; photos are Cloudinary's public demo image.
+
+BROWSER VERIFICATION (Chrome, headless, CDP; desktop 1280 px and mobile 375 px)
+  Verified: signed-out redirect; empty state with only "Create an outfit";
+  Create Outfit -> Work outfit -> Mark as worn; the POST body holds the exact
+  generated item IDs, occasion "work" and the browser's local date (emulated
+  Pacific/Pago_Pago, UTC-11, whose date differed from the UTC date at the time);
+  confirmation with a readable date; same clothes again -> "already recorded",
+  still one record; Enter key records; injected 503 -> alert takes focus,
+  outfit stays visible, Try again records; View outfit history -> newest first
+  with dates, occasions, names and photos via /_next/image; reload keeps the
+  history; deleted item -> "No longer in your wardrobe"; injected 500 on load ->
+  Retry recovers; mobile: no horizontal scroll, thumbnails inside the viewport,
+  44 px link; ended session -> Sign in link, nothing recorded; no unexpected
+  console errors or failed requests (US9 /outfits/saved prefetch 404s reported).
+  HTTP: page/API private; 401, 403 (foreign origin), 400 (userId field,
+  backdated, future and impossible dates); same clothes 7 times -> 1 record;
+  User B can't record User A's items (404) or see A's history.
+
+SCREENSHOTS (docs/evidence/issue-15/screenshots/, captured by the smoke test)
+  desktop-1280-history-empty.png
+  desktop-1280-recommendation-mark-as-worn.png
+  desktop-1280-mark-as-worn-recorded.png
+  desktop-1280-mark-as-worn-error.png
+  desktop-1280-history-entries.png
+  desktop-1280-history-deleted-item.png
+  mobile-375-history-entries.png
+  mobile-375-mark-as-worn-already-recorded.png
+
+NOT VERIFIED IN THE BROWSER
+  Adding clothing through the app and US4's delete (both need Cloudinary, blank
+  here): wardrobe items were written to, and one deleted from, the temporary
+  database directly. A real network outage (only HTTP failures were injected;
+  network errors are covered by component tests). Screen-reader output itself
+  (roles, focus and labels were checked, not a screen reader).
+
+DISK: 2,832 MB free at preflight; 2,636 MB after the smoke suite. Page file
+  unchanged at 16,226 MB. No mongod, mongo-mem-*, mdb-* or test Chrome left.

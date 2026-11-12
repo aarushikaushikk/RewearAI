@@ -1,6 +1,8 @@
 import 'server-only';
 import type { Connection } from 'mongoose';
 import { Account } from '@/models/Account';
+import { Outfit } from '@/models/Outfit';
+import { OutfitHistory } from '@/models/OutfitHistory';
 import { Session } from '@/models/Session';
 import { User } from '@/models/User';
 import { WardrobeItem } from '@/models/WardrobeItem';
@@ -35,6 +37,8 @@ export function ensureRequiredIndexes(connection: Connection): Promise<void> {
     Session.createIndexes(),
     Account.createIndexes(),
     WardrobeItem.createIndexes(),
+    Outfit.createIndexes(),
+    OutfitHistory.createIndexes(),
   ]).then(() => undefined);
   initialization.set(database, attempt);
   attempt.catch(() => {

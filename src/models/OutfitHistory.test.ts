@@ -8,6 +8,7 @@ function validEntry(overrides: Record<string, unknown> = {}) {
     owner: new Types.ObjectId(),
     outfit: new Types.ObjectId(),
     wornOn: "2026-11-04",
+    combinationKey: "64c0000000000000000000a1,64c0000000000000000000a2",
     ...overrides,
   };
 }
@@ -48,7 +49,7 @@ describe("OutfitHistory model", () => {
     expect(OutfitHistory.schema.path(field).options.ref).toBe(ref);
   });
 
-  it.each(["owner", "outfit", "wornOn"])(
+  it.each(["owner", "outfit", "wornOn", "combinationKey"])(
     "rejects a record missing %s",
     async (field) => {
       const error = await validate({ [field]: undefined });
@@ -76,6 +77,19 @@ describe("OutfitHistory model", () => {
     ]);
   });
 
+  it("allows the same clothes to be recorded as worn only once per user per day (US10)", () => {
+    expect(OutfitHistory.schema.indexes()).toContainEqual([
+      { owner: 1, wornOn: 1, combinationKey: 1 },
+      expect.objectContaining({ unique: true }),
+    ]);
+  });
+
+  it("rejects a blank combination key", async () => {
+    const error = await validate({ combinationKey: "   " });
+
+    expect(error?.errors.combinationKey?.kind).toBe("required");
+  });
+
   it("indexes each user's history newest first", () => {
     expect(OutfitHistory.schema.indexes()).toContainEqual([
       { owner: 1, wornOn: -1 },
@@ -87,5 +101,6 @@ describe("OutfitHistory model", () => {
     const entry = new OutfitHistory(validEntry());
 
     expectTypeOf(entry.wornOn).toEqualTypeOf<string>();
+    expectTypeOf(entry.combinationKey).toEqualTypeOf<string>();
   });
 });
