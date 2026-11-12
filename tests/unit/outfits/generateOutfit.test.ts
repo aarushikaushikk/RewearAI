@@ -429,6 +429,16 @@ describe('generateOutfit', () => {
       });
     });
 
+    it('reports insufficient items when no top and bottom share a season', () => {
+      const [top, bottom] = [item('Top', { season: 'Summer' }), item('Bottom', { season: 'Winter' })];
+
+      expect(generate([top, bottom], 'casual', [idsOf(top)])).toEqual({
+        status: 'insufficient',
+        occasion: 'casual',
+        reason: 'no_complete_outfit',
+      });
+    });
+
     it('never adds a shown item that is unavailable, unsuitable or someone else\'s', () => {
       const [top, bottom] = [item('Top'), item('Bottom')];
       const unavailable = item('Bottom', { isAvailable: false });
