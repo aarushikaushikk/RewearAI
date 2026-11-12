@@ -162,7 +162,7 @@ jobs:
         run: |
           url=$(npx --yes "$VERCEL_CLI" deploy --prebuilt --token="$VERCEL_TOKEN")
           # APP_ORIGIN for Preview is this fixed domain, so sign-in works there.
-          npx --yes "$VERCEL_CLI" alias set "$url" "$PREVIEW_DOMAIN" --scope="$VERCEL_ORG_ID" --token="$VERCEL_TOKEN"
+          bash scripts/setVercelAlias.sh "$url" "$PREVIEW_DOMAIN"
           echo "url=$url" >> "$GITHUB_OUTPUT"
           echo "alias_url=https://$PREVIEW_DOMAIN" >> "$GITHUB_OUTPUT"
       - name: Check the deployed app responds
@@ -229,6 +229,6 @@ jobs:
         run: |
           url=$(npx --yes "$VERCEL_CLI" deploy --prebuilt --prod --token="$VERCEL_TOKEN")
           # APP_ORIGIN for Production is this fixed domain, so it can't drift from Vercel's default.
-          npx --yes "$VERCEL_CLI" alias set "$url" "${PRODUCTION_URL#https://}" --scope="$VERCEL_ORG_ID" --token="$VERCEL_TOKEN"
+          bash scripts/setVercelAlias.sh "$url" "${PRODUCTION_URL#https://}"
       - name: Check the deployed app responds
         run: bash scripts/checkDeployment.sh "$PRODUCTION_URL"

@@ -71,18 +71,31 @@ A deploy job fails with a message naming any of these that is missing.
    npx vercel@65.2.0 link
    ```
    Choose to create a new project. This writes `.vercel/project.json`, which is gitignored.
-2. Copy `.env.local` into Vercel and store the IDs and domains in GitHub. Pass two unused `*.vercel.app` names, one for production and one for previews. Nothing needs adding in the Vercel dashboard: each deploy job points its domain at the new deployment with `vercel alias set`.
-   ```bash
-   bash scripts/setupVercelEnv.sh rewear-ai-app.vercel.app rewear-ai-preview.vercel.app
-   ```
-   Production gets the same `MONGODB_URI` with the database changed to `rewear-prod`. Each environment gets its own `APP_ORIGIN`, plus `TRUST_PROXY=true` and `MONGOMS_DISABLE_POSTINSTALL=1`. No value is printed.
-3. Create a token at Vercel → Account Settings → Tokens, then paste it when prompted:
+2. Choose two unused `*.vercel.app` names: one for production (e.g. `rewear-ai-app.vercel.app`) and one for previews (e.g. `rewear-ai-preview.vercel.app`). You don't add them in the dashboard: each deploy job points its domain at the new deployment through the Vercel API ([scripts/setVercelAlias.sh](../scripts/setVercelAlias.sh)).
+3. In Vercel → Project → **Settings → Environment Variables**, add each variable below. For each one, untick **Development**, and tick **Preview** or **Production** only, as shown. Copy the values from `.env.local`; never commit them.
+
+   | Variable | Preview | Production |
+   |---|---|---|
+   | `MONGODB_URI` | The value from `.env.local` (database `rewear`) | The same value, with the database path `/rewear` changed to `/rewear-prod` |
+   | `APP_ORIGIN` | `https://<preview domain>` | `https://<production domain>` |
+   | `TRUST_PROXY` | `true` | `true` |
+   | `MONGOMS_DISABLE_POSTINSTALL` | `1` | `1` |
+   | `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` | From `.env.local` | From `.env.local` |
+   | `CRON_SECRET` | From `.env.local` | From `.env.local` |
+   | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | From `.env.local`, if set | From `.env.local`, if set |
+
+   Changes apply to the next deploy, so after editing a variable, rerun the deploy job.
+4. In GitHub → **Settings → Secrets and variables → Actions**:
+   - **Secrets** tab: add `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID`, using `orgId` and `projectId` from `.vercel/project.json`.
+   - **Variables** tab: add `PREVIEW_DOMAIN` (e.g. `rewear-ai-preview.vercel.app`, no `https://`) and `PRODUCTION_URL` (e.g. `https://rewear-ai-app.vercel.app`).
+5. Create a token at Vercel → Account Settings → Tokens, then paste it when prompted:
    ```bash
    gh secret set VERCEL_TOKEN
    ```
-4. In Vercel → Project → Settings → Deployment Protection, turn off Vercel Authentication. Otherwise previews return 401 to the post-deploy check, your partner and the graders.
-5. In the Google OAuth client, add both redirect URIs: `https://<production domain>/api/auth/google/callback` and `https://<preview domain>/api/auth/google/callback`.
-6. After the first green run, protect `main` (Settings → Branches): require a pull request with one approval, and require the checks Lint and typecheck, Unit and integration tests, Database tests, Production build and smoke tests, Security scanning, and CodeQL.
+6. In Vercel → Project → Settings → Deployment Protection, turn off Vercel Authentication. Otherwise previews return 401 to the post-deploy check, your partner and the graders.
+7. In the Google OAuth client, add both redirect URIs: `https://<production domain>/api/auth/google/callback` and `https://<preview domain>/api/auth/google/callback`.
+8. In Atlas → Network Access → IP Access List, add `0.0.0.0/0` (not temporary). Vercel's servers have no fixed IP addresses; the database user and password still protect the cluster.
+9. After the first green run, protect `main` (Settings → Branches): require a pull request with one approval, and require the checks Lint and typecheck, Unit and integration tests, Database tests, Production build and smoke tests, Security scanning, and CodeQL.
 
 ## Rollback
 
