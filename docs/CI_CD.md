@@ -57,7 +57,7 @@ Preview and Production use the same Atlas cluster and user, with different datab
 | `VERCEL_ORG_ID` | GitHub secret | `orgId` from `.vercel/project.json` |
 | `VERCEL_PROJECT_ID` | GitHub secret | `projectId` from `.vercel/project.json` |
 | `PREVIEW_DOMAIN` | GitHub variable | e.g. `rewear-ai-preview.vercel.app` |
-| `PRODUCTION_URL` | GitHub variable | e.g. `https://rewear-ai.vercel.app` |
+| `PRODUCTION_URL` | GitHub variable | e.g. `https://rewear-ai-app.vercel.app` |
 
 A deploy job fails with a message naming any of these that is missing.
 
@@ -71,9 +71,9 @@ A deploy job fails with a message naming any of these that is missing.
    npx vercel@65.2.0 link
    ```
    Choose to create a new project. This writes `.vercel/project.json`, which is gitignored.
-2. Copy `.env.local` into Vercel and store the IDs and domains in GitHub. Pass the production domain Vercel assigned, and a free `*.vercel.app` name for previews:
+2. Copy `.env.local` into Vercel and store the IDs and domains in GitHub. Pass two unused `*.vercel.app` names, one for production and one for previews. Nothing needs adding in the Vercel dashboard: each deploy job points its domain at the new deployment with `vercel alias set`.
    ```bash
-   bash scripts/setupVercelEnv.sh rewear-ai.vercel.app rewear-ai-preview.vercel.app
+   bash scripts/setupVercelEnv.sh rewear-ai-app.vercel.app rewear-ai-preview.vercel.app
    ```
    Production gets the same `MONGODB_URI` with the database changed to `rewear-prod`. Each environment gets its own `APP_ORIGIN`, plus `TRUST_PROXY=true` and `MONGOMS_DISABLE_POSTINSTALL=1`. No value is printed.
 3. Create a token at Vercel → Account Settings → Tokens, then paste it when prompted:

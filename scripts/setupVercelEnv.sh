@@ -4,7 +4,7 @@
 # Values are piped from .env.local and never printed. See docs/CI_CD.md.
 #
 # Usage: bash scripts/setupVercelEnv.sh <production-domain> <preview-domain>
-#   e.g. bash scripts/setupVercelEnv.sh rewear-ai.vercel.app rewear-ai-preview.vercel.app
+#   e.g. bash scripts/setupVercelEnv.sh rewear-ai-app.vercel.app rewear-ai-preview.vercel.app
 # Run `npx vercel@65.2.0 login` and `npx vercel@65.2.0 link` first.
 set -euo pipefail
 

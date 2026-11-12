@@ -218,6 +218,10 @@ jobs:
           done
       - run: npx --yes "$VERCEL_CLI" pull --yes --environment=production --token="$VERCEL_TOKEN"
       - run: npx --yes "$VERCEL_CLI" build --prod --token="$VERCEL_TOKEN"
-      - run: npx --yes "$VERCEL_CLI" deploy --prebuilt --prod --token="$VERCEL_TOKEN"
+      - name: Deploy and point the production domain at it
+        run: |
+          url=$(npx --yes "$VERCEL_CLI" deploy --prebuilt --prod --token="$VERCEL_TOKEN")
+          # APP_ORIGIN for Production is this fixed domain, so it can't drift from Vercel's default.
+          npx --yes "$VERCEL_CLI" alias set "$url" "${PRODUCTION_URL#https://}" --token="$VERCEL_TOKEN"
       - name: Check the deployed app responds
         run: bash scripts/checkDeployment.sh "$PRODUCTION_URL"
