@@ -152,6 +152,26 @@ describe('US7 outfit generation on the production build (HTTP)', () => {
     for (const name of NEVER_SHOWN) expect(json).not.toContain(name);
     expect(json).not.toMatch(/publicId|ownerId|isAvailable/);
   });
+
+  it.each(['work', 'weekend', 'casual'] as const)(
+    "offers only new combinations of User A's items for %s, then says none are left (US8)",
+    async (occasion) => {
+      const shown: string[][] = [];
+      let data: { status: string; items?: { id: string }[] } | undefined;
+      for (let i = 0; i <= 20; i++) {
+        const res = await generate(shown.length ? { occasion, shown } : { occasion });
+        expect(res.status).toBe(200);
+        data = (await res.json()).data;
+        if (data?.status !== 'ok') break;
+        const json = JSON.stringify(data);
+        for (const name of NEVER_SHOWN) expect(json).not.toContain(name);
+        shown.push(data.items!.map((item) => item.id));
+      }
+
+      expect(data).toEqual({ status: 'no_alternative', occasion });
+      expect(new Set(shown.map((ids) => [...ids].sort().join())).size).toBe(shown.length);
+    },
+  );
 });
 
 describe.runIf(CHROME_PATH)('US7 Create Outfit in a real browser', () => {
