@@ -7,21 +7,30 @@ base="${1:?Usage: checkDeployment.sh <base-url>}"
 base="${base%/}"
 
 status() {
-  curl --silent --output /dev/null --write-out '%{http_code}' --max-time 20 \
+  curl --silent --output /dev/null --write-out '%{http_code} %{redirect_url}' --max-time 20 \
     --retry 5 --retry-delay 5 --retry-all-errors "$1"
 }
 
-sign_in=$(status "$base/sign-in")
+# A domain just pointed at a new deployment can answer 404 for a few seconds.
+for attempt in $(seq 1 12); do
+  read -r sign_in redirect <<< "$(status "$base/sign-in")"
+  [ "$sign_in" != "404" ] && break
+  echo "/sign-in returned 404 (attempt $attempt), waiting for the domain to update..."
+  sleep 5
+done
+
 if [ "$sign_in" != "200" ]; then
   echo "::error::$base/sign-in returned $sign_in, expected 200."
-  if [ "$sign_in" = "401" ]; then
-    echo "::error::Vercel Deployment Protection is on. See docs/CI_CD.md, One-time setup."
-  fi
+  case "$redirect" in
+    https://vercel.com/sso-api*)
+      echo "::error::Vercel Authentication is on. Turn it off in Project > Settings > Deployment Protection."
+      ;;
+  esac
   exit 1
 fi
 
 # Signed out, the session API answers 401. A 5xx means the app can't reach its database.
-session=$(status "$base/api/auth/session")
+read -r session _ <<< "$(status "$base/api/auth/session")"
 if [ "$session" -ge 500 ]; then
   echo "::error::$base/api/auth/session returned $session."
   exit 1
