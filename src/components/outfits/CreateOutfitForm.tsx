@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { NETWORK_ERROR_MESSAGE } from '@/components/auth/authFormErrors';
+import { MarkAsWornButton } from '@/components/outfits/MarkAsWornButton';
 import {
   displayName,
   OCCASION_LABELS,
@@ -17,6 +18,7 @@ import { SelectField } from '@/components/ui/SelectField';
 import { MAX_SHOWN_OUTFITS } from '@/lib/validation/outfitValidation';
 import {
   OCCASIONS,
+  type InsufficientReason,
   type Occasion,
   type OutfitItemDto,
   type OutfitRecommendationDto,
@@ -32,7 +34,7 @@ type ViewState =
   | { status: 'idle' }
   | { status: 'loading' }
   | { status: 'ok'; outfit: GeneratedOutfit }
-  | { status: 'insufficient'; occasion: Occasion }
+  | { status: 'insufficient'; occasion: Occasion; reason?: InsufficientReason }
   | { status: 'error'; message: string; sessionEnded?: boolean };
 
 type ErrorState = Extract<ViewState, { status: 'error' }>;
@@ -51,6 +53,19 @@ const ROLE_LABELS: Record<OutfitRole, string> = {
   outerwear: 'Outerwear',
   accessory: 'Accessory',
 };
+
+// US12: why generation stopped, shown after the general insufficient-wardrobe message.
+const INSUFFICIENT_REASON_MESSAGES: Record<InsufficientReason, string> = {
+  no_suitable_items: 'None of your available clothing is suitable for this occasion.',
+  no_complete_outfit: 'An outfit needs a suitable top and bottom, or a suitable dress.',
+};
+
+/** A known reason, or undefined; own keys only, so names such as "toString" are rejected. */
+function insufficientReason(value: unknown): InsufficientReason | undefined {
+  return typeof value === 'string' && Object.hasOwn(INSUFFICIENT_REASON_MESSAGES, value)
+    ? (value as InsufficientReason)
+    : undefined;
+}
 
 const CHOOSE_OCCASION_MESSAGE = 'Choose an occasion to continue.';
 const GENERATE_FAILED_MESSAGE = "We couldn't generate an outfit. Try again.";
@@ -97,7 +112,7 @@ function answerFor(data: unknown, requested: Occasion): Answer {
     return { status: 'error', message: GENERATE_FAILED_MESSAGE };
   }
   if (data.status === 'insufficient') {
-    return { status: 'insufficient', occasion: requested };
+    return { status: 'insufficient', occasion: requested, reason: insufficientReason(data.reason) };
   }
   if (data.status === 'no_alternative') {
     return { status: 'no_alternative' };
@@ -132,8 +147,8 @@ async function requestOutfit(body: { occasion: Occasion; shown?: string[][] }): 
 
 /**
  * Create Outfit (DESIGN §5.6, wireframe 08): choose an occasion, generate, review the
- * recommended items, try another combination (US8), and save the outfit (US9). Mark as worn
- * and feedback belong to later stories.
+ * recommended items, try another combination (US8), save the outfit (US9), and optionally mark
+ * it as worn (US10). Feedback belongs to a later story.
  */
 export function CreateOutfitForm() {
   const [selected, setSelected] = useState('');
@@ -279,6 +294,7 @@ export function CreateOutfitForm() {
           <p className="text-text">
             There aren&apos;t enough available items for a {view.occasion} outfit yet.
           </p>
+          {view.reason && <p className="text-text">{INSUFFICIENT_REASON_MESSAGES[view.reason]}</p>}
           <div className="flex flex-col gap-3 sm:flex-row">
             <Link href="/wardrobe" className={SECONDARY_ACTION}>
               View wardrobe
@@ -336,6 +352,11 @@ export function CreateOutfitForm() {
               itemIds={view.outfit.items.map((item) => item.id)}
             />
           </div>
+          <MarkAsWornButton
+            key={`worn-${view.outfit.items.map((item) => item.id).join()}`}
+            itemIds={view.outfit.items.map((item) => item.id)}
+            occasion={view.outfit.occasion}
+          />
           {another.status === 'none' && (
             <p role="status" className="text-text">
               {NO_ALTERNATIVE_MESSAGE}
