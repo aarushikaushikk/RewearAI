@@ -6,6 +6,7 @@ import {
   combinationKey,
   describeWornOutfit,
   isValidOutfitCombination,
+  OUTFIT_CATEGORY_ORDER,
 } from '@/services/outfitHistory/outfitCombination';
 import type {
   MarkOutfitWornInput,
@@ -52,6 +53,11 @@ function presentItem(item: WardrobeItemRecord): WornItemDto {
     season: item.season,
     formality: item.formality,
   };
+}
+
+/** Outfit order: by category, and an item no longer in the wardrobe, whose category is unknown, last. */
+function displayRank(item: WornItemDto | MissingWornItemDto): number {
+  return item.status === 'present' ? OUTFIT_CATEGORY_ORDER.indexOf(item.category) : OUTFIT_CATEGORY_ORDER.length;
 }
 
 /**
@@ -110,15 +116,18 @@ export class OutfitHistoryService {
   private toDto(entry: OutfitHistoryEntryRecord, owned: Map<string, WardrobeItemRecord>): OutfitHistoryEntryDto {
     // The key holds the same IDs if the outfit record is gone, so the items are still known.
     const itemIds = entry.outfit?.itemIds ?? entry.combinationKey.split(',');
+    const items = itemIds.map((id): WornItemDto | MissingWornItemDto => {
+      const item = owned.get(id.toLowerCase());
+      return item ? presentItem(item) : { status: 'missing', id };
+    });
     return {
       id: entry.id,
       wornOn: entry.wornOn,
       occasion: entry.outfit?.occasion ?? null,
       recordedAt: entry.recordedAt.toISOString(),
-      items: itemIds.map((id): WornItemDto | MissingWornItemDto => {
-        const item = owned.get(id.toLowerCase());
-        return item ? presentItem(item) : { status: 'missing', id };
-      }),
+      // Stored IDs are sorted, which says nothing about the clothes; show them in outfit order.
+      // The sort is stable, so items of one rank keep their stored order.
+      items: items.sort((a, b) => displayRank(a) - displayRank(b)),
     };
   }
 }

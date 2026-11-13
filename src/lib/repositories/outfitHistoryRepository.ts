@@ -39,7 +39,10 @@ export interface OutfitHistoryEntryRecord {
  * never deleted here, because other requests, history entries or saved outfits may use them.
  */
 export interface IOutfitHistoryRepository {
-  /** Reuses the owner's oldest outfit with exactly these items (any order) and occasion. */
+  /**
+   * Reuses the owner's oldest outfit with exactly these items (any order) and occasion.
+   * A new outfit stores canonicalItemIds() order, which Saved Outfits (US9) matches exactly.
+   */
   findOrCreateOutfit(data: NewOutfitData): Promise<StoredOutfitRef>;
   /**
    * Records a wear. Throws RepositoryError, and records nothing, unless `outfitId` is one of

@@ -9,15 +9,24 @@ export const MAX_OUTFIT_ITEMS = 6;
 const MAX_DESCRIPTION_LENGTH = 500;
 
 /**
- * Identifies a set of clothes regardless of order: the sorted, lowercased item IDs. The
+ * The order an outfit's item IDs are stored in: lowercased and sorted. Saved Outfits (US9)
+ * stores the same order and finds an outfit by matching that exact array, so storing any
+ * other order would make it add a second outfit for the same clothes.
+ */
+export function canonicalItemIds(itemIds: readonly string[]): string[] {
+  return itemIds.map((id) => id.toLowerCase()).sort();
+}
+
+/**
+ * Identifies a set of clothes regardless of order: the canonical item IDs, joined. The
  * same clothes on the same day are one wear, so this is part of the history's unique key.
  */
 export function combinationKey(itemIds: readonly string[]): string {
-  return itemIds
-    .map((id) => id.toLowerCase())
-    .sort()
-    .join(',');
+  return canonicalItemIds(itemIds).join(',');
 }
+
+/** The order an outfit's items are shown in, as on Create Outfit and Saved Outfits (US9). */
+export const OUTFIT_CATEGORY_ORDER: readonly Category[] = ['Top', 'Bottom', 'Dress', 'Outerwear', 'Shoes', 'Accessory'];
 
 /**
  * The outfit rule US7 generates by: one Top with one Bottom, or one Dress, never a Dress

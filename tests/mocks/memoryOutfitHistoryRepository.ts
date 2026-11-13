@@ -6,6 +6,7 @@ import type {
   StoredOutfitRef,
 } from '@/lib/repositories/outfitHistoryRepository';
 import { RepositoryError } from '@/lib/repositories/repositoryErrors';
+import { canonicalItemIds } from '@/services/outfitHistory/outfitCombination';
 import type { Occasion } from '@/types/outfit';
 
 interface MemoryOutfit {
@@ -39,7 +40,11 @@ export class MemoryOutfitHistoryRepository implements IOutfitHistoryRepository {
     if (existing) {
       return { id: existing.id, created: false };
     }
-    const outfit: MemoryOutfit = { id: `outfit_${this.nextId++}`, ...structuredClone(data) };
+    const outfit: MemoryOutfit = {
+      id: `outfit_${this.nextId++}`,
+      ...structuredClone(data),
+      itemIds: canonicalItemIds(data.itemIds),
+    };
     this.outfits.push(outfit);
     return { id: outfit.id, created: true };
   }

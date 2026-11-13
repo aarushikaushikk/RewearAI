@@ -240,6 +240,37 @@ describe('OutfitHistoryService', () => {
       ]);
     });
 
+    it('lists items in outfit order (top, bottom, shoes), not in the sorted order they are stored in', async () => {
+      // Created in reverse, so their IDs sort shoes, bottom, top.
+      const laterShoes = await items.create(newItem(ALEX, 'Shoes', 'Black Boots'));
+      const laterBottom = await items.create(newItem(ALEX, 'Bottom', 'Grey Trousers'));
+      const laterTop = await items.create(newItem(ALEX, 'Top', 'Blue Shirt'));
+      await service.markWorn(ALEX, {
+        itemIds: [laterTop.id, laterBottom.id, laterShoes.id],
+        occasion: 'work',
+        wornOn: TODAY,
+      });
+
+      const [stored] = await history.listByOwner(ALEX);
+      const [entry] = await service.list(ALEX);
+
+      expect(stored.outfit?.itemIds).toEqual([laterShoes.id, laterBottom.id, laterTop.id]);
+      expect(entry.items.map((i) => i.id)).toEqual([laterTop.id, laterBottom.id, laterShoes.id]);
+    });
+
+    it('puts a deleted item after the items still in the wardrobe, as Saved Outfits does', async () => {
+      await service.markWorn(ALEX, { itemIds: [top.id, bottom.id, shoes.id], occasion: 'work', wornOn: TODAY });
+      await items.deleteForOwner(ALEX, top.id);
+
+      const [entry] = await service.list(ALEX);
+
+      expect(entry.items).toEqual([
+        expect.objectContaining({ status: 'present', id: bottom.id }),
+        expect.objectContaining({ status: 'present', id: shoes.id }),
+        { status: 'missing', id: top.id },
+      ]);
+    });
+
     it('shows an edited item with its current details', async () => {
       await service.markWorn(ALEX, { itemIds: [top.id, bottom.id], occasion: 'work', wornOn: TODAY });
       await items.updateForOwner(ALEX, top.id, {
@@ -280,7 +311,7 @@ describe('OutfitHistoryService', () => {
 
       const [entry] = await service.list(ALEX);
 
-      expect(entry.items[0]).toEqual({ status: 'missing', id: samsTop.id });
+      expect(entry.items.find((i) => i.id === samsTop.id)).toEqual({ status: 'missing', id: samsTop.id });
       expect(JSON.stringify(entry)).not.toContain("Sam's private shirt");
     });
   });

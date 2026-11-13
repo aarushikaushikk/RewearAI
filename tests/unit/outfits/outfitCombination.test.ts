@@ -1,11 +1,43 @@
 import { describe, expect, it } from 'vitest';
 import {
+  canonicalItemIds,
   combinationKey,
   describeWornOutfit,
   isValidOutfitCombination,
   MAX_OUTFIT_ITEMS,
+  OUTFIT_CATEGORY_ORDER,
 } from '@/services/outfitHistory/outfitCombination';
 import type { Category } from '@/types/wardrobe';
+
+describe('canonicalItemIds (the stored order US9 matches exactly)', () => {
+  it('lowercases and sorts the IDs, as US9 does before saving', () => {
+    expect(canonicalItemIds(['64c0000000000000000000A3', '64c0000000000000000000a1', '64c0000000000000000000a2'])).toEqual([
+      '64c0000000000000000000a1',
+      '64c0000000000000000000a2',
+      '64c0000000000000000000a3',
+    ]);
+  });
+
+  it('leaves the given list unchanged', () => {
+    const ids = ['b', 'a'];
+
+    canonicalItemIds(ids);
+
+    expect(ids).toEqual(['b', 'a']);
+  });
+
+  it('is what the combination key is made of', () => {
+    const ids = ['c3', 'A1', 'b2'];
+
+    expect(combinationKey(ids)).toBe(canonicalItemIds(ids).join(','));
+  });
+});
+
+describe('OUTFIT_CATEGORY_ORDER', () => {
+  it('lists items as Create Outfit and Saved Outfits (US9) do', () => {
+    expect(OUTFIT_CATEGORY_ORDER).toEqual(['Top', 'Bottom', 'Dress', 'Outerwear', 'Shoes', 'Accessory']);
+  });
+});
 
 describe('combinationKey', () => {
   it('is the same whatever the order of the items', () => {

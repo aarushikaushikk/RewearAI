@@ -8,6 +8,7 @@ import { Outfit } from '@/models/Outfit';
 import { OutfitHistory } from '@/models/OutfitHistory';
 import { combinationKey } from '@/services/outfitHistory/outfitCombination';
 import { OutfitHistoryService } from '@/services/outfitHistoryService';
+import type { Occasion } from '@/types/outfit';
 import type { Category, WardrobeItemRecord } from '@/types/wardrobe';
 import {
   describeOutfitHistoryRepositoryContract,
@@ -116,6 +117,79 @@ describe('MongoOutfitHistoryRepository on a real database', () => {
       ['__v', '_id', 'combinationKey', 'createdAt', 'outfit', 'owner', 'updatedAt', 'wornOn'].sort(),
     );
     expect(storedEntry).toMatchObject({ wornOn: TODAY, combinationKey: combinationKey(pair) });
+  });
+
+  describe('compatibility with Saved Outfits (US9, PR #44)', () => {
+    const { ObjectId } = mongoose.Types;
+    const sorted = [ITEM_IDS.top, ITEM_IDS.bottom, ITEM_IDS.shoes];
+    const generatedOrder = [ITEM_IDS.shoes, ITEM_IDS.top, ITEM_IDS.bottom];
+
+    /** The filter US9 saves with: the owner, the occasion and the sorted IDs as an exact array. */
+    function us9Filter(ownerId: string, occasion: Occasion, itemIds: string[]) {
+      const items = itemIds.map((id) => id.toLowerCase()).sort().map((id) => new ObjectId(id));
+      return { owner: new ObjectId(ownerId), occasion, items };
+    }
+
+    /** A record as US9's save upsert writes it: sorted items, saved, and no explanation. */
+    async function insertUs9SavedOutfit(occasion: Occasion, itemIds: string[]) {
+      const now = new Date('2026-11-10T12:00:00.000Z');
+      const { insertedId } = await Outfit.collection.insertOne({
+        ...us9Filter(ALEX, occasion, itemIds),
+        isSaved: true,
+        savedAt: now,
+        createdAt: now,
+        updatedAt: now,
+      });
+      return insertedId.toString();
+    }
+
+    it('stores a new outfit with sorted item references, so US9 finds it by exact array', async () => {
+      const outfit = await repo.findOrCreateOutfit(outfitFor(ALEX, generatedOrder));
+
+      const stored = await Outfit.collection.findOne({ _id: new ObjectId(outfit.id) });
+      const foundByUs9 = await Outfit.findOne(us9Filter(ALEX, 'work', generatedOrder)).lean();
+
+      expect(stored?.items.map(String)).toEqual(sorted);
+      expect(foundByUs9?._id.toString()).toBe(outfit.id);
+    });
+
+    it('reuses an outfit US9 saved instead of adding another, and leaves it saved', async () => {
+      const savedId = await insertUs9SavedOutfit('work', generatedOrder);
+
+      const outfit = await repo.findOrCreateOutfit(outfitFor(ALEX, generatedOrder));
+
+      expect(outfit).toEqual({ id: savedId, created: false });
+      expect(await Outfit.countDocuments({})).toBe(1);
+      expect(await Outfit.collection.findOne({})).toMatchObject({ isSaved: true });
+    });
+
+    it('still reuses an outfit stored with its items in another order', async () => {
+      const now = new Date('2026-11-10T12:00:00.000Z');
+      const { insertedId } = await Outfit.collection.insertOne({
+        owner: new ObjectId(ALEX),
+        occasion: 'work',
+        items: generatedOrder.map((id) => new ObjectId(id)),
+        explanation: 'Worn for Work: Shoes, Top, Bottom.',
+        isSaved: false,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      const outfit = await repo.findOrCreateOutfit(outfitFor(ALEX, sorted));
+
+      expect(outfit).toEqual({ id: insertedId.toString(), created: false });
+      expect(await Outfit.countDocuments({})).toBe(1);
+    });
+
+    it("keeps a US9 outfit for another occasion, or another user's, separate", async () => {
+      const dinnerId = await insertUs9SavedOutfit('dinner', generatedOrder);
+
+      const work = await repo.findOrCreateOutfit(outfitFor(ALEX, generatedOrder));
+      const sams = await repo.findOrCreateOutfit(outfitFor(SAM, generatedOrder, { occasion: 'dinner' }));
+
+      expect(work.created && sams.created).toBe(true);
+      expect(new Set([dinnerId, work.id, sams.id]).size).toBe(3);
+    });
   });
 
   it('keeps history across repository instances and a reconnect', async () => {
@@ -296,6 +370,37 @@ describe('OutfitHistoryService with real MongoDB repositories', () => {
       expect.objectContaining({ status: 'present', id: top.id }),
       { status: 'missing', id: bottom.id },
     ]);
+  });
+
+  it('marks a US9-saved outfit as worn twice with one outfit and one wear, items in outfit order', async () => {
+    // Saved one after another, so their ObjectIds sort shoes, bottom, top.
+    const shoes = await save(ALEX, 'Shoes');
+    const bottom = await save(ALEX, 'Bottom');
+    const top = await save(ALEX, 'Top');
+    const sortedIds = [shoes.id, bottom.id, top.id];
+    expect([...sortedIds].sort()).toEqual(sortedIds);
+    const now = new Date('2026-11-10T12:00:00.000Z');
+    const { insertedId } = await Outfit.collection.insertOne({
+      owner: new mongoose.Types.ObjectId(ALEX),
+      occasion: 'casual',
+      items: sortedIds.map((id) => new mongoose.Types.ObjectId(id)),
+      isSaved: true,
+      savedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const request = { itemIds: [top.id, bottom.id, shoes.id], occasion: 'casual' as const, wornOn: TODAY };
+
+    const first = await service.markWorn(ALEX, request);
+    const second = await service.markWorn(ALEX, request);
+
+    expect([first.created, second.created]).toEqual([true, false]);
+    expect(second.entry.id).toBe(first.entry.id);
+    expect(await Outfit.countDocuments({})).toBe(1);
+    expect(await OutfitHistory.countDocuments({})).toBe(1);
+    expect((await OutfitHistory.collection.findOne({}))?.outfit.toString()).toBe(insertedId.toString());
+    const [entry] = await service.list(ALEX);
+    expect(entry.items.map((i) => i.id)).toEqual([top.id, bottom.id, shoes.id]);
   });
 
   it("rejects another user's items and records nothing", async () => {

@@ -1,6 +1,7 @@
 import 'server-only';
 import { Outfit } from '@/models/Outfit';
 import { OutfitHistory } from '@/models/OutfitHistory';
+import { canonicalItemIds } from '@/services/outfitHistory/outfitCombination';
 import type { Occasion } from '@/types/outfit';
 import { isObjectIdString, withDatabase } from './mongoSupport';
 import type {
@@ -46,7 +47,8 @@ export class MongoOutfitHistoryRepository implements IOutfitHistoryRepository {
       throw new RepositoryError();
     }
     return withDatabase('outfitHistory.findOrCreateOutfit', async () => {
-      // Exactly these items in any order: all of them, and no others.
+      // Exactly these items in any order: all of them, and no others. Order-independent, so
+      // it also finds an outfit stored before items were kept sorted.
       const existing = await Outfit.findOne({
         owner: data.ownerId,
         occasion: data.occasion,
@@ -60,7 +62,8 @@ export class MongoOutfitHistoryRepository implements IOutfitHistoryRepository {
       }
       const created = await Outfit.create({
         owner: data.ownerId,
-        items: data.itemIds,
+        // Sorted, as Saved Outfits (US9) stores them, so its exact-array match finds this outfit.
+        items: canonicalItemIds(data.itemIds),
         occasion: data.occasion,
         explanation: data.explanation,
         isSaved: false,

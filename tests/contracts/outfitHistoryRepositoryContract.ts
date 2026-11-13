@@ -91,6 +91,20 @@ export function describeOutfitHistoryRepositoryContract(name: string, setup: Out
         expect(sam.created).toBe(true);
         expect(sam.id).not.toBe(alex.id);
       });
+
+      it('stores a new outfit with its item IDs sorted, whatever order they were given in', async () => {
+        const outfit = await repo.findOrCreateOutfit(
+          outfitFor(userA, [ITEM_IDS.shoes, ITEM_IDS.top, ITEM_IDS.bottom]),
+        );
+        const { entry } = await repo.recordWorn({
+          ownerId: userA,
+          outfitId: outfit.id,
+          wornOn: '2026-11-11',
+          combinationKey: combinationKey([ITEM_IDS.top, ITEM_IDS.bottom, ITEM_IDS.shoes]),
+        });
+
+        expect(entry.outfit?.itemIds).toEqual([ITEM_IDS.top, ITEM_IDS.bottom, ITEM_IDS.shoes]);
+      });
     });
 
     describe('recordWorn', () => {
