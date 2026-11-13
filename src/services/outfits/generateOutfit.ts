@@ -11,16 +11,20 @@
 // - Alternatives (US8): given the outfits already shown, return a combination not among them
 //   that differs in at least one item, preferring the least-shown items so repeated requests
 //   mix and match across the pool. Leaving out a suitable optional piece is not an alternative.
+// - Color (#18): among valid outfits, prefer a calmer palette (colorHarmony.ts). Color only
+//   ranks; it never makes an outfit impossible or an ineligible item usable. On Try another,
+//   unseen pieces come before a calmer palette.
 
+import { paletteOf, paletteScore, type Palette } from '@/services/outfits/colorHarmony';
 import { OCCASIONS, type InsufficientReason, type Occasion, type OutfitRole } from '@/types/outfit';
 import type { Category, Formality, Season, WardrobeItemRecord } from '@/types/wardrobe';
 
-export type { InsufficientReason, OutfitRole };
+export type { InsufficientReason, OutfitRole, Palette };
 
 /** The fields generation needs; callers may pass richer records and get the same objects back. */
 export type OutfitCandidate = Pick<
   WardrobeItemRecord,
-  'id' | 'ownerId' | 'isAvailable' | 'category' | 'season' | 'formality'
+  'id' | 'ownerId' | 'isAvailable' | 'category' | 'color' | 'season' | 'formality'
 >;
 
 export interface OutfitPiece<T> {
@@ -36,6 +40,8 @@ export type OutfitGenerationResult<T> =
       pieces: OutfitPiece<T>[];
       /** The one specific season the pieces share, or All-season when none is specific. */
       season: Season;
+      /** How the pieces' colors read together (#18). */
+      palette: Palette;
     }
   | { status: 'insufficient'; occasion: Occasion; reason: InsufficientReason }
   /** US8: every valid combination has already been shown. */
@@ -63,7 +69,7 @@ export const OCCASION_FORMALITIES: Record<Occasion, readonly Formality[]> = {
   formal: ['Formal'],
 };
 
-/** How many cores are checked for suitable shoes before settling for one without. */
+/** How many cores are checked before settling on the best outfit found so far. */
 export const MAX_CORE_CANDIDATES = 50;
 
 /** How many options for each optional piece are tried with each core when finding an alternative. */
@@ -90,13 +96,6 @@ function fits(season: Season, context: SeasonContext): boolean {
 
 function narrow(context: SeasonContext, season: Season): SeasonContext {
   return season === 'All-season' ? context : season;
-}
-
-function firstFitting<T extends OutfitCandidate>(
-  entries: readonly Entry<T>[],
-  context: SeasonContext,
-): Entry<T> | undefined {
-  return entries.find((entry) => fits(entry.item.season, context));
 }
 
 /** Entries of one category, grouped by season, so compatible items are found without scanning others. */
@@ -251,16 +250,32 @@ interface Candidate<T> {
   missingShoes: boolean;
   /** How many times its items were shown, summed. */
   uses: number;
+  palette: Palette;
+  /** paletteScore(palette): higher is calmer. */
+  calm: number;
 }
 
-const isBetter = <T>(a: Candidate<T>, b: Candidate<T> | undefined) =>
-  !b || (a.missingShoes === b.missingShoes ? a.uses < b.uses : b.missingShoes);
+const MAX_CALM = paletteScore('tonal');
+
+/** Shoes when suitable ones exist, then the fewest shown items, then the calmer palette. */
+function isBetter<T>(a: Candidate<T>, b: Candidate<T> | undefined): boolean {
+  if (!b) {
+    return true;
+  }
+  if (a.missingShoes !== b.missingShoes) {
+    return b.missingShoes;
+  }
+  if (a.uses !== b.uses) {
+    return a.uses < b.uses;
+  }
+  return a.calm > b.calm;
+}
 
 /**
- * US8: the unshown combination with shoes when any are suitable, then the fewest shown items,
- * then the earliest. Checks a bounded number of cores, each with a few options per piece.
+ * The best combination not among `shown` (none, on a first request): ranked by isBetter, with
+ * ties going to the earliest. Checks a bounded number of cores, each with a few options per piece.
  */
-function alternativeOutfit<T extends OutfitCandidate>(
+function bestOutfit<T extends OutfitCandidate>(
   eligible: ReturnType<typeof eligibleEntries<T>>,
   occasion: Occasion,
   shown: readonly (readonly string[])[],
@@ -284,17 +299,20 @@ function alternativeOutfit<T extends OutfitCandidate>(
       if (shownKeys.has(outfitKey(itemIds))) {
         continue;
       }
+      const palette = paletteOf(outfit.pieces.map((piece) => piece.item.color));
       const candidate = {
         outfit,
         missingShoes: shoesExist && !outfit.pieces.some((piece) => piece.role === 'shoes'),
         uses: itemIds.reduce((sum, id) => sum + (uses.get(id) ?? 0), 0),
+        palette,
+        calm: paletteScore(palette),
       };
       if (isBetter(candidate, best)) {
         best = candidate;
       }
     }
-    // Nothing beats an outfit with shoes made only of unshown items.
-    const unbeatable = best !== undefined && !best.missingShoes && best.uses === 0;
+    // Nothing beats an outfit with shoes, made only of unshown items, in the calmest palette.
+    const unbeatable = best !== undefined && !best.missingShoes && best.uses === 0 && best.calm === MAX_CALM;
     if (++checked >= MAX_CORE_CANDIDATES || unbeatable) {
       break;
     }
@@ -306,7 +324,13 @@ function alternativeOutfit<T extends OutfitCandidate>(
   if (!best) {
     return { status: 'no_alternative', occasion };
   }
-  return { status: 'ok', occasion, pieces: best.outfit.pieces, season: best.outfit.context ?? 'All-season' };
+  return {
+    status: 'ok',
+    occasion,
+    pieces: best.outfit.pieces,
+    season: best.outfit.context ?? 'All-season',
+    palette: best.palette,
+  };
 }
 
 export function generateOutfit<T extends OutfitCandidate>(input: GenerateOutfitInput<T>): OutfitGenerationResult<T> {
@@ -319,47 +343,5 @@ export function generateOutfit<T extends OutfitCandidate>(input: GenerateOutfitI
   if (eligible.count === 0) {
     return { status: 'insufficient', occasion, reason: 'no_suitable_items' };
   }
-  if (input.shown?.length) {
-    return alternativeOutfit(eligible, occasion, input.shown);
-  }
-
-  const leads = [...eligible.of('Dress'), ...eligible.of('Top')].sort((a, b) => a.index - b.index);
-  const bottoms = new SeasonBuckets(eligible.of('Bottom'));
-  const shoes = eligible.of('Shoes');
-
-  // Prefer the first core that suitable shoes fit, checking a bounded number of cores.
-  const limit = shoes.length > 0 ? MAX_CORE_CANDIDATES : 1;
-  let chosen: Core<T> | undefined;
-  let chosenShoes: Entry<T> | undefined;
-  let checked = 0;
-  for (const core of cores(leads, bottoms)) {
-    chosen ??= core;
-    const fittingShoes = firstFitting(shoes, core.context);
-    if (fittingShoes) {
-      chosen = core;
-      chosenShoes = fittingShoes;
-      break;
-    }
-    if (++checked >= limit) {
-      break;
-    }
-  }
-  if (!chosen) {
-    return { status: 'insufficient', occasion, reason: 'no_complete_outfit' };
-  }
-
-  const pieces = [...chosen.pieces];
-  let context = chosen.context;
-  const add = (role: OutfitRole, entry: Entry<T> | undefined) => {
-    if (entry) {
-      pieces.push({ role, item: entry.item });
-      context = narrow(context, entry.item.season);
-    }
-  };
-  // Each optional piece must fit the season set by the pieces before it.
-  add('shoes', chosenShoes);
-  add('outerwear', firstFitting(eligible.of('Outerwear'), context));
-  add('accessory', firstFitting(eligible.of('Accessory'), context));
-
-  return { status: 'ok', occasion, pieces, season: context ?? 'All-season' };
+  return bestOutfit(eligible, occasion, input.shown ?? []);
 }
