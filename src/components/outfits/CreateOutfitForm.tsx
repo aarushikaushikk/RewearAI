@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { NETWORK_ERROR_MESSAGE } from '@/components/auth/authFormErrors';
+import { ExplanationPanel } from '@/components/outfits/ExplanationPanel';
 import { MarkAsWornButton } from '@/components/outfits/MarkAsWornButton';
 import {
   displayName,
@@ -18,17 +19,24 @@ import { SelectField } from '@/components/ui/SelectField';
 import { MAX_SHOWN_OUTFITS } from '@/lib/validation/outfitValidation';
 import {
   OCCASIONS,
+  PALETTES,
   type InsufficientReason,
   type Occasion,
+  type OutfitExplanationDto,
   type OutfitItemDto,
   type OutfitRecommendationDto,
   type OutfitRole,
 } from '@/types/outfit';
+import { FORMALITIES, SEASONS } from '@/types/wardrobe';
 
 /** A recommended item as received; its image is checked when shown, so it may be missing. */
 type ShownItem = Omit<OutfitItemDto, 'image'> & { image?: { url?: unknown } };
 
-type GeneratedOutfit = Omit<Extract<OutfitRecommendationDto, { status: 'ok' }>, 'items'> & { items: ShownItem[] };
+/** The explanation is checked separately: an outfit without a usable one is still shown (US13). */
+type GeneratedOutfit = Omit<Extract<OutfitRecommendationDto, { status: 'ok' }>, 'items' | 'explanation'> & {
+  items: ShownItem[];
+  explanation?: OutfitExplanationDto;
+};
 
 type ViewState =
   | { status: 'idle' }
@@ -118,9 +126,34 @@ function answerFor(data: unknown, requested: Occasion): Answer {
     return { status: 'no_alternative' };
   }
   if (data.status === 'ok' && Array.isArray(data.items) && data.items.length > 0 && data.items.every(isOutfitItem)) {
-    return { status: 'ok', outfit: data as GeneratedOutfit };
+    return { status: 'ok', outfit: { ...(data as GeneratedOutfit), explanation: parseExplanation(data.explanation) } };
   }
   return { status: 'error', message: GENERATE_FAILED_MESSAGE };
+}
+
+/** A distinct, non-empty list of values from `allowed`; own entries only, so "toString" is rejected. */
+function distinctOf<T extends string>(value: unknown, allowed: readonly T[]): T[] | undefined {
+  if (!Array.isArray(value) || value.length === 0 || new Set(value).size !== value.length) {
+    return undefined;
+  }
+  return value.every((v) => typeof v === 'string' && (allowed as readonly string[]).includes(v)) ? (value as T[]) : undefined;
+}
+
+/**
+ * The explanation facts (US13), or undefined when they're missing or can't be true. The outfit
+ * is then shown without the panel: no explanation is better than a wrong one.
+ */
+function parseExplanation(value: unknown): OutfitExplanationDto | undefined {
+  if (!isRecord(value) || typeof value.alternative !== 'boolean') {
+    return undefined;
+  }
+  const formalities = distinctOf(value.formalities, FORMALITIES);
+  const seasons = distinctOf(value.seasons, SEASONS);
+  const palette = typeof value.palette === 'string' ? PALETTES.find((p) => p === value.palette) : undefined;
+  if (!formalities || !seasons || !palette || seasons.filter((season) => season !== 'All-season').length > 1) {
+    return undefined;
+  }
+  return { formalities, seasons, palette, alternative: value.alternative };
 }
 
 /** Asks for an outfit; with `shown` (US8), for one that isn't among those outfits. */
@@ -147,8 +180,8 @@ async function requestOutfit(body: { occasion: Occasion; shown?: string[][] }): 
 
 /**
  * Create Outfit (DESIGN §5.6, wireframe 08): choose an occasion, generate, review the
- * recommended items, try another combination (US8), save the outfit (US9), and optionally mark
- * it as worn (US10). Feedback belongs to a later story.
+ * recommended items and why they were combined (US13), try another combination (US8), save the
+ * outfit (US9), and optionally mark it as worn (US10). Feedback belongs to a later story.
  */
 export function CreateOutfitForm() {
   const [selected, setSelected] = useState('');
@@ -160,6 +193,12 @@ export function CreateOutfitForm() {
   // Item IDs of the outfits shown since Generate Outfit, sent so Try another doesn't repeat them.
   const shown = useRef<string[][]>([]);
   const resultHeading = useRef<HTMLHeadingElement>(null);
+  // The piece the current explanation features, and the one Try another should move on from.
+  const featured = useRef<string | undefined>(undefined);
+  const [rotateFrom, setRotateFrom] = useState<string | undefined>(undefined);
+  const handleFeatured = useCallback((itemId: string) => {
+    featured.current = itemId;
+  }, []);
   const isLoading = view.status === 'loading';
   const isBusy = isLoading || another.status === 'loading';
 
@@ -188,6 +227,7 @@ export function CreateOutfitForm() {
     }
     inFlight.current = true;
     forgetShown();
+    setRotateFrom(undefined);
     setView({ status: 'loading' });
 
     const answer = await requestOutfit({ occasion });
@@ -213,6 +253,7 @@ export function CreateOutfitForm() {
       setAnother(answer);
     } else {
       setAnother({ status: 'idle' });
+      setRotateFrom(featured.current);
       show(answer);
     }
   }
@@ -335,6 +376,15 @@ export function CreateOutfitForm() {
               </li>
             ))}
           </ul>
+          {view.outfit.explanation && (
+            <ExplanationPanel
+              occasion={view.outfit.occasion}
+              explanation={view.outfit.explanation}
+              items={view.outfit.items}
+              previousFeatured={view.outfit.explanation.alternative ? rotateFrom : undefined}
+              onFeatured={handleFeatured}
+            />
+          )}
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
             <button
               type="button"

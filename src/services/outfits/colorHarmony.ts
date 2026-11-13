@@ -3,7 +3,10 @@
 //
 // PROVISIONAL tables, pending teammate review (LLD #18 §3.2, decision D4).
 
+import { PALETTES, type Palette } from '@/types/outfit';
 import type { Color } from '@/types/wardrobe';
+
+export { PALETTES, type Palette };
 
 export type ColorFamily = 'neutral' | 'accent' | 'pattern';
 
@@ -28,10 +31,6 @@ export const COLOR_FAMILY: Record<Color, ColorFamily> = {
   Purple: 'accent',
   Multicolor: 'pattern',
 };
-
-/** Best first: how calm the outfit's colors are together. */
-export const PALETTES = ['tonal', 'neutral', 'one_accent', 'paired', 'bold'] as const;
-export type Palette = (typeof PALETTES)[number];
 
 /** Colors that read as one family, such as navy, indigo and blue. */
 const TONAL_FAMILIES: readonly (readonly Color[])[] = [
