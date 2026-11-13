@@ -1,0 +1,47 @@
+US8 Alternative Outfit Suggestions (#13), Checkpoint 1: alternative generation (TDD)
+Branch: feature/13-alternative-outfit-suggestions (merged into feature/14-saved-outfits by #45).
+Work date: 2026-11-11. This file was written on 2026-11-13 from the branch's own commits; the RED
+and GREEN runs below were rerun at those commits. It replaces the earlier README, which cited
+pre-rebase hashes (5774027, f4f1352, 3eb3fdb) that are not on the branch.
+
+=== COMMITS ===
+d7ba9b4  test: add failing alternative outfit generation tests (#13)
+3a0daab  feat: generate alternative outfits from unshown combinations (#13)
+
+=== FILES CHANGED ===
+tests/unit/outfits/generateOutfit.test.ts   +12 tests (alternatives (US8) describe block)
+src/services/outfits/generateOutfit.ts      `shown` input; bounded search for an unshown combination
+
+=== BEHAVIOUR ===
+Given the item IDs of outfits already shown, generateOutfit returns a combination not among them:
+ - It only has to differ by at least one item; the rest of the outfit can stay.
+ - It prefers pieces shown least, so repeated requests mix and match across the wardrobe.
+ - Leaving out a suitable piece (for example shoes) does not count as a new outfit.
+ - When every combination has been shown, it answers { status: 'no_alternative' }.
+ - Shown IDs only rule combinations out. They never make an unavailable, unsuitable, or other
+   user's item eligible. Season and formality rules still apply.
+ - The search is bounded (MAX_CORE_CANDIDATES cores, MAX_OPTIONS_PER_PIECE options per piece).
+
+=== RED (rerun at d7ba9b4) ===
+npx vitest run tests/unit/outfits/generateOutfit.test.ts
+   x alternatives (US8) > returns a different combination from the one already shown
+   x alternatives (US8) > mixes in clothes that have not been shown yet before reusing shown ones
+   x alternatives (US8) > keeps some of the same clothes when only part of the outfit can change
+   x alternatives (US8) > swaps an optional piece when the core cannot change
+   x alternatives (US8) > spreads repeated requests across the pool instead of reusing the same pieces
+   x alternatives (US8) > offers every distinct combination once, then says there is no alternative
+   x alternatives (US8) > says there is no alternative when the wardrobe makes only one outfit
+   x alternatives (US8) > does not count dropping a suitable piece as an alternative
+   x alternatives (US8) > matches shown outfits regardless of item order
+   x alternatives (US8) > never adds a shown item that is unavailable, unsuitable or someone else's
+   x alternatives (US8) > keeps the season and formality rules for alternatives
+   x alternatives (US8) > stays bounded on a large wardrobe
+AssertionError: expected [ ... ] to not deeply equal [ ... ]   (the same outfit came back)
+ Test Files  1 failed (1)
+      Tests  12 failed | 40 passed (52)
+
+=== GREEN (rerun at 3a0daab) ===
+npx vitest run tests/unit/outfits/generateOutfit.test.ts
+ Test Files  1 passed (1)
+      Tests  53 passed (53)
+(3a0daab also adds "treats an empty shown list like a first request".)
