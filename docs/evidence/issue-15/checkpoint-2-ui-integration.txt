@@ -1,0 +1,37 @@
+US10 (#15) Outfit History - Checkpoint 2: UI, integration, focused tests
+Branch: feature/15-outfit-history (base origin/main 90a9e1c). Date: 2026-11-11.
+No PR #43 code used. CreateOutfitForm.tsx: 1 import, 1 render line, doc comment only.
+
+BACKEND OWNERSHIP CHECK
+  Finding: MongoOutfitHistoryRepository.recordWorn() accepted any outfitId, so a
+  direct repository call could record a history entry pointing at another user's
+  outfit. The service never did this (it only passes the user's own outfit).
+  Fix: recordWorn checks Outfit.exists({ _id, owner }) before inserting and throws
+  RepositoryError otherwise; the in-memory repository does the same.
+  RED: 3 new contract tests failed in-memory (3/17) and on MongoDB (3/31).
+  GREEN: in-memory contract + service + routes 69/69; MongoDB file 31/31.
+
+UI TDD RED
+  localDate.test.ts: 6 failed (todayLocalDate / formatWornDate not functions).
+  MarkAsWornButton, OutfitHistoryList, CreateOutfitFormMarkWorn and
+  outfitHistoryPage test files failed to load (modules did not exist).
+
+UI TDD GREEN
+  New UI tests + existing CreateOutfitForm.test.tsx: 6 files, 121/121 passed.
+  Focused regression (dates, outfits, validation, repositories, outfit
+    components, layout, outfit API routes, all page integration tests, models):
+    35 files, 780/780 passed.
+  npx tsc --noEmit: exit 0. npx eslint <changed and new files>: exit 0.
+  git diff --check: exit 0; no trailing whitespace; files CRLF.
+
+MUTATION CHECKS (MarkAsWornButton, restored and verified with cmp)
+  UTC date via toISOString: 3 tests failed.
+  In-flight guard removed: 1 test failed.
+  Retry recomputes the date: 1 test failed.
+
+NOT RUN (by instruction): full npm test, full test:db, build, smoke, browser.
+  Layout at desktop and mobile widths is not yet verified in a browser.
+
+DISK: 3,432 MB at start; 257 MB at the end. The Windows page file grew from
+  14,691 MB to 17,858 MB during the final test run, and Windows Update
+  (TiWorker) is active. No test artifacts were left. Heavy work stopped.

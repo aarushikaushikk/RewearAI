@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { NETWORK_ERROR_MESSAGE } from '@/components/auth/authFormErrors';
+import { MarkAsWornButton } from '@/components/outfits/MarkAsWornButton';
 import {
   displayName,
   OCCASION_LABELS,
@@ -111,8 +112,8 @@ function viewFor(data: unknown, requested: Occasion): ViewState {
 
 /**
  * Create Outfit (DESIGN §5.6, wireframe 08): choose an occasion, generate, and review the
- * recommended items, and save the outfit (US9). Mark as worn, Try another and feedback
- * belong to later stories.
+ * recommended items, then save and optionally mark them as worn (US9, US10). Try another and
+ * feedback belong to later stories.
  */
 export function CreateOutfitForm() {
   const [selected, setSelected] = useState('');
@@ -279,8 +280,11 @@ export function CreateOutfitForm() {
               </li>
             ))}
           </ul>
-          {/* Generating again unmounts this section, so each new outfit starts unsaved. */}
-          <SaveOutfitButton occasion={view.outfit.occasion} itemIds={view.outfit.items.map((item) => item.id)} />
+          <div className="flex flex-col gap-4">
+            {/* Generating again unmounts this section, so each new outfit starts unsaved. */}
+            <SaveOutfitButton occasion={view.outfit.occasion} itemIds={view.outfit.items.map((item) => item.id)} />
+            <MarkAsWornButton itemIds={view.outfit.items.map((item) => item.id)} occasion={view.outfit.occasion} />
+          </div>
         </section>
       )}
     </div>
