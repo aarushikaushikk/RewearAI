@@ -13,11 +13,14 @@ import {
 import { ValidationResult } from '@/types/auth';
 import { WardrobeImage, WardrobeItemDto, WardrobeItemRecord } from '@/types/wardrobe';
 
-/** Marks uploads not yet saved to a wardrobe item, so cleanup can find abandoned ones. */
-export const PENDING_UPLOAD_TAG = 'rewear-pending';
-
-export function pendingUploadTag(_uploadScope: string): string {
-  return PENDING_UPLOAD_TAG;
+/**
+ * Marks uploads not yet saved to a wardrobe item, so cleanup can find abandoned ones.
+ * The tag names the database the upload was made for (see uploadScopeFor): environments
+ * share one Cloudinary account, and cleanup can only check uploads against its own
+ * database. Uploads from before #50 carry a bare `rewear-pending`, which no cleanup reads.
+ */
+export function pendingUploadTag(uploadScope: string): string {
+  return `rewear-pending-${uploadScope}`;
 }
 
 /** How long an uploaded image may wait to be saved before cleanup deletes it. */
@@ -79,7 +82,9 @@ function batches<T>(items: T[]): T[][] {
 }
 
 // Logs fixed values only: image service errors can contain credentials.
-function logFailure(operation: 'image.upload' | 'image.find' | 'image.delete'): void {
+function logFailure(
+  operation: 'image.upload' | 'image.find' | 'image.delete' | 'image.removeTag',
+): void {
   console.error('[wardrobe] operation failed', { operation });
 }
 
@@ -96,11 +101,16 @@ function itemNotFound(): WardrobeError {
 }
 
 export class WardrobeItemService {
+  private readonly pendingTag: string;
+
+  /** `uploadScope` identifies this environment's database; see pendingUploadTag. */
   constructor(
     private itemRepo: IWardrobeItemRepository,
     private imageStore: IImageStore,
-    _uploadScope: string,
-  ) {}
+    uploadScope: string,
+  ) {
+    this.pendingTag = pendingUploadTag(uploadScope);
+  }
 
   /** Stores a photo for `userId`. No wardrobe item exists until createItem. */
   async uploadImage(userId: string, bytes: Uint8Array): Promise<WardrobeImage> {
@@ -113,7 +123,7 @@ export class WardrobeItemService {
     try {
       return await this.imageStore.upload(bytes, {
         folder: userImageFolder(userId),
-        tags: [PENDING_UPLOAD_TAG],
+        tags: [this.pendingTag],
       });
     } catch {
       logFailure('image.upload');
@@ -148,6 +158,7 @@ export class WardrobeItemService {
     try {
       // The image store's URL is used, never one supplied by the client.
       const record = await this.itemRepo.create({ ...details, ownerId: userId, image });
+      await this.confirmUpload(publicId);
       return { item: toWardrobeItemDto(record), created: true };
     } catch (err) {
       if (!(err instanceof DuplicateImageError)) {
@@ -157,7 +168,20 @@ export class WardrobeItemService {
       if (!existing) {
         throw new WardrobeError(IMAGE_NOT_FOUND_MESSAGE, 'IMAGE_NOT_FOUND', 404);
       }
+      await this.confirmUpload(publicId);
       return { item: toWardrobeItemDto(existing), created: false };
+    }
+  }
+
+  /**
+   * Clears the pending tag of a saved item's image. A failure doesn't fail the save:
+   * the item is stored, and cleanup finds it in the database and clears the tag later.
+   */
+  private async confirmUpload(publicId: string): Promise<void> {
+    try {
+      await this.imageStore.removeTag(this.pendingTag, [publicId]);
+    } catch {
+      logFailure('image.removeTag');
     }
   }
 
@@ -228,8 +252,9 @@ export class WardrobeItemService {
   }
 
   /**
-   * Deletes uploads left unsaved past PENDING_UPLOAD_TTL_MS. Whether an image was
-   * saved is checked in the database, not trusted to the pending tag.
+   * Deletes this environment's uploads left unsaved past PENDING_UPLOAD_TTL_MS. Saving an
+   * item clears the tag, so this is a safety net. Whether an image was saved is still
+   * checked in the database, not trusted to the pending tag.
    */
   async cleanupAbandonedUploads(
     now = new Date(),
@@ -238,7 +263,7 @@ export class WardrobeItemService {
     const stale: string[] = [];
     let cursor: string | undefined;
     do {
-      const page = await this.imageStore.listByTag(PENDING_UPLOAD_TAG, cursor);
+      const page = await this.imageStore.listByTag(this.pendingTag, cursor);
       for (const image of page.images) {
         if (image.createdAt.getTime() <= cutoff) {
           stale.push(image.publicId);
@@ -256,7 +281,7 @@ export class WardrobeItemService {
     const abandoned = stale.filter((publicId) => !used.has(publicId));
 
     for (const batch of batches(confirmed)) {
-      await this.imageStore.removeTag(PENDING_UPLOAD_TAG, batch);
+      await this.imageStore.removeTag(this.pendingTag, batch);
     }
     for (const batch of batches(abandoned)) {
       await this.imageStore.delete(batch);

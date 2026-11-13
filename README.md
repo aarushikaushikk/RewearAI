@@ -95,7 +95,7 @@ Clothing photos are stored in Cloudinary; MongoDB keeps only the image URL and p
 2. Under **Settings → API Keys**, copy the cloud name, API key, and API secret into `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET` in `.env.local`.
 3. Set `CRON_SECRET` to a long random string (also in Vercel's project settings).
 
-Uploads accept JPEG, PNG, or WebP up to 4 MB; the browser shrinks photos to 2000 px before uploading. Each image goes to `rewear/users/<userId>/` tagged `rewear-pending`. A daily Vercel Cron job ([vercel.json](vercel.json)) calls `/api/cron/cleanup-uploads`, which deletes pending images older than 24 hours that no wardrobe item uses, so abandoned uploads are removed within about 48 hours.
+Uploads accept JPEG, PNG, or WebP up to 4 MB; the browser shrinks photos to 2000 px before uploading. Each image goes to `rewear/users/<userId>/` tagged `rewear-pending-<scope>`, and saving the item removes the tag. The scope is a short hash of the database's hosts and name from `MONGODB_URI`, because every environment shares one Cloudinary account but has its own database. A daily Vercel Cron job ([vercel.json](vercel.json)) calls `/api/cron/cleanup-uploads`, which deletes images with its own environment's pending tag that are older than 24 hours and that no wardrobe item uses. Abandoned uploads are removed within about 48 hours, and no environment can delete another's photos. Uploads from before this change carry a bare `rewear-pending` tag that no cleanup reads, so remove those by hand if needed.
 
 Both upload routes require a signed-in session (`requireAuth()`) and a same-origin request (`validateCsrfOrigin()`), like the auth routes. The cron route instead requires `Authorization: Bearer $CRON_SECRET`.
 

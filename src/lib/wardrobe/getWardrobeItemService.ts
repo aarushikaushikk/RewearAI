@@ -1,6 +1,7 @@
 import 'server-only';
 import { ConfigurationError } from '@/lib/auth/getAuthService';
 import { CloudinaryImageStore, readCloudinarySettings } from '@/lib/images/cloudinaryImageStore';
+import { uploadScopeFor } from '@/lib/images/uploadScope';
 import { MongoWardrobeItemRepository } from '@/lib/repositories/mongoWardrobeItemRepository';
 import { WardrobeItemService } from '@/services/wardrobeItemService';
 
@@ -11,11 +12,19 @@ import { WardrobeItemService } from '@/services/wardrobeItemService';
  */
 export function getProductionWardrobeItemService(): WardrobeItemService {
   const cloudinary = readCloudinarySettings();
-  if (!process.env.MONGODB_URI?.trim() || !cloudinary) {
+  const mongodbUri = process.env.MONGODB_URI?.trim();
+  if (!mongodbUri || !cloudinary) {
+    throw new ConfigurationError('The wardrobe service is temporarily unavailable');
+  }
+  let uploadScope: string;
+  try {
+    uploadScope = uploadScopeFor(mongodbUri);
+  } catch {
     throw new ConfigurationError('The wardrobe service is temporarily unavailable');
   }
   return new WardrobeItemService(
     new MongoWardrobeItemRepository(),
     new CloudinaryImageStore(cloudinary),
+    uploadScope,
   );
 }
