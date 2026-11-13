@@ -152,6 +152,26 @@ describe('US7 outfit generation on the production build (HTTP)', () => {
     for (const name of NEVER_SHOWN) expect(json).not.toContain(name);
     expect(json).not.toMatch(/publicId|ownerId|isAvailable/);
   });
+
+  it.each(['work', 'weekend', 'casual'] as const)(
+    "offers only new combinations of User A's items for %s, then says none are left (US8)",
+    async (occasion) => {
+      const shown: string[][] = [];
+      let data: { status: string; items?: { id: string }[] } | undefined;
+      for (let i = 0; i <= 20; i++) {
+        const res = await generate(shown.length ? { occasion, shown } : { occasion });
+        expect(res.status).toBe(200);
+        data = (await res.json()).data;
+        if (data?.status !== 'ok') break;
+        const json = JSON.stringify(data);
+        for (const name of NEVER_SHOWN) expect(json).not.toContain(name);
+        shown.push(data.items!.map((item) => item.id));
+      }
+
+      expect(data).toEqual({ status: 'no_alternative', occasion });
+      expect(new Set(shown.map((ids) => [...ids].sort().join())).size).toBe(shown.length);
+    },
+  );
 });
 
 describe.runIf(CHROME_PATH)('US7 Create Outfit in a real browser', () => {
@@ -383,6 +403,41 @@ describe.runIf(CHROME_PATH)('US7 Create Outfit in a real browser', () => {
     expect(await outfitNames()).toEqual(EXPECTED.weekend);
   });
 
+  it('offers new Weekend combinations on Try another, then keeps the last one when none are left (US8)', async () => {
+    const seen = [(await outfitNames()).slice().sort().join()];
+    const before = generateRequests.length;
+
+    for (let i = 0; i < 10; i++) {
+      const current = await outfitNames();
+      await clickButton('Try another');
+      await page.waitFor(
+        `document.body.innerText.includes("There isn't another suitable combination right now.") ||
+          [...document.querySelectorAll('ul[aria-label="Items in this outfit"] li p.font-semibold')].map((p) => p.textContent).join() !== ${JSON.stringify(current.join())}`,
+        'another outfit or the no-alternative message',
+      );
+      if ((await bodyText()).includes("There isn't another suitable combination right now.")) {
+        expect(await outfitNames()).toEqual(current);
+        break;
+      }
+      const names = await outfitNames();
+      for (const name of NEVER_SHOWN) expect(names).not.toContain(name);
+      expect(seen).not.toContain(names.slice().sort().join());
+      seen.push(names.slice().sort().join());
+      if (seen.length === 2) {
+        await page.waitFor(
+          `[...document.querySelectorAll('ul[aria-label="Items in this outfit"] img')].every((img) => img.complete)`,
+          'the alternative photos to settle',
+        );
+        await shot('desktop-1280-try-another');
+      }
+    }
+
+    expect(seen.length).toBeGreaterThan(1);
+    expect(await bodyText()).toContain("There isn't another suitable combination right now.");
+    expect(generateRequests.length - before).toBe(seen.length);
+    await shot('desktop-1280-no-alternative');
+  });
+
   it('lays out the selector, recommendation, and insufficient state on mobile (375 px)', async () => {
     await viewport(375);
     await goto('/outfits/create');
@@ -408,6 +463,24 @@ describe.runIf(CHROME_PATH)('US7 Create Outfit in a real browser', () => {
     await page.waitFor(`document.body.innerText.includes("There aren't enough available items")`, 'the insufficient message');
     expect(await page.evaluate('document.documentElement.scrollWidth <= innerWidth')).toBe(true);
     await shot('mobile-375-insufficient');
+  });
+
+  it('lays out Try another and the no-alternative message on mobile (375 px) (US8)', async () => {
+    await generateAndWait('Work');
+    const first = await outfitNames();
+    await clickButton('Try another');
+    await page.waitFor(
+      `document.body.innerText.includes("There isn't another suitable combination right now.")`,
+      'the no-alternative message on mobile',
+    );
+    // User A has one Work combination, so it stays on screen.
+    expect(await outfitNames()).toEqual(first);
+    expect(await page.evaluate('document.documentElement.scrollWidth <= innerWidth')).toBe(true);
+    await page.waitFor(
+      `[...document.querySelectorAll('ul[aria-label="Items in this outfit"] img')].every((img) => img.complete)`,
+      'photos on mobile',
+    );
+    await shot('mobile-375-no-alternative');
   });
 
   it('offers Sign in when the session has ended', async () => {
