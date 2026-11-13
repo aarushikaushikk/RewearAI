@@ -44,7 +44,10 @@ export type RepositoryOperation =
   | 'wardrobeItem.deleteForOwner'
   | 'outfitHistory.findOrCreateOutfit'
   | 'outfitHistory.recordWorn'
-  | 'outfitHistory.listByOwner';
+  | 'outfitHistory.listByOwner'
+  | 'outfitFeedback.setRating'
+  | 'outfitFeedback.clearRating'
+  | 'outfitFeedback.listRatedByOccasion';
 
 export type ErrorCategory =
   | 'connection'

@@ -1,4 +1,4 @@
-import { OCCASIONS, type Occasion } from '@/types/outfit';
+import { FEEDBACK_RATINGS, OCCASIONS, type FeedbackRating, type Occasion } from '@/types/outfit';
 
 export const CHOOSE_OCCASION_ERROR = 'Choose an occasion to continue.';
 export const INVALID_PAYLOAD_ERROR = 'Invalid request payload';
@@ -80,4 +80,33 @@ export function parseSaveOutfitPayload(body: unknown): SaveOutfitPayloadResult {
     return invalid;
   }
   return { ok: true, occasion: occasion as Occasion, itemIds: [...itemIds] };
+}
+
+export interface OutfitFeedbackInput extends SaveOutfitInput {
+  rating: FeedbackRating;
+}
+
+export type OutfitFeedbackPayloadResult =
+  | ({ ok: true } & OutfitFeedbackInput)
+  | { ok: false; error: typeof INVALID_PAYLOAD_ERROR };
+
+/**
+ * Accepts exactly `{ occasion, itemIds, rating }` (US14): the outfit as Save accepts it, and a
+ * rating from FEEDBACK_RATINGS, matched exactly. Clearing has its own request, so null is refused.
+ * An owner or outfit ID is refused: the session decides whose outfit is rated.
+ */
+export function parseOutfitFeedbackPayload(body: unknown): OutfitFeedbackPayloadResult {
+  const invalid = { ok: false, error: INVALID_PAYLOAD_ERROR } as const;
+  if (!isRecord(body) || !('rating' in body)) {
+    return invalid;
+  }
+  const { rating, ...outfit } = body;
+  if (typeof rating !== 'string' || !(FEEDBACK_RATINGS as readonly string[]).includes(rating)) {
+    return invalid;
+  }
+  const parsed = parseSaveOutfitPayload(outfit);
+  if (!parsed.ok) {
+    return invalid;
+  }
+  return { ok: true, occasion: parsed.occasion, itemIds: parsed.itemIds, rating: rating as FeedbackRating };
 }

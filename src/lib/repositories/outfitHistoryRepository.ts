@@ -5,7 +5,8 @@ export interface NewOutfitData {
   ownerId: string;
   itemIds: string[];
   occasion: Occasion;
-  explanation: string;
+  /** Optional: an outfit first stored by feedback (US14) has none. */
+  explanation?: string;
 }
 
 export interface StoredOutfitRef {

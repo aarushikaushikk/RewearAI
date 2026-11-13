@@ -60,6 +60,12 @@ export interface OutfitExplanationDto {
   alternative: boolean;
 }
 
+/** US14: the user's saved rating of an outfit, and the stored outfit it belongs to. */
+export interface OutfitFeedbackDto {
+  outfitId: string;
+  rating: FeedbackRating;
+}
+
 /**
  * Response data for POST /api/outfits/generate. Generated outfits are not saved (US9).
  * `no_alternative` means every valid combination was among the outfits already shown (US8).
@@ -71,6 +77,8 @@ export type OutfitRecommendationDto =
       season: Season;
       items: OutfitItemDto[];
       explanation: OutfitExplanationDto;
+      /** US14: the rating saved for exactly these items and this occasion, or null. */
+      feedback: OutfitFeedbackDto | null;
     }
   | { status: "insufficient"; occasion: Occasion; reason: InsufficientReason }
   | { status: "no_alternative"; occasion: Occasion };

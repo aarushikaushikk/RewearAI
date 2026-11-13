@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { NETWORK_ERROR_MESSAGE } from '@/components/auth/authFormErrors';
 import { ExplanationPanel } from '@/components/outfits/ExplanationPanel';
+import { FeedbackControl, parseOutfitFeedback } from '@/components/outfits/FeedbackControl';
 import { MarkAsWornButton } from '@/components/outfits/MarkAsWornButton';
 import {
   displayName,
@@ -126,7 +127,15 @@ function answerFor(data: unknown, requested: Occasion): Answer {
     return { status: 'no_alternative' };
   }
   if (data.status === 'ok' && Array.isArray(data.items) && data.items.length > 0 && data.items.every(isOutfitItem)) {
-    return { status: 'ok', outfit: { ...(data as GeneratedOutfit), explanation: parseExplanation(data.explanation) } };
+    return {
+      status: 'ok',
+      outfit: {
+        ...(data as GeneratedOutfit),
+        explanation: parseExplanation(data.explanation),
+        // US14: a malformed rating is shown as none rather than guessed.
+        feedback: parseOutfitFeedback(data.feedback),
+      },
+    };
   }
   return { status: 'error', message: GENERATE_FAILED_MESSAGE };
 }
@@ -181,7 +190,7 @@ async function requestOutfit(body: { occasion: Occasion; shown?: string[][] }): 
 /**
  * Create Outfit (DESIGN §5.6, wireframe 08): choose an occasion, generate, review the
  * recommended items and why they were combined (US13), try another combination (US8), save the
- * outfit (US9), and optionally mark it as worn (US10). Feedback belongs to a later story.
+ * outfit (US9), optionally mark it as worn (US10), and rate it Helpful or Not helpful (US14).
  */
 export function CreateOutfitForm() {
   const [selected, setSelected] = useState('');
@@ -406,6 +415,13 @@ export function CreateOutfitForm() {
             key={`worn-${view.outfit.items.map((item) => item.id).join()}`}
             itemIds={view.outfit.items.map((item) => item.id)}
             occasion={view.outfit.occasion}
+          />
+          {/* Keyed by its items, so each new outfit starts from its own saved rating. */}
+          <FeedbackControl
+            key={`feedback-${view.outfit.items.map((item) => item.id).join()}`}
+            occasion={view.outfit.occasion}
+            itemIds={view.outfit.items.map((item) => item.id)}
+            initial={view.outfit.feedback}
           />
           {another.status === 'none' && (
             <p role="status" className="text-text">
