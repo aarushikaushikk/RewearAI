@@ -15,7 +15,7 @@ const facts = (overrides: Partial<OutfitExplanationDto> = {}): OutfitExplanation
 describe('reasonLine (US13)', () => {
   it('states the formality, season and palette the outfit was picked on', () => {
     expect(reasonLine('work', facts(), ['White', 'Navy', 'Brown'])).toBe(
-      'Picked because every piece is Smart casual or Formal for Work, they all suit Autumn, and the colors stay in neutrals.',
+      'Picked for Work because every piece is Smart casual or Formal, they all suit Autumn, and the colors stay in neutrals.',
     );
   });
 
@@ -54,7 +54,7 @@ describe('reasonLine (US13)', () => {
           for (const palette of PALETTES) {
             for (const alternative of [false, true]) {
               const line = reasonLine(occasion, { formalities, seasons, palette, alternative }, ['Pink', 'Burgundy']);
-              expect(line).toMatch(new RegExp(`for ${occasion}`, 'i'));
+              expect(line).toMatch(new RegExp(`^Picked for ${occasion} because`, 'i'));
               expect(line.length).toBeLessThanOrEqual(300);
               expect(line).not.toMatch(/perfect|ideal|best|always|must|definitely/i);
             }

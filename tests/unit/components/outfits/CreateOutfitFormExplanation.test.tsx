@@ -65,7 +65,7 @@ describe('CreateOutfitForm explanation (US13)', () => {
 
     const region = panel();
     expect(region).toBeInTheDocument();
-    expect(within(region!).getByText(/^Picked because every piece is Smart casual for Work/)).toBeInTheDocument();
+    expect(within(region!).getByText(/^Picked for Work because every piece is Smart casual,/)).toBeInTheDocument();
     expect(within(region!).getByText('The Suede jacket can add a rugged edge.')).toBeInTheDocument();
     const items = screen.getByRole('list', { name: 'Items in this outfit' });
     expect(items.compareDocumentPosition(region!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

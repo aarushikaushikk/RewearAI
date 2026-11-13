@@ -36,7 +36,7 @@ function paletteClause(palette: OutfitExplanationDto['palette'], colors: readonl
 export function reasonLine(occasion: Occasion, explanation: OutfitExplanationDto, colors: readonly Color[]): string {
   const formalities = explanation.formalities.join(' or ');
   const line =
-    `Picked because every piece is ${formalities} for ${OCCASION_LABELS[occasion]}, ` +
+    `Picked for ${OCCASION_LABELS[occasion]} because every piece is ${formalities}, ` +
     `${seasonClause(explanation.seasons)}, and ${paletteClause(explanation.palette, colors)}.`;
   return explanation.alternative ? `${line} It's a different combination from the ones you've already seen.` : line;
 }

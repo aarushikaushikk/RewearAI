@@ -358,7 +358,7 @@ describe.runIf(CHROME_PATH)('US7 Create Outfit in a real browser', () => {
     for (const role of ['Top', 'Bottom', 'Shoes', 'Outerwear']) expect(text).toContain(role);
     // US13: the explanation panel, with the basic note (the photo model is never downloaded here).
     expect(text).toContain('Why these items?');
-    expect(text).toMatch(/Picked because every piece is [^.]+ for Work, /);
+    expect(text).toMatch(/Picked for Work because every piece is [^.]+, /);
     expect(text).not.toContain('chosen with on-device AI');
     for (const name of NEVER_SHOWN) expect(text).not.toContain(name);
     expect(await page.evaluate('document.activeElement && document.activeElement.id')).toBe('outfit-heading');

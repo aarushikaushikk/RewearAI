@@ -59,7 +59,7 @@ describe('ExplanationPanel (US13)', () => {
     expect(screen.getByRole('heading', { name: 'Why these items?' })).toBeInTheDocument();
     expect(
       screen.getByText(
-        'Picked because every piece is Smart casual or Formal for Work, they all suit Autumn, and the colors stay in neutrals.',
+        'Picked for Work because every piece is Smart casual or Formal, they all suit Autumn, and the colors stay in neutrals.',
       ),
     ).toBeInTheDocument();
     expect(screen.getByText(/^Sticking to neutral shades/)).toBeInTheDocument();
