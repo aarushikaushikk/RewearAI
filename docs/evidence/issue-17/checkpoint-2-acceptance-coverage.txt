@@ -1,0 +1,84 @@
+US12 Insufficient Wardrobe Items (#17), Checkpoint 2: acceptance coverage with US6 and US7
+Branch: feature/17-insufficient-wardrobe-items (after Checkpoint 1). Date: 2026-11-11.
+No Git operations that change the repository were run. No dependencies installed. No production
+code changed in this checkpoint: existing US6/US7 code already met these criteria, so only
+regression tests were added (as instructed). Auth, schemas, Cloudinary, generation rules, and the
+temporary MongoAvailableWardrobeItems source are unchanged.
+
+=== FILES CHANGED ===
+tests/integration/api/insufficientWardrobe.test.ts       new, 11 tests
+tests/unit/outfits/generateOutfit.test.ts                +64 tests (one describe block)
+tests/unit/components/outfits/CreateOutfitForm.test.tsx  +2 tests (in the Checkpoint 1 US12 block)
+
+=== WHAT THE NEW TESTS VERIFY ===
+Integration (insufficientWardrobe.test.ts). One MemoryWardrobeItemRepository (US6's test store,
+which also implements listAvailableByOwner) backs both US6's real handleSetAvailability handler
+and OutfitRecommendationService behind handleGenerateOutfit. Requests carry real sessions from
+AuthService, CSRF origin headers, and JSON bodies.
+ 1. Insufficient -> available -> outfit: Alex's needed Bottom is marked unavailable through
+    PATCH /api/wardrobe/[itemId]/availability, so generate gives insufficient/no_complete_outfit.
+    After it is marked available again, generate gives an ok outfit [top, bottom] with Alex's
+    item IDs. Sam's available Bottom (which would complete the outfit) never appears.
+ 2. Same flow for no_suitable_items: the only Formal item (a dress) is unavailable, then available.
+ 3. Another user's items or availability change don't complete the signed-in user's outfit.
+ 4. x5 (each occasion): with Alex's available and unavailable items and Sam's items in every
+    category and formality, every recommended ID is one of Alex's saved, available items, and
+    its image URL, category, and formality equal the stored record (nothing filled in).
+ 5. x3: top without bottom / bottom without top / only optional pieces -> exactly
+    { status: 'insufficient', occasion, reason: 'no_complete_outfit' }, with no `items`.
+Unit (generateOutfit.test.ts, "insufficient wardrobes (US12)"):
+ 6. x64: every combination of the six categories, alongside an unavailable item and another
+    user's item of every category. Without a Dress or a Top+Bottom, the result is exactly
+    insufficient (no_suitable_items when the user has no eligible items, else no_complete_outfit).
+    Otherwise every piece is one of the given objects (none created or copied), no item repeats,
+    and the core is exactly [dress] or [top, bottom], never a lone top or bottom.
+Component (CreateOutfitForm.test.tsx):
+ 7. After an insufficient result, the links are present, the occasion stays selected, and
+    Generate Outfit is enabled. Generating again sends the same occasion; the outfit replaces the
+    insufficient message and explanation; the occasion is still selected.
+ 8. While generating again, the old explanation is hidden (only the button's "Loading..." status
+    remains). A second insufficient answer shows its own new reason, not the old one, with the
+    links.
+
+=== RESULTS ===
+First run of the new tests:
+ Test Files  1 failed | 2 passed (3); Tests 1 failed | 156 passed (157)
+   x hides the previous explanation while generating again, ...
+   Error: expect(element).not.toBeInTheDocument()   at queryByRole('status')
+ Cause: a mistake in the test, not the code. PrimaryButton shows <span role="status">Loading...</span>
+ while loading. The assertion was replaced with stricter ones (the only status is "Loading...";
+ neither the general message nor the old reason is shown).
+
+The new tests lock in existing behaviour, so they passed once the test was corrected. The mutation
+checks below show they catch regressions.
+
+Focused run:
+npx vitest run tests/unit/components/outfits tests/unit/outfits tests/integration/api/outfitRoutes.test.ts
+  tests/integration/api/insufficientWardrobe.test.ts tests/integration/api/wardrobeRoutes.test.ts
+ Test Files  6 passed (6)
+      Tests  254 passed (254)
+(After converting the new file to CRLF: insufficientWardrobe.test.ts 11 passed (11).)
+npx tsc --noEmit: exit 0
+npx eslint (4 changed/new files): exit 0
+git diff --check: exit 0; the new untracked file checked separately for trailing whitespace: none
+CRLF line endings on all changed and new files.
+
+=== MUTATION CHECKS (run with -t "US12": 83 tests; each restored and verified with cmp) ===
+M1 generateOutfit ignores ownership:            caught, 64 failed (unit combinations)
+M2 generateOutfit ignores availability:         caught, 64 failed (unit combinations)
+M3 view not reset to loading on generating again: caught, 1 failed (component test 8)
+Note: M1 and M2 are not caught by the integration tests, because the data source also scopes by
+owner and availability (defence in depth). The unit tests check generateOutfit's own filter.
+
+=== NOT RUN (by instruction) ===
+npm test, npm run test:db, npm run build, npm run test:smoke.
+
+=== RISKS / OUTSTANDING ===
+- The integration test uses the in-memory US6 repository as the outfit source. Production still
+  uses the temporary MongoAvailableWardrobeItems (same query; covered by tests/db, not run here).
+- Real-browser check of the insufficient state, and the smoke test's insufficient check (which may
+  need the new reason line), are left for Checkpoint 3.
+- The provisional generation rules (DESIGN.md open item) define "complete outfit"; these tests
+  follow the current rules.
+
+Free space on C: after this checkpoint: 3.4 GB.
