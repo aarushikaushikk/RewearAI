@@ -1,0 +1,110 @@
+# CI/CD and Deployment
+
+GitHub Actions runs every check and owns every deploy. Vercel's own Git deploys are off (`"git": { "deploymentEnabled": false }` in [vercel.json](../vercel.json)), so nothing reaches Vercel unless the whole pipeline has passed.
+
+## Pipeline
+
+[.github/workflows/ci.yml](../.github/workflows/ci.yml) runs on every pull request to `main` and every push to `main`. A newer run on the same branch cancels an older one.
+
+```mermaid
+flowchart LR
+  Q[Lint and typecheck] --> U[Unit and integration tests]
+  Q --> D[Database tests]
+  U --> B[Production build and smoke tests]
+  D --> B
+  S[Security scanning] --> P
+  S --> R
+  B --> P[Deploy preview<br/>pull requests]
+  B --> R[Deploy production<br/>main only]
+  P --> PC[Post-deploy check<br/>+ PR comment]
+  R --> RC[Post-deploy check]
+```
+
+| Stage | Job | What it does |
+|---|---|---|
+| 1. Quality | Lint and typecheck | `npm run lint`, `npm run typecheck` |
+| 2. Tests | Unit and integration tests | `npm test` (Vitest; `MONGODB_URI` is forced empty, so it can't reach a real database) |
+| 2. Tests | Database tests | `npm run test:db` against a temporary `mongodb-memory-server`, cached between runs |
+| 3. Build | Production build and smoke tests | `npm run test:smoke`: `next build`, then HTTP and real-Chrome checks against the built app and a temporary database. Fails if any `/api` route isn't dynamic (`ƒ`) |
+| Security | Security scanning | `npm audit` of production dependencies (fails on high), GitHub dependency review on PRs (fails on high), and a gitleaks secret scan of the full history |
+| Security | CodeQL ([codeql.yml](../.github/workflows/codeql.yml)) | `security-extended` analysis of the TypeScript code on PRs, on pushes to `main`, and weekly. Results appear under Security → Code scanning |
+| 4. Deploy | Deploy preview | PRs only. `vercel pull`, `vercel build`, `vercel deploy --prebuilt`, then points the fixed preview domain at the new deployment and comments both URLs on the PR |
+| 4. Deploy | Deploy production | Pushes to `main` only, one at a time. Same steps with `--prod` |
+| 5. Verify | Post-deploy check | [scripts/checkDeployment.sh](../scripts/checkDeployment.sh): `/sign-in` must return 200 and `/api/auth/session` must not return a 5xx |
+
+[Dependabot](../.github/dependabot.yml) opens weekly PRs for npm and GitHub Actions updates. Major versions are ignored, because AGENTS.md requires both partners to agree to those.
+
+The third-party gitleaks action is pinned to a full commit SHA, with its version in a comment, because a tag can be moved to different code. Dependabot updates the pin. GitHub's own `actions/*` use version tags.
+
+## Reading a run
+
+- **Summary:** each run's page (Actions → the run) lists the test counts for each suite and, after a deploy, its URL and database.
+- **Diagnostics:** if the build and smoke tests fail, the run has a `smoke-diagnostics` artifact (kept for 7 days) with the full build output and the browser screenshots taken so far.
+- **Timeouts:** every job has a `timeout-minutes` limit (10–20 minutes), so a hung browser or database stops in minutes instead of GitHub's 6-hour default.
+
+## Environments
+
+| Environment | Where it runs | Config | Database |
+|---|---|---|---|
+| Development | `npm run dev` | `.env.local` | `rewear` |
+| Test | Vitest and CI | Set by the test configs | Temporary `mongodb-memory-server`, never Atlas |
+| Preview | Vercel Preview, one deploy per PR push | Vercel Preview environment variables | `rewear` (holds the seeded test account) |
+| Production | Vercel Production, every merge to `main` | Vercel Production environment variables | `rewear-prod` |
+
+Preview and Production are also GitHub Environments, so each deploy is listed on the repository's Deployments page with its URL.
+
+Preview and Production use the same Atlas cluster and user, with different databases. The app creates its indexes when it connects, so a new, empty database needs no migration.
+
+`APP_ORIGIN` must be one exact origin (sign-in refuses any other). Each preview deploy has its own URL, so the pipeline also points a fixed domain, `PREVIEW_DOMAIN`, at the latest preview, and Preview's `APP_ORIGIN` is that domain. Sign in through the domain in the PR comment, not the per-deployment URL. The latest PR push takes over the domain.
+
+## Settings the pipeline needs
+
+| Name | Kind | Value |
+|---|---|---|
+| `VERCEL_TOKEN` | GitHub secret | A Vercel access token |
+| `VERCEL_ORG_ID` | GitHub secret | `orgId` from `.vercel/project.json` |
+| `VERCEL_PROJECT_ID` | GitHub secret | `projectId` from `.vercel/project.json` |
+| `PREVIEW_DOMAIN` | GitHub variable | e.g. `rewear-ai-preview.vercel.app` |
+| `PRODUCTION_URL` | GitHub variable | e.g. `https://rewear-ai-app.vercel.app` |
+
+A deploy job fails with a message naming any of these that is missing.
+
+## One-time setup
+
+1. Log in and create the Vercel project from the repository root:
+   ```bash
+   npx vercel@65.2.0 login
+   ```
+   ```bash
+   npx vercel@65.2.0 link
+   ```
+   Choose to create a new project. This writes `.vercel/project.json`, which is gitignored.
+2. Choose two unused `*.vercel.app` names: one for production (e.g. `rewear-ai-app.vercel.app`) and one for previews (e.g. `rewear-ai-preview.vercel.app`). You don't add them in the dashboard: each deploy job points its domain at the new deployment through the Vercel API ([scripts/setVercelAlias.sh](../scripts/setVercelAlias.sh)).
+3. In Vercel → Project → **Settings → Environment Variables**, add each variable below. For each one, untick **Development**, and tick **Preview** or **Production** only, as shown. Copy the values from `.env.local`; never commit them.
+
+   | Variable | Preview | Production |
+   |---|---|---|
+   | `MONGODB_URI` | The value from `.env.local` (database `rewear`) | The same value, with the database path `/rewear` changed to `/rewear-prod` |
+   | `APP_ORIGIN` | `https://<preview domain>` | `https://<production domain>` |
+   | `TRUST_PROXY` | `true` | `true` |
+   | `MONGOMS_DISABLE_POSTINSTALL` | `1` | `1` |
+   | `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` | From `.env.local` | From `.env.local` |
+   | `CRON_SECRET` | From `.env.local` | From `.env.local` |
+   | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | From `.env.local`, if set | From `.env.local`, if set |
+
+   Changes apply to the next deploy, so after editing a variable, rerun the deploy job.
+4. In GitHub → **Settings → Secrets and variables → Actions**:
+   - **Secrets** tab: add `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID`, using `orgId` and `projectId` from `.vercel/project.json`.
+   - **Variables** tab: add `PREVIEW_DOMAIN` (e.g. `rewear-ai-preview.vercel.app`, no `https://`) and `PRODUCTION_URL` (e.g. `https://rewear-ai-app.vercel.app`).
+5. Create a token at Vercel → Account Settings → Tokens, then paste it when prompted:
+   ```bash
+   gh secret set VERCEL_TOKEN
+   ```
+6. In Vercel → Project → Settings → Deployment Protection, turn off Vercel Authentication. Otherwise previews return 401 to the post-deploy check, your partner and the graders.
+7. In the Google OAuth client, add both redirect URIs: `https://<production domain>/api/auth/google/callback` and `https://<preview domain>/api/auth/google/callback`.
+8. In Atlas → Network Access → IP Access List, add `0.0.0.0/0` (not temporary). Vercel's servers have no fixed IP addresses; the database user and password still protect the cluster.
+9. After the first green run, protect `main` (Settings → Branches): require a pull request with one approval, and require the checks Lint and typecheck, Unit and integration tests, Database tests, Production build and smoke tests, Security scanning, and CodeQL.
+
+## Rollback
+
+In Vercel → Deployments, open an earlier production deployment and choose **Promote to Production**. Then revert the bad commit on `main` through a PR, so the next deploy doesn't bring it back.
