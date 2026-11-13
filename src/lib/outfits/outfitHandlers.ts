@@ -13,7 +13,8 @@ export interface OutfitHandlerDeps {
   outfitService?: OutfitRecommendationService;
 }
 
-const GENERIC_503_ERROR = 'The outfit service is temporarily unavailable. Please try again later.';
+/** Shared by every outfit route, so an outage reads the same everywhere. */
+export const GENERIC_503_ERROR = 'The outfit service is temporarily unavailable. Please try again later.';
 
 function errorResponse(error: string, status: number): Response {
   return NextResponse.json({ success: false, error }, { status });
