@@ -46,3 +46,35 @@ export interface OutfitItemDto {
 export type OutfitRecommendationDto =
   | { status: "ok"; occasion: Occasion; season: Season; items: OutfitItemDto[] }
   | { status: "insufficient"; occasion: Occasion; reason: InsufficientReason };
+
+/** A saved outfit as stored (US9): references to the user's wardrobe items, never copies. */
+export interface SavedOutfitRecord {
+  id: string;
+  ownerId: string;
+  occasion: Occasion;
+  itemIds: string[];
+  savedAt: Date;
+}
+
+/** One item of a saved outfit; an item deleted since saving is only marked removed (US9). */
+export type SavedOutfitItemDto =
+  | {
+      status: 'present';
+      id: string;
+      /** Null when the user didn't name the item; display color and style instead. */
+      name: string | null;
+      image: { url: string };
+      category: Category;
+      color: Color;
+      style: string;
+    }
+  | { status: 'removed'; id: string };
+
+/** A saved outfit as the Saved Outfits page shows it. */
+export interface SavedOutfitDto {
+  id: string;
+  occasion: Occasion;
+  /** ISO 8601. */
+  savedAt: string;
+  items: SavedOutfitItemDto[];
+}

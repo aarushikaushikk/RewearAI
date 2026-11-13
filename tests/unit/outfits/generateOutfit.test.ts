@@ -323,4 +323,39 @@ describe('generateOutfit', () => {
       },
     );
   });
+
+  describe('insufficient wardrobes (US12)', () => {
+    const ALL: Category[] = ['Top', 'Bottom', 'Dress', 'Shoes', 'Outerwear', 'Accessory'];
+    // Every combination of categories, as eligible items, plus an unavailable and another user's
+    // item of every category, which must never be used to complete an outfit.
+    const SUBSETS = Array.from({ length: 1 << ALL.length }, (_, mask) => ALL.filter((_, bit) => mask & (1 << bit)));
+
+    it.each(SUBSETS.map((s) => [s.join(', ') || 'nothing', s] as [string, Category[]]))(
+      'given %s, returns a complete outfit from the given items or says why not',
+      (_label, categories) => {
+        const own = categories.map((c) => item(c));
+        const unusable = ALL.flatMap((c) => [item(c, { isAvailable: false }), item(c, { ownerId: OTHER_USER })]);
+
+        const result = generate([...unusable, ...own]);
+
+        const canDress = categories.includes('Dress');
+        const canPair = categories.includes('Top') && categories.includes('Bottom');
+        if (!canDress && !canPair) {
+          expect(result).toEqual({
+            status: 'insufficient',
+            occasion: 'casual',
+            reason: own.length === 0 ? 'no_suitable_items' : 'no_complete_outfit',
+          });
+          return;
+        }
+        const chosen = pieces(result);
+        // The same objects that were passed in: nothing is created or copied.
+        expect(chosen.every((p) => own.includes(p.item))).toBe(true);
+        expect(new Set(chosen.map((p) => p.item.id)).size).toBe(chosen.length);
+        const core = chosen.map((p) => p.role).filter((r) => r === 'top' || r === 'bottom' || r === 'dress');
+        // A complete core, never a lone top or bottom.
+        expect([['dress'], ['top', 'bottom']]).toContainEqual(core);
+      },
+    );
+  });
 });

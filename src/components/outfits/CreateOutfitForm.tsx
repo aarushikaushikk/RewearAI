@@ -4,12 +4,20 @@ import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { NETWORK_ERROR_MESSAGE } from '@/components/auth/authFormErrors';
 import { MarkAsWornButton } from '@/components/outfits/MarkAsWornButton';
+import {
+  displayName,
+  OCCASION_LABELS,
+  SECONDARY_ACTION,
+  SIGN_IN_SESSION_ENDED_PATH,
+} from '@/components/outfits/outfitDisplay';
 import { OutfitItemImage } from '@/components/outfits/OutfitItemImage';
+import { SaveOutfitButton } from '@/components/outfits/SaveOutfitButton';
 import { Alert } from '@/components/ui/Alert';
 import { PrimaryButton } from '@/components/ui/PrimaryButton';
 import { SelectField } from '@/components/ui/SelectField';
 import {
   OCCASIONS,
+  type InsufficientReason,
   type Occasion,
   type OutfitItemDto,
   type OutfitRecommendationDto,
@@ -25,16 +33,8 @@ type ViewState =
   | { status: 'idle' }
   | { status: 'loading' }
   | { status: 'ok'; outfit: GeneratedOutfit }
-  | { status: 'insufficient'; occasion: Occasion }
+  | { status: 'insufficient'; occasion: Occasion; reason?: InsufficientReason }
   | { status: 'error'; message: string; sessionEnded?: boolean };
-
-const OCCASION_LABELS: Record<Occasion, string> = {
-  work: 'Work',
-  dinner: 'Dinner',
-  weekend: 'Weekend',
-  casual: 'Casual',
-  formal: 'Formal',
-};
 
 const ROLE_LABELS: Record<OutfitRole, string> = {
   top: 'Top',
@@ -44,6 +44,19 @@ const ROLE_LABELS: Record<OutfitRole, string> = {
   outerwear: 'Outerwear',
   accessory: 'Accessory',
 };
+
+// US12: why generation stopped, shown after the general insufficient-wardrobe message.
+const INSUFFICIENT_REASON_MESSAGES: Record<InsufficientReason, string> = {
+  no_suitable_items: 'None of your available clothing is suitable for this occasion.',
+  no_complete_outfit: 'An outfit needs a suitable top and bottom, or a suitable dress.',
+};
+
+/** A known reason, or undefined; own keys only, so names such as "toString" are rejected. */
+function insufficientReason(value: unknown): InsufficientReason | undefined {
+  return typeof value === 'string' && Object.hasOwn(INSUFFICIENT_REASON_MESSAGES, value)
+    ? (value as InsufficientReason)
+    : undefined;
+}
 
 const CHOOSE_OCCASION_MESSAGE = 'Choose an occasion to continue.';
 const GENERATE_FAILED_MESSAGE = "We couldn't generate an outfit. Try again.";
@@ -56,19 +69,8 @@ const STATUS_MESSAGES: Record<number, string> = {
   503: 'Service temporarily unavailable. Please try again later.',
 };
 
-// Same as SIGN_IN_SESSION_ENDED_PATH, which lives in a server-only module; a test keeps them in sync.
-const SIGN_IN_SESSION_ENDED_PATH = '/sign-in?reason=session-ended';
-
-const SECONDARY_ACTION =
-  'inline-flex min-h-11 items-center justify-center rounded-xl border border-text-muted bg-surface px-4 font-medium text-text hover:bg-background focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2';
-
 const occasionFromLabel = (label: string): Occasion | undefined =>
   OCCASIONS.find((occasion) => OCCASION_LABELS[occasion] === label);
-
-/** The item's name, or its color and style when it has none (as on the Add Clothing card). */
-function displayName(item: Pick<OutfitItemDto, 'name' | 'color' | 'style'>): string {
-  return item.name ?? `${item.color} ${item.style}`;
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -100,7 +102,7 @@ function viewFor(data: unknown, requested: Occasion): ViewState {
     return { status: 'error', message: GENERATE_FAILED_MESSAGE };
   }
   if (data.status === 'insufficient') {
-    return { status: 'insufficient', occasion: requested };
+    return { status: 'insufficient', occasion: requested, reason: insufficientReason(data.reason) };
   }
   if (data.status === 'ok' && Array.isArray(data.items) && data.items.length > 0 && data.items.every(isOutfitItem)) {
     return { status: 'ok', outfit: data as GeneratedOutfit };
@@ -110,8 +112,8 @@ function viewFor(data: unknown, requested: Occasion): ViewState {
 
 /**
  * Create Outfit (DESIGN §5.6, wireframe 08): choose an occasion, generate, and review the
- * recommended items, and mark them as worn (US10). Save, Try another and feedback belong to
- * later stories.
+ * recommended items, then save and optionally mark them as worn (US9, US10). Try another and
+ * feedback belong to later stories.
  */
 export function CreateOutfitForm() {
   const [selected, setSelected] = useState('');
@@ -237,6 +239,7 @@ export function CreateOutfitForm() {
           <p className="text-text">
             There aren&apos;t enough available items for a {view.occasion} outfit yet.
           </p>
+          {view.reason && <p className="text-text">{INSUFFICIENT_REASON_MESSAGES[view.reason]}</p>}
           <div className="flex flex-col gap-3 sm:flex-row">
             <Link href="/wardrobe" className={SECONDARY_ACTION}>
               View wardrobe
@@ -277,7 +280,11 @@ export function CreateOutfitForm() {
               </li>
             ))}
           </ul>
-          <MarkAsWornButton itemIds={view.outfit.items.map((item) => item.id)} occasion={view.outfit.occasion} />
+          <div className="flex flex-col gap-4">
+            {/* Generating again unmounts this section, so each new outfit starts unsaved. */}
+            <SaveOutfitButton occasion={view.outfit.occasion} itemIds={view.outfit.items.map((item) => item.id)} />
+            <MarkAsWornButton itemIds={view.outfit.items.map((item) => item.id)} occasion={view.outfit.occasion} />
+          </div>
         </section>
       )}
     </div>
