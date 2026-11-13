@@ -79,7 +79,7 @@ describe('US12: insufficient wardrobe with US6 availability and US7 generation',
   beforeEach(async () => {
     authService = new AuthService(new MemoryUserRepository(), new MemorySessionRepository());
     itemRepo = new MemoryWardrobeItemRepository();
-    wardrobeService = new WardrobeItemService(itemRepo, new MemoryImageStore());
+    wardrobeService = new WardrobeItemService(itemRepo, new MemoryImageStore(), 'test-db');
     // US6's repository has the listAvailableByOwner the outfit service reads.
     outfitService = new OutfitRecommendationService(itemRepo);
     alex = await signUp('alex@example.com');

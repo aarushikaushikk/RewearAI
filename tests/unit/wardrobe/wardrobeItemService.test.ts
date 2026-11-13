@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import {
-  PENDING_UPLOAD_TAG,
   PENDING_UPLOAD_TTL_MS,
+  pendingUploadTag,
   WardrobeError,
   WardrobeItemService,
 } from '@/services/wardrobeItemService';
+import { ImageStoreError } from '@/lib/images/imageStore';
 import { RepositoryUnavailableError } from '@/lib/repositories/repositoryErrors';
 import { USER_IDS } from '../../contracts/fixtures';
 import { itemFor as newItem } from '../../contracts/wardrobeItemRepositoryContract';
@@ -13,6 +14,10 @@ import { MemoryWardrobeItemRepository } from '../../mocks/memoryWardrobeItemRepo
 import { GIF_BYTES, JPEG_BYTES } from '../../helpers/imageBytes';
 
 const [ALEX, SAM] = USER_IDS;
+
+// The upload scope of this test's database. Another database's uploads get another tag.
+const SCOPE = 'unit-test-db';
+const PENDING_TAG = pendingUploadTag(SCOPE);
 
 function details(publicId: string) {
   return {
@@ -41,7 +46,7 @@ describe('WardrobeItemService', () => {
   beforeEach(() => {
     repo = new MemoryWardrobeItemRepository();
     store = new MemoryImageStore();
-    service = new WardrobeItemService(repo, store);
+    service = new WardrobeItemService(repo, store, SCOPE);
     consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
@@ -50,14 +55,13 @@ describe('WardrobeItemService', () => {
   });
 
   describe('uploadImage', () => {
-    it("uploads into the user's own folder, tagged as pending", async () => {
+    it("uploads into the user's own folder, tagged as pending for this database", async () => {
       const image = await service.uploadImage(ALEX, JPEG_BYTES);
 
       expect(image.publicId.startsWith(`rewear/users/${ALEX}/`)).toBe(true);
       expect(image.url).toMatch(/^https:\/\//);
-      expect(store.uploads).toEqual([
-        { folder: `rewear/users/${ALEX}`, tags: [PENDING_UPLOAD_TAG] },
-      ]);
+      expect(store.uploads).toEqual([{ folder: `rewear/users/${ALEX}`, tags: [PENDING_TAG] }]);
+      expect(PENDING_TAG).toBe('rewear-pending-unit-test-db');
     });
 
     it('rejects an unsupported file without uploading it', async () => {
@@ -100,6 +104,38 @@ describe('WardrobeItemService', () => {
       });
       expect(typeof item.createdAt).toBe('string');
       expect(await repo.findByImage(ALEX, image.publicId)).not.toBeNull();
+    });
+
+    it('clears the pending tag once the item is saved', async () => {
+      const image = await service.uploadImage(ALEX, JPEG_BYTES);
+
+      await service.createItem(ALEX, details(image.publicId));
+
+      expect(store.tagsOf(image.publicId)).not.toContain(PENDING_TAG);
+    });
+
+    it('clears the pending tag when a retried save finds the item already saved', async () => {
+      const image = await service.uploadImage(ALEX, JPEG_BYTES);
+      vi.spyOn(store, 'removeTag').mockRejectedValueOnce(new ImageStoreError());
+      await service.createItem(ALEX, details(image.publicId));
+
+      const retry = await service.createItem(ALEX, details(image.publicId));
+
+      expect(retry.created).toBe(false);
+      expect(store.tagsOf(image.publicId)).not.toContain(PENDING_TAG);
+    });
+
+    it('still saves the item if clearing the pending tag fails, leaving it to cleanup', async () => {
+      const image = await service.uploadImage(ALEX, JPEG_BYTES);
+      vi.spyOn(store, 'removeTag').mockRejectedValue(new ImageStoreError());
+
+      const { created } = await service.createItem(ALEX, details(image.publicId));
+
+      expect(created).toBe(true);
+      expect(await repo.findUsedImageIds([image.publicId])).toEqual([image.publicId]);
+      expect(consoleError).toHaveBeenCalledWith('[wardrobe] operation failed', {
+        operation: 'image.removeTag',
+      });
     });
 
     it('rejects invalid details with the first field error, before any lookup', async () => {
@@ -380,15 +416,47 @@ describe('WardrobeItemService', () => {
       expect(store.has(inProgress)).toBe(true);
     });
 
-    it('keeps saved images and clears their pending tag', async () => {
+    it('keeps saved images whose tag was not cleared on save, and clears it', async () => {
       const saved = await pendingImage(STALE);
+      vi.spyOn(store, 'removeTag').mockRejectedValueOnce(new ImageStoreError());
       await service.createItem(ALEX, details(saved));
+      expect(store.tagsOf(saved)).toContain(PENDING_TAG);
 
       const result = await service.cleanupAbandonedUploads(NOW);
 
       expect(result).toEqual({ deleted: 0, confirmed: 1 });
       expect(store.has(saved)).toBe(true);
-      expect(store.tagsOf(saved)).not.toContain(PENDING_UPLOAD_TAG);
+      expect(store.tagsOf(saved)).not.toContain(PENDING_TAG);
+    });
+
+    it("never deletes another database's uploads, even ones this database never saved", async () => {
+      // Production and local development share one Cloudinary account but not a database.
+      const otherService = new WardrobeItemService(
+        new MemoryWardrobeItemRepository(),
+        store,
+        'other-db',
+      );
+      const otherUpload = await otherService.uploadImage(ALEX, JPEG_BYTES);
+      store.setCreatedAtForTest(otherUpload.publicId, STALE);
+
+      const result = await service.cleanupAbandonedUploads(NOW);
+
+      expect(result).toEqual({ deleted: 0, confirmed: 0 });
+      expect(store.has(otherUpload.publicId)).toBe(true);
+      expect(store.tagsOf(otherUpload.publicId)).toEqual([pendingUploadTag('other-db')]);
+    });
+
+    it('leaves uploads with the old unscoped pending tag alone', async () => {
+      // Before #50 every environment used this tag, so its owner can't be known.
+      const legacy = await store.upload(JPEG_BYTES, {
+        folder: `rewear/users/${ALEX}`,
+        tags: ['rewear-pending'],
+      });
+      store.setCreatedAtForTest(legacy.publicId, STALE);
+
+      await service.cleanupAbandonedUploads(NOW);
+
+      expect(store.has(legacy.publicId)).toBe(true);
     });
 
     it('reads every page of pending images', async () => {
@@ -419,7 +487,7 @@ describe('WardrobeItemService availability (US6)', () => {
 
   beforeEach(() => {
     repo = new MemoryWardrobeItemRepository();
-    service = new WardrobeItemService(repo, new MemoryImageStore());
+    service = new WardrobeItemService(repo, new MemoryImageStore(), SCOPE);
   });
 
   function itemFor(ownerId: string, n: number) {

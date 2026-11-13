@@ -206,7 +206,7 @@ describe('MongoWardrobeItemRepository on a real database', () => {
   });
 
   it('lets a retried save through the service return the one stored item', async () => {
-    const service = new WardrobeItemService(repo, new MemoryImageStore());
+    const service = new WardrobeItemService(repo, new MemoryImageStore(), 'test-db');
     const image = await service.uploadImage(ALEX, JPEG_BYTES);
     const details = {
       publicId: image.publicId,

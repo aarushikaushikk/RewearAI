@@ -16,6 +16,10 @@ import { WardrobeImage, WardrobeItemDto, WardrobeItemRecord } from '@/types/ward
 /** Marks uploads not yet saved to a wardrobe item, so cleanup can find abandoned ones. */
 export const PENDING_UPLOAD_TAG = 'rewear-pending';
 
+export function pendingUploadTag(_uploadScope: string): string {
+  return PENDING_UPLOAD_TAG;
+}
+
 /** How long an uploaded image may wait to be saved before cleanup deletes it. */
 export const PENDING_UPLOAD_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -95,6 +99,7 @@ export class WardrobeItemService {
   constructor(
     private itemRepo: IWardrobeItemRepository,
     private imageStore: IImageStore,
+    _uploadScope: string,
   ) {}
 
   /** Stores a photo for `userId`. No wardrobe item exists until createItem. */
