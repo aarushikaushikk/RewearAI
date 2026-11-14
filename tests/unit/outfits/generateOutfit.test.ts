@@ -24,8 +24,8 @@ function item(category: Category, overrides: Partial<OutfitCandidate> = {}): Out
   };
 }
 
-function generate(items: OutfitCandidate[], occasion: Occasion = 'casual') {
-  return generateOutfit({ userId: USER, occasion, items });
+function generate(items: OutfitCandidate[], occasion: Occasion = 'casual', shown?: string[][]) {
+  return generateOutfit({ userId: USER, occasion, items, shown });
 }
 
 function pieces(result: OutfitGenerationResult<OutfitCandidate>) {
@@ -322,6 +322,174 @@ describe('generateOutfit', () => {
         expect(seasonReads).toBeLessThan(20 * wardrobe.length);
       },
     );
+  });
+  describe('alternatives (US8)', () => {
+    const idsOf = (...items: OutfitCandidate[]) => items.map((i) => i.id);
+    const sorted = (list: string[]) => [...list].sort();
+
+    it('treats an empty shown list like a first request', () => {
+      const wardrobe = [item('Top'), item('Top'), item('Bottom'), item('Bottom'), item('Shoes')];
+
+      expect(generate(wardrobe, 'casual', [])).toEqual(generate(wardrobe));
+    });
+
+    it('returns a different combination from the one already shown', () => {
+      const wardrobe = [item('Top'), item('Top'), item('Bottom'), item('Bottom'), item('Shoes')];
+      const first = ids(generate(wardrobe));
+
+      const next = ids(generate(wardrobe, 'casual', [first]));
+
+      expect(sorted(next)).not.toEqual(sorted(first));
+    });
+
+    it('mixes in clothes that have not been shown yet before reusing shown ones', () => {
+      const [shownTop, freshTop] = [item('Top'), item('Top')];
+      const [shownBottom, freshBottom] = [item('Bottom'), item('Bottom')];
+
+      const next = generate([shownTop, freshTop, shownBottom, freshBottom], 'casual', [idsOf(shownTop, shownBottom)]);
+
+      expect(ids(next)).toEqual(idsOf(freshTop, freshBottom));
+    });
+
+    it('keeps some of the same clothes when only part of the outfit can change', () => {
+      const top = item('Top');
+      const [shownBottom, freshBottom] = [item('Bottom'), item('Bottom')];
+
+      const next = generate([top, shownBottom, freshBottom], 'casual', [idsOf(top, shownBottom)]);
+
+      expect(ids(next)).toEqual(idsOf(top, freshBottom));
+    });
+
+    it('swaps an optional piece when the core cannot change', () => {
+      const [top, bottom] = [item('Top'), item('Bottom')];
+      const [shownShoes, freshShoes] = [item('Shoes'), item('Shoes')];
+
+      const next = generate([top, bottom, shownShoes, freshShoes], 'casual', [idsOf(top, bottom, shownShoes)]);
+
+      expect(ids(next)).toEqual(idsOf(top, bottom, freshShoes));
+    });
+
+    it('spreads repeated requests across the pool instead of reusing the same pieces', () => {
+      const tops = [item('Top'), item('Top'), item('Top')];
+      const bottoms = [item('Bottom'), item('Bottom'), item('Bottom')];
+      const wardrobe = [...tops, ...bottoms];
+      const shown: string[][] = [];
+
+      for (let i = 0; i < 3; i++) {
+        shown.push(ids(generate(wardrobe, 'casual', shown)));
+      }
+
+      // Three requests over three tops and three bottoms wear each piece once.
+      expect(sorted(shown.flat())).toEqual(sorted(idsOf(...tops, ...bottoms)));
+    });
+
+    it('offers every distinct combination once, then says there is no alternative', () => {
+      const wardrobe = [item('Top'), item('Top'), item('Bottom'), item('Bottom')];
+      const shown: string[][] = [];
+
+      for (let i = 0; i < 4; i++) {
+        shown.push(ids(generate(wardrobe, 'casual', shown)));
+      }
+
+      expect(new Set(shown.map((outfit) => sorted(outfit).join())).size).toBe(4);
+      expect(generate(wardrobe, 'casual', shown)).toEqual({ status: 'no_alternative', occasion: 'casual' });
+    });
+
+    it('says there is no alternative when the wardrobe makes only one outfit', () => {
+      const [top, bottom] = [item('Top'), item('Bottom')];
+
+      expect(generate([top, bottom], 'casual', [idsOf(top, bottom)])).toEqual({
+        status: 'no_alternative',
+        occasion: 'casual',
+      });
+    });
+
+    it('does not count dropping a suitable piece as an alternative', () => {
+      const [top, bottom, shoes] = [item('Top'), item('Bottom'), item('Shoes')];
+
+      expect(generate([top, bottom, shoes], 'casual', [idsOf(top, bottom, shoes)])).toEqual({
+        status: 'no_alternative',
+        occasion: 'casual',
+      });
+    });
+
+    it('matches shown outfits regardless of item order', () => {
+      const [top, bottom] = [item('Top'), item('Bottom')];
+
+      expect(generate([top, bottom], 'casual', [idsOf(bottom, top)]).status).toBe('no_alternative');
+    });
+
+    it('still reports insufficient items rather than no alternative', () => {
+      const top = item('Top');
+
+      expect(generate([top], 'casual', [idsOf(top)])).toEqual({
+        status: 'insufficient',
+        occasion: 'casual',
+        reason: 'no_complete_outfit',
+      });
+    });
+
+    it('reports insufficient items when no top and bottom share a season', () => {
+      const [top, bottom] = [item('Top', { season: 'Summer' }), item('Bottom', { season: 'Winter' })];
+
+      expect(generate([top, bottom], 'casual', [idsOf(top)])).toEqual({
+        status: 'insufficient',
+        occasion: 'casual',
+        reason: 'no_complete_outfit',
+      });
+    });
+
+    it('never adds a shown item that is unavailable, unsuitable or someone else\'s', () => {
+      const [top, bottom] = [item('Top'), item('Bottom')];
+      const unavailable = item('Bottom', { isAvailable: false });
+      const formal = item('Bottom', { formality: 'Formal' });
+      const others = item('Bottom', { ownerId: OTHER_USER });
+
+      const result = generate([top, bottom, unavailable, formal, others], 'casual', [
+        idsOf(top, bottom),
+        idsOf(top, unavailable, formal, others),
+      ]);
+
+      expect(result).toEqual({ status: 'no_alternative', occasion: 'casual' });
+    });
+
+    it('keeps the season and formality rules for alternatives', () => {
+      const summerTop = item('Top', { season: 'Summer' });
+      const winterTop = item('Top', { season: 'Winter' });
+      const summerBottom = item('Bottom', { season: 'Summer' });
+      const winterBottom = item('Bottom', { season: 'Winter' });
+      const winterCoat = item('Outerwear', { season: 'Winter' });
+
+      const next = generate([summerTop, winterTop, summerBottom, winterBottom, winterCoat], 'casual', [
+        idsOf(summerTop, summerBottom),
+      ]);
+
+      expect(ids(next)).toEqual(idsOf(winterTop, winterBottom, winterCoat));
+    });
+
+    it('stays bounded on a large wardrobe', () => {
+      let seasonReads = 0;
+      const counted = (category: Category) =>
+        Object.defineProperty({ ...item(category) }, 'season', {
+          get: () => {
+            seasonReads++;
+            return 'All-season';
+          },
+          enumerable: true,
+        }) as OutfitCandidate;
+      const wardrobe = [
+        ...Array.from({ length: 300 }, () => counted('Top')),
+        ...Array.from({ length: 300 }, () => counted('Bottom')),
+        ...Array.from({ length: 300 }, () => counted('Shoes')),
+      ];
+      const first = ids(generate(wardrobe));
+      seasonReads = 0;
+
+      const next = generate(wardrobe, 'casual', [first]);
+
+      expect(sorted(ids(next))).not.toEqual(sorted(first));
+      expect(seasonReads).toBeLessThan(20 * wardrobe.length);
+    });
   });
 
   describe('insufficient wardrobes (US12)', () => {

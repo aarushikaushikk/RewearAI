@@ -104,6 +104,26 @@ describe('OutfitRecommendationService', () => {
     });
   });
 
+  it('returns an alternative to the outfits already shown (US8)', async () => {
+    const [firstTop, secondTop] = [wardrobeRecord(ALEX, 'Top'), wardrobeRecord(ALEX, 'Top')];
+    const bottom = wardrobeRecord(ALEX, 'Bottom');
+    const service = new OutfitRecommendationService(new MemoryAvailableWardrobeItems([firstTop, secondTop, bottom]));
+
+    const result = await service.generate(ALEX, 'casual', [[firstTop.id, bottom.id]]);
+
+    expect(result.status === 'ok' && result.items.map((i) => i.id)).toEqual([secondTop.id, bottom.id]);
+  });
+
+  it('says so when no alternative to the shown outfits exists', async () => {
+    const [top, bottom] = [wardrobeRecord(ALEX, 'Top'), wardrobeRecord(ALEX, 'Bottom')];
+    const service = new OutfitRecommendationService(new MemoryAvailableWardrobeItems([top, bottom]));
+
+    await expect(service.generate(ALEX, 'casual', [[top.id, bottom.id]])).resolves.toEqual({
+      status: 'no_alternative',
+      occasion: 'casual',
+    });
+  });
+
   it('reports insufficient items for an empty wardrobe', async () => {
     const service = new OutfitRecommendationService(new MemoryAvailableWardrobeItems());
 
