@@ -1,0 +1,47 @@
+US15 Failure Recovery (#20): verification
+Branch: feature/20-failure-recovery (from feature/19-recommendation-feedback). Date: 2026-11-12.
+Nothing ran on Vercel. The browser run used the evidence account (test@example.com) on the local dev
+server (next dev, MongoDB Atlas and Cloudinary from .env.local).
+
+=== CHANGE ===
+When a save answers 404 ("We couldn't find that image. Please upload it again."), the details step now
+offers "Upload photo again". It re-sends the photo the form kept, without leaving the details step:
+details, review state and the analysis result are untouched, and only the stored image changes.
+Save and the fields are disabled while it runs ("Uploading your photo again."). A failure is reported
+with the upload messages, and the button stays when a retry can help. Success shows "Your photo was
+uploaded again. You can save now." No server change: the routes already refused a missing image and
+answered a retried save with the existing item.
+
+=== ACCEPTANCE CRITERIA -> EVIDENCE ===
+Distinguishes an upload failure from an image-processing failure
+  tests: AddClothingForm.test.tsx "reports an upload failure on the upload step, never as an analysis
+         failure"; "reports a failed re-upload as an upload failure and lets the user try again"
+The user can retry a failed operation
+  tests: "offers to upload the photo again when the save cannot find it, keeping every detail";
+         "disables saving while the photo is uploaded again"; "offers no re-upload for other save
+         failures"; existing "keeps the preview and offers Retry or Choose another...", "explains a
+         failed analysis and fills in suggestions after Retry analysis"
+         wardrobeRoutes.test.ts "refuses a save whose image is gone, then saves once after the photo
+         is uploaded again"
+  browser: dropped a photo on /wardrobe/new, entered details manually, and stubbed the page's
+           POST /api/wardrobe to answer 404. "Upload photo again" appeared beside the error with every
+           detail kept. Clicking it sent the kept photo (POST /api/uploads -> 201), cleared the error,
+           showed the success message, and left the details unchanged. No console errors.
+If classification fails, the user can manually enter clothing information
+  tests: "never lets a failed analysis block the upload or the save"; existing "lets the user finish
+         without AI after a failed analysis"
+A failed request does not create a broken or duplicate wardrobe item
+  tests: wardrobeRoutes.test.ts "leaves no wardrobe item behind when the upload fails...", "keeps
+         exactly one item when a failed save is retried", "returns 502 and saves nothing when the image
+         cannot be checked"; AddClothingForm.test.tsx "shows the saved item once when a save is retried
+         after a network failure"
+
+=== SIDE EFFECTS OF THE BROWSER RUN ===
+No wardrobe item was saved (the save was stubbed in the page). Two unsaved, pending-tagged Cloudinary
+images were uploaded; the daily cleanup (/api/cron/cleanup-uploads) removes them.
+
+=== CHECKS ===
+npm test           112 files passed, 2 skipped; 2177 tests passed, 2 skipped
+npm run typecheck  passed
+npm run test:db    17 files, 465 tests passed
+eslint (changed files) clean. `npm run lint` reports errors only from the untracked .claude/ folder.

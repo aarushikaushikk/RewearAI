@@ -1,0 +1,18 @@
+Issue #20 (US15) checkpoint 1: failing tests before implementation
+Branch: feature/20-failure-recovery   Date: 2026-11-12
+Command: npx vitest run tests/unit/components/wardrobe/AddClothingForm.test.tsx tests/integration/api/wardrobeRoutes.test.ts -t US15
+
+ ✓ tests/integration/api/wardrobeRoutes.test.ts (64 tests | 60 skipped) 872ms
+   ✓ AddClothingForm > failure recovery (US15) > reports an upload failure on the upload step, never as an analysis failure 153ms
+   ✓ AddClothingForm > failure recovery (US15) > never lets a failed analysis block the upload or the save 166ms
+   × AddClothingForm > failure recovery (US15) > offers to upload the photo again when the save cannot find it, keeping every detail 194ms
+     → Unable to find an accessible element with the role "button" and name "Upload photo again"
+   × AddClothingForm > failure recovery (US15) > reports a failed re-upload as an upload failure and lets the user try again 1132ms
+     → Unable to find role="button" and name "Upload photo again"
+   × AddClothingForm > failure recovery (US15) > disables saving while the photo is uploaded again 195ms
+     → Unable to find an accessible element with the role "button" and name "Upload photo again"
+   ✓ AddClothingForm > failure recovery (US15) > offers no re-upload for other save failures 130ms
+   ✓ AddClothingForm > failure recovery (US15) > shows the saved item once when a save is retried after a network failure 140ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+ Test Files  1 failed | 1 passed (2)
+      Tests  3 failed | 8 passed | 86 skipped (97)

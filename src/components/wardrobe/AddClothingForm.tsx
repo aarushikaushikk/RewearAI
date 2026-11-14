@@ -62,6 +62,18 @@ type AnalysisState = { status: 'idle' | 'loading' | 'manual' } | ClassificationR
 
 type FieldErrors = Partial<Record<ClassifiedField, string>>;
 
+/** A stored photo, or why it couldn't be stored and whether sending it again could help. */
+type UploadOutcome =
+  | { ok: true; image: WardrobeImage }
+  | { ok: false; error: string; retryable: boolean };
+
+/**
+ * The step after a save found no image (404), for example because an unsaved photo was
+ * cleaned up: the kept photo can be sent again without losing any detail (US15).
+ * `failed` keeps the offer after a re-upload that may succeed if tried again.
+ */
+type ReuploadState = 'none' | 'offered' | 'uploading' | 'failed' | 'done';
+
 const ANALYZING_MESSAGE =
   'Analyzing your photo to suggest details. This can take a moment the first time, and you can start entering details now.';
 const ANALYSIS_FAILED_MESSAGE = "We couldn't analyze this image. You can retry or enter details manually.";
@@ -69,6 +81,32 @@ const NOT_CLOTHING_MESSAGE = "This photo doesn't look like a clothing item. You 
 const UNCERTAIN_MESSAGE = "We aren't confident about these details. Please review them before saving.";
 const SUGGESTED_MESSAGE = "We've filled in details suggested from your photo. Check each one before saving.";
 const REVIEW_BEFORE_SAVE_MESSAGE = 'Review or correct the highlighted details before saving.';
+const REUPLOADING_MESSAGE = 'Uploading your photo again.';
+const REUPLOADED_MESSAGE = 'Your photo was uploaded again. You can save now.';
+
+/** Sends a photo to the upload route. Messages come from the status, never from the response. */
+async function postImage(blob: Blob): Promise<UploadOutcome> {
+  try {
+    const form = new FormData();
+    form.set('image', blob, 'clothing.jpg');
+    const response = await fetch('/api/uploads', {
+      method: 'POST',
+      headers: { Origin: window.location.origin },
+      body: form,
+    });
+    if (response.ok) {
+      const { data } = (await response.json()) as { data: WardrobeImage };
+      return { ok: true, image: data };
+    }
+    return {
+      ok: false,
+      error: getUploadErrorMessage(response.status),
+      retryable: isRetryableUploadStatus(response.status),
+    };
+  } catch {
+    return { ok: false, error: NETWORK_ERROR_MESSAGE, retryable: true };
+  }
+}
 
 const SECONDARY_BUTTON =
   'inline-flex min-h-11 items-center justify-center rounded-xl border border-text-muted bg-surface px-4 text-sm font-medium text-text hover:bg-background focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed';
@@ -92,6 +130,7 @@ export function AddClothingForm() {
   // Set when a save was blocked by unreviewed suggestions; the message shows while any remain.
   const [reviewBlocked, setReviewBlocked] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [reupload, setReupload] = useState<ReuploadState>('none');
   const [savedItem, setSavedItem] = useState<WardrobeItemDto | null>(null);
   // Ignores the response for a photo the user has since replaced.
   const uploadAttempt = useRef(0);
@@ -100,6 +139,9 @@ export function AddClothingForm() {
   const detailsHeading = useRef<HTMLHeadingElement>(null);
   const isDetailsStep = upload.status === 'uploaded';
   const details = fieldValues(fields);
+  const isReuploading = reupload === 'uploading';
+  // Details stay locked while a save or a re-upload is in flight.
+  const isBusy = isSaving || isReuploading;
 
   const previewUrl = upload.previewUrl;
   useEffect(() => {
@@ -160,32 +202,42 @@ export function AddClothingForm() {
     const attempt = ++uploadAttempt.current;
     setUpload({ status: 'uploading', previewUrl: preview, blob });
 
-    let next: UploadState;
-    try {
-      const form = new FormData();
-      form.set('image', blob, 'clothing.jpg');
-      const response = await fetch('/api/uploads', {
-        method: 'POST',
-        headers: { Origin: window.location.origin },
-        body: form,
-      });
-      if (response.ok) {
-        const { data } = (await response.json()) as { data: WardrobeImage };
-        next = { status: 'uploaded', previewUrl: preview, blob, image: data };
-      } else {
-        next = {
-          status: 'failed',
-          previewUrl: preview,
-          blob,
-          error: getUploadErrorMessage(response.status),
-          retryable: isRetryableUploadStatus(response.status),
-        };
-      }
-    } catch {
-      next = { status: 'failed', previewUrl: preview, blob, error: NETWORK_ERROR_MESSAGE, retryable: true };
+    const outcome = await postImage(blob);
+    if (attempt !== uploadAttempt.current) {
+      return;
     }
-    if (attempt === uploadAttempt.current) {
-      setUpload(next);
+    setUpload(
+      outcome.ok
+        ? { status: 'uploaded', previewUrl: preview, blob, image: outcome.image }
+        : { status: 'failed', previewUrl: preview, blob, error: outcome.error, retryable: outcome.retryable },
+    );
+  }
+
+  /**
+   * Sends the kept photo again from the details step after a save found no image. The
+   * details, review state and analysis stay as they are; only the stored image changes.
+   * A failure here is reported with the upload messages, so it reads as an upload problem.
+   */
+  async function reuploadPhoto() {
+    const blob = upload.blob;
+    if (!blob) {
+      return;
+    }
+    const attempt = ++uploadAttempt.current;
+    setFormError(null);
+    setReupload('uploading');
+
+    const outcome = await postImage(blob);
+    if (attempt !== uploadAttempt.current) {
+      return;
+    }
+    if (outcome.ok) {
+      setUpload((current) => ({ ...current, image: outcome.image }));
+      setReupload('done');
+      detailsHeading.current?.focus();
+    } else {
+      setFormError(outcome.error);
+      setReupload(outcome.retryable ? 'failed' : 'none');
     }
   }
 
@@ -225,6 +277,7 @@ export function AddClothingForm() {
     setFieldErrors({});
 
     setIsSaving(true);
+    setReupload('none');
     try {
       const response = await fetch('/api/wardrobe', {
         method: 'POST',
@@ -237,6 +290,10 @@ export function AddClothingForm() {
         setSavedItem(data);
       } else {
         setFormError(getSaveErrorMessage(response.status));
+        // 404: the photo is gone (cleaned up or never stored), so offer to send it again.
+        if (response.status === 404 && upload.blob) {
+          setReupload('offered');
+        }
       }
     } catch {
       setFormError(NETWORK_ERROR_MESSAGE);
@@ -253,6 +310,7 @@ export function AddClothingForm() {
     setFieldErrors({});
     setFormError(null);
     setSavedItem(null);
+    setReupload('none');
   }
 
   if (savedItem) {
@@ -337,13 +395,38 @@ export function AddClothingForm() {
           />
         )}
 
+        {reupload !== 'none' && reupload !== 'done' && (
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <button
+              type="button"
+              onClick={() => void reuploadPhoto()}
+              disabled={isBusy}
+              aria-busy={isReuploading || undefined}
+              className={`${SECONDARY_BUTTON} sm:self-start`}
+            >
+              Upload photo again
+            </button>
+            {isReuploading && (
+              <p role="status" className="text-sm text-text">
+                {REUPLOADING_MESSAGE}
+              </p>
+            )}
+          </div>
+        )}
+
+        {reupload === 'done' && (
+          <p role="status" className="text-sm text-text-muted">
+            {REUPLOADED_MESSAGE}
+          </p>
+        )}
+
         {reviewBlocked && hasUnreviewed(fields) && <Alert variant="error" message={REVIEW_BEFORE_SAVE_MESSAGE} />}
 
         <AnalysisNotice
           analysis={analysis}
           hasUnreviewed={hasUnreviewed(fields)}
           hasSuggestions={hasAppliedSuggestions(fields)}
-          disabled={isSaving}
+          disabled={isBusy}
           onRetry={upload.blob ? retryAnalysis : undefined}
           onManual={enterManually}
         />
@@ -360,9 +443,9 @@ export function AddClothingForm() {
               error={fieldErrors.category}
               hint={reviewHint(fields.category)}
               warning={!fields.category.reviewed}
-              disabled={isSaving}
+              disabled={isBusy}
             />
-            <ConfirmSuggestion field="category" state={fields.category} disabled={isSaving} onChange={setConfirmed} />
+            <ConfirmSuggestion field="category" state={fields.category} disabled={isBusy} onChange={setConfirmed} />
           </div>
           <div className="flex flex-col gap-1">
             <SelectField
@@ -375,9 +458,9 @@ export function AddClothingForm() {
               error={fieldErrors.color}
               hint={reviewHint(fields.color)}
               warning={!fields.color.reviewed}
-              disabled={isSaving}
+              disabled={isBusy}
             />
-            <ConfirmSuggestion field="color" state={fields.color} disabled={isSaving} onChange={setConfirmed} />
+            <ConfirmSuggestion field="color" state={fields.color} disabled={isBusy} onChange={setConfirmed} />
           </div>
           <div className="flex flex-col gap-1">
             <FormField
@@ -390,10 +473,10 @@ export function AddClothingForm() {
               error={fieldErrors.style}
               hint={reviewHint(fields.style)}
               warning={!fields.style.reviewed}
-              disabled={isSaving}
+              disabled={isBusy}
               placeholder="e.g. Button-down"
             />
-            <ConfirmSuggestion field="style" state={fields.style} disabled={isSaving} onChange={setConfirmed} />
+            <ConfirmSuggestion field="style" state={fields.style} disabled={isBusy} onChange={setConfirmed} />
           </div>
           <div className="flex flex-col gap-1">
             <SelectField
@@ -406,9 +489,9 @@ export function AddClothingForm() {
               error={fieldErrors.season}
               hint={reviewHint(fields.season)}
               warning={!fields.season.reviewed}
-              disabled={isSaving}
+              disabled={isBusy}
             />
-            <ConfirmSuggestion field="season" state={fields.season} disabled={isSaving} onChange={setConfirmed} />
+            <ConfirmSuggestion field="season" state={fields.season} disabled={isBusy} onChange={setConfirmed} />
           </div>
           <div className="flex flex-col gap-1">
             <SelectField
@@ -421,19 +504,19 @@ export function AddClothingForm() {
               error={fieldErrors.formality}
               hint={reviewHint(fields.formality)}
               warning={!fields.formality.reviewed}
-              disabled={isSaving}
+              disabled={isBusy}
             />
             <ConfirmSuggestion
               field="formality"
               state={fields.formality}
-              disabled={isSaving}
+              disabled={isBusy}
               onChange={setConfirmed}
             />
           </div>
         </div>
 
         <div className="flex justify-end">
-          <PrimaryButton isLoading={isSaving} className="sm:w-auto">
+          <PrimaryButton isLoading={isSaving} disabled={isReuploading} className="sm:w-auto">
             Confirm and save
           </PrimaryButton>
         </div>
