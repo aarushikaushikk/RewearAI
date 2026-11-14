@@ -14,6 +14,8 @@
 // - Color (#18): among valid outfits, prefer a calmer palette (colorHarmony.ts). Color only
 //   ranks; it never makes an outfit impossible or an ineligible item usable. On Try another,
 //   unseen pieces come before a calmer palette.
+// - Feedback (US14): a combination the user marked Not helpful ranks below every other valid
+//   one, so it's returned only when nothing else is left. Feedback never makes an item eligible.
 
 import { paletteOf, paletteScore, type Palette } from '@/services/outfits/colorHarmony';
 import { OCCASIONS, type InsufficientReason, type Occasion, type OutfitRole } from '@/types/outfit';
@@ -59,6 +61,11 @@ export interface GenerateOutfitInput<T extends OutfitCandidate> {
    * an item eligible.
    */
   shown?: readonly (readonly string[])[];
+  /**
+   * US14: item IDs of combinations the user marked Not helpful, each in any order. They rank
+   * after every other valid combination; like `shown`, IDs never make an item eligible.
+   */
+  disliked?: readonly (readonly string[])[];
 }
 
 export const OCCASION_FORMALITIES: Record<Occasion, readonly Formality[]> = {
@@ -247,6 +254,8 @@ function* completions<T extends OutfitCandidate>(
 
 interface Candidate<T> {
   outfit: Core<T>;
+  /** The user marked exactly this combination Not helpful (US14). */
+  disliked: boolean;
   missingShoes: boolean;
   /** How many times its items were shown, summed. */
   uses: number;
@@ -257,10 +266,13 @@ interface Candidate<T> {
 
 const MAX_CALM = paletteScore('tonal');
 
-/** Shoes when suitable ones exist, then the fewest shown items, then the calmer palette. */
+/** Not disliked, then shoes when suitable ones exist, then the fewest shown items, then the calmer palette. */
 function isBetter<T>(a: Candidate<T>, b: Candidate<T> | undefined): boolean {
   if (!b) {
     return true;
+  }
+  if (a.disliked !== b.disliked) {
+    return b.disliked;
   }
   if (a.missingShoes !== b.missingShoes) {
     return b.missingShoes;
@@ -279,9 +291,11 @@ function bestOutfit<T extends OutfitCandidate>(
   eligible: ReturnType<typeof eligibleEntries<T>>,
   occasion: Occasion,
   shown: readonly (readonly string[])[],
+  disliked: readonly (readonly string[])[],
 ): OutfitGenerationResult<T> {
   const uses = countUses(shown);
   const shownKeys = new Set(shown.map(outfitKey));
+  const dislikedKeys = new Set(disliked.map(outfitKey));
   const leads = byUses([...eligible.of('Dress'), ...eligible.of('Top')], uses);
   const bottoms = new SeasonBuckets(byUses(eligible.of('Bottom'), uses));
   const shoesExist = eligible.of('Shoes').length > 0;
@@ -296,12 +310,14 @@ function bestOutfit<T extends OutfitCandidate>(
   for (const core of cores(leads, bottoms)) {
     for (const outfit of completions(core.pieces, core.context, slots)) {
       const itemIds = outfit.pieces.map((piece) => piece.item.id);
-      if (shownKeys.has(outfitKey(itemIds))) {
+      const key = outfitKey(itemIds);
+      if (shownKeys.has(key)) {
         continue;
       }
       const palette = paletteOf(outfit.pieces.map((piece) => piece.item.color));
       const candidate = {
         outfit,
+        disliked: dislikedKeys.has(key),
         missingShoes: shoesExist && !outfit.pieces.some((piece) => piece.role === 'shoes'),
         uses: itemIds.reduce((sum, id) => sum + (uses.get(id) ?? 0), 0),
         palette,
@@ -311,8 +327,9 @@ function bestOutfit<T extends OutfitCandidate>(
         best = candidate;
       }
     }
-    // Nothing beats an outfit with shoes, made only of unshown items, in the calmest palette.
-    const unbeatable = best !== undefined && !best.missingShoes && best.uses === 0 && best.calm === MAX_CALM;
+    // Nothing beats an outfit not disliked, with shoes, made only of unshown items, in the calmest palette.
+    const unbeatable =
+      best !== undefined && !best.disliked && !best.missingShoes && best.uses === 0 && best.calm === MAX_CALM;
     if (++checked >= MAX_CORE_CANDIDATES || unbeatable) {
       break;
     }
@@ -343,5 +360,5 @@ export function generateOutfit<T extends OutfitCandidate>(input: GenerateOutfitI
   if (eligible.count === 0) {
     return { status: 'insufficient', occasion, reason: 'no_suitable_items' };
   }
-  return bestOutfit(eligible, occasion, input.shown ?? []);
+  return bestOutfit(eligible, occasion, input.shown ?? [], input.disliked ?? []);
 }

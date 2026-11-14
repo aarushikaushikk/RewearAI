@@ -1,6 +1,7 @@
 import 'server-only';
 import { ConfigurationError } from '@/lib/auth/getAuthService';
 import { MongoAvailableWardrobeItems } from '@/lib/outfits/mongoAvailableWardrobeItems';
+import { MongoOutfitFeedbackRepository } from '@/lib/repositories/mongoOutfitFeedbackRepository';
 import { OutfitRecommendationService } from '@/services/outfitRecommendationService';
 
 /**
@@ -11,5 +12,5 @@ export function getProductionOutfitRecommendationService(): OutfitRecommendation
   if (!process.env.MONGODB_URI?.trim()) {
     throw new ConfigurationError('The outfit service is temporarily unavailable');
   }
-  return new OutfitRecommendationService(new MongoAvailableWardrobeItems());
+  return new OutfitRecommendationService(new MongoAvailableWardrobeItems(), new MongoOutfitFeedbackRepository());
 }

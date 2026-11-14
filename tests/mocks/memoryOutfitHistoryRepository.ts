@@ -14,7 +14,7 @@ interface MemoryOutfit {
   ownerId: string;
   itemIds: string[];
   occasion: Occasion;
-  explanation: string;
+  explanation?: string;
 }
 
 type MemoryEntry = Omit<OutfitHistoryEntryRecord, 'outfit'>;
@@ -47,6 +47,12 @@ export class MemoryOutfitHistoryRepository implements IOutfitHistoryRepository {
     };
     this.outfits.push(outfit);
     return { id: outfit.id, created: true };
+  }
+
+  /** The owner's outfit with this ID, for repositories that share this store (US14). */
+  outfitOf(ownerId: string, outfitId: string): { occasion: Occasion; itemIds: string[] } | undefined {
+    const outfit = this.outfits.find((o) => o.id === outfitId && o.ownerId === ownerId);
+    return outfit ? structuredClone({ occasion: outfit.occasion, itemIds: outfit.itemIds }) : undefined;
   }
 
   async recordWorn(entry: NewWornEntry): Promise<{ entry: OutfitHistoryEntryRecord; created: boolean }> {

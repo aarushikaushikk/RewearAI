@@ -54,6 +54,8 @@ describe('OutfitRecommendationService', () => {
         },
       ],
       explanation: { formalities: [formality], seasons: ['All-season'], palette: 'tonal', alternative: false },
+      // US14: no rating saved for this combination.
+      feedback: null,
     });
   });
 
