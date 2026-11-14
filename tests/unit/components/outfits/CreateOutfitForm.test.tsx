@@ -37,7 +37,13 @@ const CHINOS = outfitItem({
   image: { url: 'https://res.cloudinary.com/test/image/upload/v1/chinos.jpg' },
 });
 
-const OUTFIT: OutfitRecommendationDto = { status: 'ok', occasion: 'work', season: 'All-season', items: [SHIRT, CHINOS] };
+const OUTFIT: OutfitRecommendationDto = {
+  status: 'ok',
+  occasion: 'work',
+  season: 'All-season',
+  items: [SHIRT, CHINOS],
+  explanation: { formalities: ['Smart casual'], seasons: ['All-season'], palette: 'neutral', alternative: false },
+};
 
 function reply(status: number, body: unknown = {}): Response {
   return { ok: status >= 200 && status < 300, status, json: async () => body } as Response;

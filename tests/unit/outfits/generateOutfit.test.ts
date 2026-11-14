@@ -18,6 +18,8 @@ function item(category: Category, overrides: Partial<OutfitCandidate> = {}): Out
     ownerId: USER,
     isAvailable: true,
     category,
+    // One shared color keeps palettes tied, so these tests isolate the other rules.
+    color: 'Black',
     season: 'All-season',
     formality: 'Casual',
     ...overrides,
@@ -266,7 +268,7 @@ describe('generateOutfit', () => {
     });
 
     it('treats two entries with the same ID as one item', () => {
-      const shared = { id: 'same', ownerId: USER, isAvailable: true, season: 'All-season', formality: 'Casual' } as const;
+      const shared = { id: 'same', ownerId: USER, isAvailable: true, color: 'Black', season: 'All-season', formality: 'Casual' } as const;
 
       // The same ID listed as both a top and a bottom can't make an outfit by itself.
       const result = generate([
@@ -525,5 +527,80 @@ describe('generateOutfit', () => {
         expect([['dress'], ['top', 'bottom']]).toContainEqual(core);
       },
     );
+  });
+
+  describe('colors (#18)', () => {
+    const idsOf = (...items: OutfitCandidate[]) => items.map((i) => i.id);
+
+    it('prefers a tonal outfit even when bolder pieces are newer', () => {
+      const [red, navy] = [item('Top', { color: 'Red' }), item('Top', { color: 'Navy' })];
+      const [green, indigo] = [item('Bottom', { color: 'Green' }), item('Bottom', { color: 'Indigo' })];
+
+      const result = generate([red, navy, green, indigo]);
+
+      expect(ids(result)).toEqual(idsOf(navy, indigo));
+      expect(result).toMatchObject({ palette: 'tonal' });
+    });
+
+    it('avoids a bold mix when a calmer combination exists', () => {
+      const [red, green] = [item('Top', { color: 'Red' }), item('Top', { color: 'Green' })];
+      const [orange, black] = [item('Bottom', { color: 'Orange' }), item('Bottom', { color: 'Black' })];
+
+      expect(ids(generate([red, green, orange, black]))).toEqual(idsOf(red, black));
+    });
+
+    it('considers the colors of optional pieces too', () => {
+      const [top, bottom] = [item('Top', { color: 'Red' }), item('Bottom', { color: 'Black' })];
+      const [green, black] = [item('Shoes', { color: 'Green' }), item('Shoes', { color: 'Black' })];
+
+      expect(ids(generate([top, bottom, green, black]))).toEqual(idsOf(top, bottom, black));
+    });
+
+    it('still makes an outfit from an all-accent wardrobe', () => {
+      const [top, bottom] = [item('Top', { color: 'Red' }), item('Bottom', { color: 'Green' })];
+
+      const result = generate([top, bottom]);
+
+      expect(ids(result)).toEqual(idsOf(top, bottom));
+      expect(result).toMatchObject({ palette: 'bold' });
+    });
+
+    it('never pulls in an ineligible item for a better palette', () => {
+      const top = item('Top', { color: 'Navy' });
+      const unavailable = item('Bottom', { color: 'Navy', isAvailable: false });
+      const formal = item('Bottom', { color: 'Navy', formality: 'Formal' });
+      const others = item('Bottom', { color: 'Navy', ownerId: OTHER_USER });
+      const orange = item('Bottom', { color: 'Orange' });
+
+      expect(ids(generate([top, unavailable, formal, others, orange]))).toEqual(idsOf(top, orange));
+    });
+
+    it('reports the palette of the chosen pieces', () => {
+      const result = generate([item('Top', { color: 'White' }), item('Bottom', { color: 'Navy' })]);
+
+      expect(result).toMatchObject({ status: 'ok', palette: 'neutral' });
+    });
+
+    it('puts unseen pieces before a calmer palette on Try another (US8)', () => {
+      const [navy, red] = [item('Top', { color: 'Navy' }), item('Top', { color: 'Red' })];
+      const [indigo, green] = [item('Bottom', { color: 'Indigo' }), item('Bottom', { color: 'Green' })];
+
+      const next = generate([navy, red, indigo, green], 'casual', [idsOf(navy, indigo)]);
+
+      expect(ids(next)).toEqual(idsOf(red, green));
+    });
+
+    it('prefers the calmer palette among equally unseen alternatives', () => {
+      const [navy, red, white] = [item('Top', { color: 'Navy' }), item('Top', { color: 'Red' }), item('Top', { color: 'White' })];
+      const [indigo, green, black] = [
+        item('Bottom', { color: 'Indigo' }),
+        item('Bottom', { color: 'Green' }),
+        item('Bottom', { color: 'Black' }),
+      ];
+
+      const next = generate([navy, red, white, indigo, green, black], 'casual', [idsOf(navy, indigo)]);
+
+      expect(ids(next)).toEqual(idsOf(red, black));
+    });
   });
 });

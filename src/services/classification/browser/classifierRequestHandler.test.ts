@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   createClassifierRequestHandler,
+  MAX_LABEL_SETS,
   type ZeroShotEmbeddingModel,
 } from "./classifierRequestHandler";
 
@@ -47,6 +48,30 @@ describe("createClassifierRequestHandler", () => {
     await handle(request(1));
     await handle({ ...request(2), labels: ["a photo of a coat", "a photo of food"] });
     expect(model.embedTexts).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps several label sets, so switching back to one doesn't embed it again (US13)", async () => {
+    const model = fakeModel();
+    const handle = createClassifierRequestHandler(async () => model);
+    const other = ["a photo of a coat", "a photo of food"];
+
+    await handle(request(1));
+    await handle({ ...request(2), labels: other });
+    await handle(request(3));
+    await handle({ ...request(4), labels: other });
+
+    expect(model.embedTexts).toHaveBeenCalledTimes(2);
+  });
+
+  it("forgets the least recently used label set beyond the limit", async () => {
+    const model = fakeModel();
+    const handle = createClassifierRequestHandler(async () => model);
+    const sets = Array.from({ length: MAX_LABEL_SETS + 1 }, (_, i) => [`label ${i}`, "a photo of food"]);
+
+    for (const [i, set] of sets.entries()) await handle({ ...request(i), labels: set });
+    await handle({ ...request(99), labels: sets[0] });
+
+    expect(model.embedTexts).toHaveBeenCalledTimes(MAX_LABEL_SETS + 2);
   });
 
   it("runs requests one at a time, in order", async () => {

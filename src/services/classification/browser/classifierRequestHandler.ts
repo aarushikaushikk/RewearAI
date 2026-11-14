@@ -19,11 +19,15 @@ export interface ZeroShotEmbeddingModel {
  * time, because a model session shouldn't run concurrent inferences.
  * Responses carry only an error code, never error details.
  */
+/** How many label sets keep their text embeddings, so alternating sets isn't re-embedded. */
+export const MAX_LABEL_SETS = 8;
+
 export function createClassifierRequestHandler(
   loadModel: () => Promise<ZeroShotEmbeddingModel>,
 ): (message: unknown) => Promise<WorkerResponse | null> {
   let model: Promise<ZeroShotEmbeddingModel> | null = null;
-  let labelCache: { key: string; embeddings: Embedding[] } | null = null;
+  // Most recently used last. Classification uses one label set; the stylist (US13) one per role.
+  const labelCache = new Map<string, Embedding[]>();
   let queue: Promise<unknown> = Promise.resolve();
 
   function getModel() {
@@ -36,10 +40,17 @@ export function createClassifierRequestHandler(
 
   async function labelEmbeddings(loaded: ZeroShotEmbeddingModel, labels: readonly string[]) {
     const key = JSON.stringify(labels);
-    if (labelCache?.key !== key) {
-      labelCache = { key, embeddings: await loaded.embedTexts(labels) };
+    let embeddings = labelCache.get(key);
+    if (embeddings) {
+      labelCache.delete(key);
+    } else {
+      embeddings = await loaded.embedTexts(labels);
     }
-    return labelCache.embeddings;
+    labelCache.set(key, embeddings);
+    if (labelCache.size > MAX_LABEL_SETS) {
+      labelCache.delete(labelCache.keys().next().value!);
+    }
+    return embeddings;
   }
 
   async function classify({ id, image, labels }: ClassifyRequest): Promise<WorkerResponse> {

@@ -1,3 +1,4 @@
+import { explainOutfit } from '@/services/outfits/explainOutfit';
 import { generateOutfit } from '@/services/outfits/generateOutfit';
 import type { Occasion, OutfitItemDto, OutfitRecommendationDto } from '@/types/outfit';
 import type { WardrobeItemRecord } from '@/types/wardrobe';
@@ -15,7 +16,7 @@ export interface AvailableWardrobeItemSource {
  * US7: recommends an outfit for an occasion from the user's own available clothing, and with
  * `shown` (US8) an alternative to outfits already shown. All outfit rules live in
  * generateOutfit; this service only loads candidates and shapes the response. Nothing is
- * saved (US9).
+ * saved (US9). Each outfit carries the facts it was chosen on (US13).
  */
 export class OutfitRecommendationService {
   constructor(private items: AvailableWardrobeItemSource) {}
@@ -46,6 +47,7 @@ export class OutfitRecommendationService {
         season: item.season,
         formality: item.formality,
       })),
+      explanation: explainOutfit(result.occasion, result.pieces, result.palette, shown.length > 0),
     };
   }
 }

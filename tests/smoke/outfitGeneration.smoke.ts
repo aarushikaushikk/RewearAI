@@ -161,6 +161,12 @@ describe('US7 outfit generation on the production build (HTTP)', () => {
     } else {
       expect(data.status).toBe('ok');
       expect(data.items.map((i: { name: string }) => i.name)).toEqual(expected);
+      // US13: the explanation restates the chosen pieces' own formality and seasons.
+      const items = data.items as { formality: string; season: string }[];
+      expect(data.explanation).toMatchObject({ alternative: false });
+      expect([...data.explanation.formalities].sort()).toEqual([...new Set(items.map((i) => i.formality))].sort());
+      expect([...data.explanation.seasons].sort()).toEqual([...new Set(items.map((i) => i.season))].sort());
+      expect(['tonal', 'neutral', 'one_accent', 'paired', 'bold']).toContain(data.explanation.palette);
     }
     const json = JSON.stringify(data);
     for (const name of NEVER_SHOWN) expect(json).not.toContain(name);
@@ -350,6 +356,10 @@ describe.runIf(CHROME_PATH)('US7 Create Outfit in a real browser', () => {
     expect(await outfitNames()).toEqual(EXPECTED.work);
     const text = await bodyText();
     for (const role of ['Top', 'Bottom', 'Shoes', 'Outerwear']) expect(text).toContain(role);
+    // US13: the explanation panel, with the basic note (the photo model is never downloaded here).
+    expect(text).toContain('Why these items?');
+    expect(text).toMatch(/Picked for Work because every piece is [^.]+, /);
+    expect(text).not.toContain('chosen with on-device AI');
     for (const name of NEVER_SHOWN) expect(text).not.toContain(name);
     expect(await page.evaluate('document.activeElement && document.activeElement.id')).toBe('outfit-heading');
 
@@ -541,6 +551,13 @@ describe.runIf(CHROME_PATH)('US7 Create Outfit in a real browser', () => {
     );
     expect(rows).toBe(4); // One column.
     expect(await page.evaluate('document.documentElement.scrollWidth <= innerWidth')).toBe(true);
+    // US13: the explanation panel stays inside the 375 px viewport.
+    const panelOutside = await page.evaluate<number>(`(() => {
+      const heading = [...document.querySelectorAll('h3')].find((h) => h.textContent === 'Why these items?');
+      const r = heading.closest('section').getBoundingClientRect();
+      return r.left < 0 || r.right > innerWidth ? 1 : 0;
+    })()`);
+    expect(panelOutside).toBe(0);
     await shot('mobile-375-recommendation');
 
     await setOccasion('Formal');

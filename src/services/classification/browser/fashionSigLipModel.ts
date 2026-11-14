@@ -13,7 +13,9 @@ import type { ClassifiableImage } from "@/types/classification";
 import type { Embedding } from "../zeroShotScoring";
 import type { ZeroShotEmbeddingModel } from "./classifierRequestHandler";
 
-export const FASHION_SIGLIP_MODEL_ID = "Marqo/marqo-fashionSigLIP";
+import { FASHION_SIGLIP_MODEL_ID } from "./modelId";
+
+export { FASHION_SIGLIP_MODEL_ID };
 
 /** 8-bit quantized weights: about 94 MB (vision) plus 111 MB (text), downloaded once and cached. */
 const MODEL_OPTIONS = { dtype: "q8" } as const;
