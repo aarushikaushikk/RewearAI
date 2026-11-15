@@ -12,20 +12,73 @@ ReWear AI is a digital wardrobe application that helps users organize clothing t
 
 ## Status
 
-The application is in `src/`. User Stories 1–7 and 11 are merged; the rest are tracked in [Sprint 4](https://github.com/aarushikaushikk/RewearAI/milestones). Every merge to `main` deploys to production (see [CI/CD and Deployment](#cicd-and-deployment)). The `baseline/` and `run-*` folders are separate prototypes from the [HW-3 Rules Experiment](#hw-3-rules-experiment).
+The application is in `src/`. All 15 user stories in the [PRD](docs/PRD.md) are implemented and merged into `main`, the last of them in PR #54. Every merge to `main` deploys to production (see [CI/CD and Deployment](#cicd-and-deployment)). The `baseline/` and `run-*` folders are separate prototypes from the [HW-3 Rules Experiment](#hw-3-rules-experiment).
 
-## Core Features (planned)
+## Features
 
-- Authentication with private, user-specific wardrobe data
-- Clothing image upload and AI-assisted classification (category, color, style, season, formality)
-- Digital wardrobe: view, edit, search, filter, and remove items
-- Availability management
-- Occasion-based outfit generation (work, dinner, weekend, casual, formal)
-- Alternative suggestions, saved outfits, and outfit history
-- Recommendation explanations and feedback
-- Graceful handling of upload, processing, and classification failures
+ReWear AI is for people who want to get more use out of the clothes they already have. Each user's wardrobe is private, and outfits are only ever built from items that user has saved.
+
+### Accounts
+
+- **Email and password accounts.** Register, sign in, and sign out. Sessions last 7 days.
+- **Google sign-in.** Available when the Google OAuth client is configured. A Google account is never attached to an existing account just because the email matches.
+
+### Wardrobe
+
+- **Add clothing.** Choose or drop a JPEG, PNG, or WebP photo. The browser shrinks it before upload, then you review the details and save. A photo can only be saved as one item, so retrying a save never creates a duplicate.
+- **AI-assisted classification.** While the photo uploads, a model running in your browser suggests the category, color, style, season, and formality. Suggestions only fill fields you haven't touched. Uncertain ones are marked and must be confirmed before saving, and you can always enter the details yourself.
+- **View, edit, and delete.** Each item has a detail page where its details can be corrected. Deleting an item removes its photo too.
+- **Search and filter.** Search by name or attributes, and filter by category, color, season, and formality.
+- **Availability.** Mark an item unavailable, for example while it's in the laundry. Unavailable items are left out of new outfits.
+
+### Outfits
+
+- **Occasion-based outfits.** Pick an occasion (work, dinner, weekend, casual, or formal) and get an outfit built only from your available items. If your wardrobe can't make one, the page explains why and links to your wardrobe and to Add Clothing.
+- **Try another.** Ask for a different combination. When every valid combination has been shown, the page says so instead of repeating one.
+- **Why these items?** Each outfit explains the formality, season, and color palette it was chosen on. A short stylist note describes the look.
+- **Saved outfits.** Save an outfit to find it again later, and remove it from the Saved Outfits page. An item deleted since saving is shown as removed, not replaced.
+- **Outfit history.** Mark an outfit as worn today and see your history, newest first. The same clothes on the same day are recorded once.
+- **Feedback.** Rate an outfit Helpful or Not helpful, then change or clear the rating. A combination rated Not helpful is offered last for that occasion. Nothing else is learned from ratings.
+
+### Failure recovery
+
+Upload failures and analysis failures get different messages and actions:
+- a failed upload offers **Retry upload** and keeps the photo;
+- a failed analysis offers **Retry analysis** or **Enter details manually**;
+- if a save finds the photo gone, **Upload photo again** sends it again without losing the entered details.
+
+Failed requests don't leave broken or duplicate wardrobe items. When loading or saving fails, the app shows a fixed message with a way to try again, or a **Sign in** link if the session has ended.
+
+### Where the AI runs
+
+Clothing classification is the only machine-learning part of the app, and it runs in the browser:
+- It uses [Transformers.js](https://huggingface.co/docs/transformers.js) with the Marqo-FashionSigLIP model, in a Web Worker.
+- The model is downloaded once and cached by the browser.
+- Photos are not sent to an AI service.
+- If the model is already cached, the stylist note also uses it to score the outfit's photos.
+
+Outfit recommendations are generated on the server by fixed rules in `src/services/outfits/`:
+- formality for the occasion;
+- matching seasons;
+- a top and bottom or a dress, with no repeated category;
+- shoes included when suitable ones exist;
+- avoiding combinations already shown;
+- calmer color palettes first.
+
+They don't use a language model or any external AI API.
 
 Full requirements, the 15 user stories, and acceptance criteria are in [docs/PRD.md](docs/PRD.md).
+
+## Documentation
+
+| Document | What it covers |
+|---|---|
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System architecture diagram and how the parts fit together |
+| [docs/API.md](docs/API.md) | Guide to the HTTP API: authentication, conventions, errors, and curl examples |
+| [docs/openapi.yaml](docs/openapi.yaml) | OpenAPI 3.1 specification of all 22 API operations. Open it in [Swagger Editor](https://editor.swagger.io) |
+| [docs/PRD.md](docs/PRD.md) | Product requirements and the 15 user stories |
+| [docs/DESIGN.md](docs/DESIGN.md) | UI design, screen states, and wireframe references |
+| [AGENTS.md](AGENTS.md) | Rules for the AI coding tools we used |
 
 ## Repository Structure
 
@@ -34,8 +87,18 @@ RewearAI/
 ├── AGENTS.md                               # Rules file for AI coding tools
 ├── README.md
 ├── ReWear_HW3_Experiment_Comparison.pdf    # HW-3 before/after comparison
+├── src/
+│   ├── app/                                # Pages and API Route Handlers (app/api)
+│   ├── components/                         # React components
+│   ├── lib/                                # Auth, database, repositories, validation, images
+│   ├── models/                             # Mongoose models
+│   ├── services/                           # Business rules, outfit generation, classification
+│   └── types/                              # Shared TypeScript types
+├── tests/                                  # unit/, integration/, db/, smoke/, plus helpers and mocks
 ├── docs/
 │   ├── PRD.md                              # Product requirements (15 user stories)
+│   ├── DESIGN.md                           # UI design and wireframe references
+│   ├── evidence/                           # Test and screenshot evidence for each issue
 │   └── sprints/
 │       ├── sprint-1/                       # planning.md, standups.md, retro.md
 │       ├── sprint-2/
@@ -362,8 +425,33 @@ Both upload routes require a signed-in session (`requireAuth()`) and a same-orig
 
 ## Running Tests
 
+All automated tests use [Vitest](https://vitest.dev). Component and page tests also use React Testing Library in jsdom. We wrote the failing tests first for most stories, and the red and green runs are recorded in [docs/evidence/](docs/evidence).
+
+| Folder | What it tests |
+|---|---|
+| `tests/unit/` and `src/**/*.test.ts` | Services (outfit generation, explanations, saved outfits, history, feedback), validation, classification logic, Mongoose schemas, and React components |
+| `tests/integration/` | Route Handlers called with real `Request` objects and in-memory repositories, covering auth, uploads, wardrobe, and outfits. Also pages rendered with React Testing Library |
+| `tests/contracts/` | Behaviour every repository must have, run against both the in-memory and the MongoDB versions |
+| `tests/db/` | MongoDB repositories, indexes, and the Google sign-in routes against a temporary MongoDB server |
+| `tests/smoke/` | The production build under `next start`: HTTP checks of auth, outfit generation, history, and feedback, plus real-Chrome checks of Create Outfit and Outfit History |
+
+The two `*.live.test.ts` files run the real classification model. They're skipped unless `RUN_LIVE_MODEL` and a folder of test images are set.
+
+We don't measure test coverage. The smoke suites are our end-to-end tests. They are custom Vitest suites that drive Chrome through the DevTools Protocol ([tests/helpers/chromeCdp.ts](tests/helpers/chromeCdp.ts)); Playwright isn't used.
+
+The CI workflows (`.github/workflows/ci.yml` and `codeql.yml`) add security checks on top of these tests:
+- `npm audit` of production dependencies;
+- GitHub dependency review on pull requests;
+- a gitleaks scan for committed secrets;
+- CodeQL analysis.
+
+The CI/CD and Deployment section explains how the pipeline runs.
+
 | Command | What it runs | Database |
 |---|---|---|
+| `npm run lint` | ESLint with `eslint-config-next` | None |
+| `npm run typecheck` | TypeScript check (`tsc --noEmit`) | None |
+| `npm run build` | Production build. `npm run test:smoke` runs it first. | None |
 | `npm test` | Unit, component, and integration tests | None; `MONGODB_URI` is blanked |
 | `npm run test:db` | Real-database tests in `tests/db/` | A temporary MongoDB server on `127.0.0.1` |
 | `npm run test:smoke` | Builds the app and tests `next start` with real requests | A temporary MongoDB server on `127.0.0.1` |
@@ -574,18 +662,25 @@ node --test services/filterClothing.test.ts
 
 ## Tech Stack
 
-As defined in `AGENTS.md`. The HW-3 prototypes use only Next.js, React, and TypeScript.
+ReWear AI is a single Next.js application: the pages, the API, and the browser code are built and deployed together. Versions are the ones in [package.json](package.json). The HW-3 prototypes use only Next.js, React, and TypeScript.
 
-| Layer | Choice |
-|-------|--------|
-| Frontend | Next.js, React, TypeScript, Tailwind CSS |
-| Backend | Next.js Route Handlers (`app/api`) |
-| Database | MongoDB Atlas with Mongoose |
-| Image storage | Cloudinary |
-| Authentication | Custom MongoDB-backed sessions; bcrypt for passwords; `openid-client` for Google |
-| Testing | Vitest (unit/integration), Playwright (end-to-end) |
-| Quality | ESLint, Prettier, TypeScript type checking |
-| Hosting | Vercel |
+| Technology | What we use it for |
+|---|---|
+| Next.js 16 (App Router) | Server-rendered pages and the API, as Route Handlers in `src/app/api` |
+| React 19 | The UI, as server components for page shells and client components for interactive screens |
+| TypeScript 5 | All application and test code |
+| Tailwind CSS 4 | Styling |
+| MongoDB Atlas + Mongoose 9 | Users, sessions, Google account links, wardrobe items, outfits, outfit history, and feedback |
+| Cloudinary | Clothing photo storage. MongoDB keeps each photo's URL and public ID. |
+| Transformers.js 4 + Marqo-FashionSigLIP | In-browser clothing classification, run in a Web Worker |
+| Custom session authentication | Random session token in an HttpOnly cookie, stored only as a SHA-256 hash; passwords hashed with bcryptjs. No JWT sessions. |
+| Google OpenID Connect (`openid-client` 6) | Google sign-in with PKCE |
+| Vitest 3 + React Testing Library + jsdom | Unit, component, integration, and smoke tests |
+| `mongodb-memory-server` | Temporary MongoDB servers for the database and smoke tests |
+| ESLint 9 | Linting, with `eslint-config-next` |
+| Vercel | Hosting, plus the daily upload-cleanup cron job in [vercel.json](vercel.json) |
+
+The design is covered in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Project Management
 
