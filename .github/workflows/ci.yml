@@ -1,0 +1,287 @@
+# Multi-stage pipeline: quality -> tests -> build + smoke -> deploy -> post-deploy check.
+# Security scanning runs alongside, and every deploy waits for it. See docs/CI_CD.md.
+name: CI/CD
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '22'
+  VERCEL_CLI: vercel@65.2.0
+
+jobs:
+  lint-typecheck:
+    name: Lint and typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+
+  unit-integration:
+    name: Unit and integration tests
+    needs: lint-typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - name: Run tests
+        shell: bash
+        run: npm test 2>&1 | tee test-output.txt
+      - name: Summarize
+        if: always()
+        run: bash scripts/writeTestSummary.sh "Unit and integration tests" test-output.txt
+
+  db-tests:
+    name: Database tests
+    needs: lint-typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/mongodb-binaries
+          key: mongodb-binaries-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - run: npm ci
+      - name: Run tests
+        shell: bash
+        run: npm run test:db 2>&1 | tee test-output.txt
+      - name: Summarize
+        if: always()
+        run: bash scripts/writeTestSummary.sh "Database tests" test-output.txt
+
+  build-smoke:
+    name: Production build and smoke tests
+    needs: [unit-integration, db-tests]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # Turns on the real-browser checks in tests/smoke/outfitGeneration.smoke.ts.
+      SMOKE_CHROME_PATH: /usr/bin/google-chrome
+      SMOKE_SCREENSHOT_DIR: smoke-screenshots
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/mongodb-binaries
+          key: mongodb-binaries-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - run: npm ci
+      - name: Build and run smoke tests
+        # An explicit bash shell adds pipefail, so a failing build still fails through tee.
+        shell: bash
+        run: npm run test:smoke 2>&1 | tee build-output.txt
+      # AGENTS.md section 7: a prerendered /api route would serve stale data.
+      - name: Check every /api route is dynamic
+        run: |
+          # Only the build's route table, whose lines start with a tree character.
+          routes=$(grep -E '^(┌|├|└|│) .*/api/' build-output.txt || true)
+          if [ -z "$routes" ]; then
+            echo "::error::No /api routes found in the build output."
+            exit 1
+          fi
+          if printf '%s\n' "$routes" | grep -vE 'ƒ /api/'; then
+            echo "::error::The routes above are not dynamic. Call await connection() in their GET handler."
+            exit 1
+          fi
+          echo "All $(printf '%s\n' "$routes" | wc -l | tr -d ' ') /api routes are dynamic."
+      - name: Summarize
+        if: always()
+        run: bash scripts/writeTestSummary.sh "Production smoke tests" build-output.txt
+      - name: Upload diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: smoke-diagnostics
+          path: |
+            build-output.txt
+            smoke-screenshots/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  security:
+    name: Security scanning
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+      - name: Review dependency changes
+        if: github.event_name == 'pull_request'
+        uses: actions/dependency-review-action@v5
+        with:
+          fail-on-severity: high
+      - name: Scan for committed secrets
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  deploy-preview:
+    name: Deploy preview
+    if: github.event_name == 'pull_request'
+    needs: [build-smoke, security]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+    environment:
+      name: preview
+      url: ${{ steps.deploy.outputs.alias_url }}
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      PREVIEW_DOMAIN: ${{ vars.PREVIEW_DOMAIN }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Check deploy settings
+        run: |
+          for name in VERCEL_ORG_ID VERCEL_PROJECT_ID VERCEL_TOKEN PREVIEW_DOMAIN; do
+            if [ -z "${!name}" ]; then
+              echo "::error::$name is not set. See docs/CI_CD.md, One-time setup."
+              exit 1
+            fi
+          done
+      - run: npx --yes "$VERCEL_CLI" pull --yes --environment=preview --token="$VERCEL_TOKEN"
+      - run: npx --yes "$VERCEL_CLI" build --token="$VERCEL_TOKEN"
+      - name: Deploy and point the preview domain at it
+        id: deploy
+        run: |
+          url=$(npx --yes "$VERCEL_CLI" deploy --prebuilt --token="$VERCEL_TOKEN")
+          # APP_ORIGIN for Preview is this fixed domain, so sign-in works there.
+          bash scripts/setVercelAlias.sh "$url" "$PREVIEW_DOMAIN"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "alias_url=https://$PREVIEW_DOMAIN" >> "$GITHUB_OUTPUT"
+      - name: Check the deployed app responds
+        run: bash scripts/checkDeployment.sh "https://$PREVIEW_DOMAIN"
+      - name: Summarize
+        env:
+          DEPLOY_URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          {
+            echo "### Preview deployed"
+            echo "- Sign in here: https://$PREVIEW_DOMAIN"
+            echo "- This exact deployment: $DEPLOY_URL"
+            echo "- Environment: Preview, database \`rewear\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Comment the preview URL on the PR
+        uses: actions/github-script@v9
+        env:
+          DEPLOY_URL: ${{ steps.deploy.outputs.url }}
+          ALIAS_URL: ${{ steps.deploy.outputs.alias_url }}
+        with:
+          script: |
+            const marker = '<!-- rewear-preview -->';
+            const body = [
+              marker,
+              `**Preview deployed** for ${context.sha.slice(0, 7)}`,
+              '',
+              `- Sign-in works here: ${process.env.ALIAS_URL}`,
+              `- This exact deployment: ${process.env.DEPLOY_URL}`,
+              '',
+              'Uses the Preview environment and the `rewear` database.',
+            ].join('\n');
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number });
+            const existing = comments.find((c) => c.body?.startsWith(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
+
+  deploy-production:
+    name: Deploy production
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [build-smoke, security]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    environment:
+      name: production
+      url: ${{ vars.PRODUCTION_URL }}
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      PRODUCTION_URL: ${{ vars.PRODUCTION_URL }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Check deploy settings
+        run: |
+          for name in VERCEL_ORG_ID VERCEL_PROJECT_ID VERCEL_TOKEN PRODUCTION_URL; do
+            if [ -z "${!name}" ]; then
+              echo "::error::$name is not set. See docs/CI_CD.md, One-time setup."
+              exit 1
+            fi
+          done
+      - run: npx --yes "$VERCEL_CLI" pull --yes --environment=production --token="$VERCEL_TOKEN"
+      - run: npx --yes "$VERCEL_CLI" build --prod --token="$VERCEL_TOKEN"
+      - name: Deploy and point the production domain at it
+        id: deploy
+        run: |
+          url=$(npx --yes "$VERCEL_CLI" deploy --prebuilt --prod --token="$VERCEL_TOKEN")
+          # APP_ORIGIN for Production is this fixed domain, so it can't drift from Vercel's default.
+          bash scripts/setVercelAlias.sh "$url" "${PRODUCTION_URL#https://}"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+      - name: Check the deployed app responds
+        run: bash scripts/checkDeployment.sh "$PRODUCTION_URL"
+      - name: Summarize
+        env:
+          DEPLOY_URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          {
+            echo "### Production deployed"
+            echo "- Live at: $PRODUCTION_URL"
+            echo "- This exact deployment: $DEPLOY_URL"
+            echo "- Environment: Production, database \`rewear-prod\`"
+          } >> "$GITHUB_STEP_SUMMARY"

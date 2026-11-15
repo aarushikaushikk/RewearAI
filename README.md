@@ -1,5 +1,8 @@
 # ReWear AI
 
+[![CI/CD](https://github.com/aarushikaushikk/RewearAI/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/aarushikaushikk/RewearAI/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/aarushikaushikk/RewearAI/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/aarushikaushikk/RewearAI/actions/workflows/codeql.yml)
+
 > An intelligent stylist that creates new outfits from clothes you already own.
 
 ReWear AI is a digital wardrobe application that helps users organize clothing they already own and generate occasion-based outfit combinations from those items, encouraging wardrobe reuse rather than new purchases.
@@ -9,7 +12,7 @@ ReWear AI is a digital wardrobe application that helps users organize clothing t
 
 ## Status
 
-The application is in `src/`. User Story 1 (accounts and sign-in) is under review in Draft PR #33 and hasn't been deployed; [docs/issue-6-team-review.md](docs/issue-6-team-review.md) lists what's left. The `baseline/` and `run-*` folders are separate prototypes from the [HW-3 Rules Experiment](#hw-3-rules-experiment).
+The application is in `src/`. User Stories 1–7 and 11 are merged; the rest are tracked in [Sprint 4](https://github.com/aarushikaushikk/RewearAI/milestones). Every merge to `main` deploys to production (see [CI/CD and Deployment](#cicd-and-deployment)). The `baseline/` and `run-*` folders are separate prototypes from the [HW-3 Rules Experiment](#hw-3-rules-experiment).
 
 ## Core Features (planned)
 
@@ -86,6 +89,12 @@ A Google sign-in never connects to an existing account because the email matches
 `npm run test:db` and `npm run test:smoke` never use `MONGODB_URI` or Google settings from your shell or `.env.local`, and no test contacts Google: they use a local fake. [tests/helpers/mongoTestServer.ts](tests/helpers/mongoTestServer.ts) starts a new server for each test file, refuses any other database, and removes the server's files when it stops. If the server can't start, the tests fail rather than falling back to another database.
 
 `npm install` downloads the `mongod` binary these tests use. Set `MONGOMS_DISABLE_POSTINSTALL=1` to skip that download where the tests don't run; `npm run test:db` will then download it on first use.
+
+## CI/CD and Deployment
+
+Every pull request runs lint, typecheck, unit and integration tests, database tests, a production build with smoke tests, and security scanning (npm audit, dependency review, gitleaks, CodeQL). If all of them pass, it deploys a Vercel preview and comments its URL on the PR. Every merge to `main` runs the same checks and then deploys to production. Preview uses the `rewear` database and Production uses `rewear-prod`.
+
+[docs/CI_CD.md](docs/CI_CD.md) describes each stage, the environments, the secrets the pipeline needs, the one-time Vercel setup, and how to roll back.
 
 ## Image Storage Setup (Cloudinary)
 
