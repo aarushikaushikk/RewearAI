@@ -40,6 +40,14 @@ const CHROME_FLAGS = [
   '--metrics-recording-only',
 ];
 
+/** A cold first start on a shared CI runner can take well over 10 s. */
+const STARTUP_TIMEOUT_MS = 30_000;
+const STARTUP_POLL_MS = 100;
+/** How much of Chrome's stderr a startup error repeats. */
+const STDERR_TAIL_CHARS = 4_000;
+/** How long `stop` waits after asking Chrome to quit before killing it outright. */
+const FORCE_KILL_AFTER_MS = 5_000;
+
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function readDevToolsPort(profileDir: string): number | null {
@@ -115,21 +123,45 @@ async function connect(wsUrl: string): Promise<CdpPage> {
 
 function stop(child: ChildProcess): Promise<void> {
   return new Promise((resolve) => {
-    if (child.exitCode !== null) return resolve();
-    child.once('exit', () => resolve());
+    // Already gone: it exited, was killed by a signal, or never spawned (no pid, no 'exit').
+    if (child.exitCode !== null || child.signalCode !== null || child.pid === undefined) return resolve();
+    const forceKill = setTimeout(() => child.kill('SIGKILL'), FORCE_KILL_AFTER_MS);
+    child.once('exit', () => {
+      clearTimeout(forceKill);
+      resolve();
+    });
     child.kill();
   });
 }
 
 export async function launchChrome(chromePath: string): Promise<RunningChrome> {
   const profileDir = mkdtempSync(path.join(tmpdir(), 'rewear-smoke-chrome-'));
+  const startedAt = Date.now();
   const child = spawn(chromePath, [...CHROME_FLAGS, `--user-data-dir=${profileDir}`, 'about:blank'], {
-    stdio: 'ignore',
+    stdio: ['ignore', 'ignore', 'pipe'],
+  });
+
+  // Keep only the end of stderr, and keep reading it for Chrome's whole life so a full pipe
+  // can never block the browser.
+  let stderrTail = '';
+  child.stderr?.setEncoding('utf8');
+  child.stderr?.on('data', (chunk: string) => {
+    stderrTail = (stderrTail + chunk).slice(-STDERR_TAIL_CHARS);
+  });
+  // Without these listeners a failed spawn would surface as an unhandled error, and an early
+  // exit would go unnoticed until the timeout.
+  const ended: { spawnError?: Error; exit?: { code: number | null; signal: NodeJS.Signals | null } } = {};
+  child.on('error', (err) => {
+    ended.spawnError ??= err;
+  });
+  const closed = new Promise<void>((resolve) => child.once('close', () => resolve()));
+  child.once('exit', (code, signal) => {
+    ended.exit = { code, signal };
   });
 
   let port: number | null = null;
-  for (let attempt = 0; attempt < 100 && port === null; attempt += 1) {
-    await sleep(100);
+  while (port === null && !ended.spawnError && !ended.exit && Date.now() - startedAt < STARTUP_TIMEOUT_MS) {
+    await sleep(STARTUP_POLL_MS);
     port = readDevToolsPort(profileDir);
   }
 
@@ -147,8 +179,23 @@ export async function launchChrome(chromePath: string): Promise<RunningChrome> {
   };
 
   if (port === null) {
+    const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
+    const { spawnError, exit } = ended;
+    if (exit) {
+      // 'exit' can fire before stderr is drained; give the last lines a moment to arrive.
+      await Promise.race([closed, sleep(1_000)]);
+    }
+    const reason = spawnError
+      ? `it failed to spawn (${spawnError.message})`
+      : exit
+        ? `it exited with ${exit.signal ? `signal ${exit.signal}` : `code ${exit.code}`} after ${seconds} s`
+        : `no DevToolsActivePort file after ${seconds} s`;
     await close();
-    throw new Error('Chrome did not start its DevTools endpoint');
+    const stderr = stderrTail.trim();
+    throw new Error(
+      `Chrome did not start its DevTools endpoint: ${reason}` +
+        (stderr ? `\nChrome stderr (last ${STDERR_TAIL_CHARS} characters at most):\n${stderr}` : ''),
+    );
   }
 
   return {
