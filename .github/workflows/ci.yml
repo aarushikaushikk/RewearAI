@@ -1,5 +1,5 @@
 # Multi-stage pipeline: quality -> tests -> build + smoke -> deploy -> post-deploy check.
-# Security scanning runs alongside, and every deploy waits for it. See docs/CI_CD.md.
+# Security scanning runs alongside, and every deploy waits for it. See the README, CI/CD and Deployment.
 name: CI/CD
 
 on:
@@ -181,7 +181,7 @@ jobs:
         run: |
           for name in VERCEL_ORG_ID VERCEL_PROJECT_ID VERCEL_TOKEN PREVIEW_DOMAIN; do
             if [ -z "${!name}" ]; then
-              echo "::error::$name is not set. See docs/CI_CD.md, One-time setup."
+              echo "::error::$name is not set. See the README, CI/CD and Deployment, One-time setup."
               exit 1
             fi
           done
@@ -260,7 +260,7 @@ jobs:
         run: |
           for name in VERCEL_ORG_ID VERCEL_PROJECT_ID VERCEL_TOKEN PRODUCTION_URL; do
             if [ -z "${!name}" ]; then
-              echo "::error::$name is not set. See docs/CI_CD.md, One-time setup."
+              echo "::error::$name is not set. See the README, CI/CD and Deployment, One-time setup."
               exit 1
             fi
           done
