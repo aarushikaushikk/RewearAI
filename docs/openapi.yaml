@@ -1,0 +1,2337 @@
+openapi: 3.1.0
+
+info:
+  title: ReWear AI API
+  version: 0.1.0
+  summary: Authenticated HTTP API used by the ReWear AI web application.
+  description: |
+    ReWear AI is a private digital wardrobe. The web application uses this API to sign users
+    in, store clothing photos and details, and build occasion-based outfits only from the
+    clothing each user has saved.
+
+    **Audience.** These Next.js Route Handlers serve the ReWear AI web application. They can
+    also be called by scripts that sign in first (see `docs/API.md`). They are not designed
+    for unrestricted third-party access: there are no API keys and no CORS support.
+
+    **Authentication.** Signing in (email and password, or Google) sets the HttpOnly
+    `rewear_session` cookie, which holds an opaque random token. Only its SHA-256 hash is
+    stored on the server. Sessions last 7 days. No JWT is used for application sessions.
+
+    **Origin check.** Every `POST`, `PUT`, `PATCH`, and `DELETE` request must send an `Origin`
+    header, or failing that a `Referer` header, whose origin matches the application's configured
+    origin (`APP_ORIGIN`). Without it the request is refused with `403` before anything else
+    happens. Browsers send `Origin` automatically. Other clients must set it.
+
+    **Response envelope.** JSON responses are `{ "success": true, "data": ... }` or
+    `{ "success": false, "error": "..." }`. Error messages are fixed, safe texts. Logout is the
+    one success response with `message` instead of `data`. The Google sign-in operations are
+    browser redirects (`303`) with no body.
+
+    **Ownership.** The signed-in user always comes from the session, never from the request.
+    Another user's record is reported exactly like a missing one (`404`), so IDs can't be probed.
+
+    **Not HTTP endpoints.** Clothing classification, the outfit stylist note, and wardrobe
+    search and filtering all run in the browser.
+  license:
+    name: Course project. No license granted.
+    identifier: LicenseRef-Proprietary
+
+servers:
+  - url: http://localhost:3000
+    description: Local development server (`npm run dev`).
+
+security:
+  - sessionCookie: []
+
+tags:
+  - name: Authentication
+    description: Email and password accounts, the current session, and sign-out.
+  - name: Google sign-in
+    description: >-
+      Browser redirects for Google sign-in (OpenID Connect with PKCE). These endpoints return
+      `303` redirects, not JSON, and are meant to be opened by a browser.
+  - name: Uploads
+    description: Clothing photo upload, the first of the two steps of adding clothing.
+  - name: Wardrobe
+    description: The signed-in user's clothing items.
+  - name: Outfits
+    description: Occasion-based outfit generation, including alternatives and explanations.
+  - name: Saved outfits
+    description: Outfits the user saved to wear again.
+  - name: Outfit history
+    description: Outfits the user marked as worn.
+  - name: Feedback
+    description: The user's positive or negative rating of an outfit.
+  - name: Internal
+    description: >-
+      Operations called by the platform, not by users or the web application. Marked with
+      `x-internal: true`.
+
+paths:
+  /api/auth/register:
+    post:
+      tags: [Authentication]
+      operationId: registerUser
+      summary: Create an account and sign in
+      description: |
+        Creates an email and password account and starts a session by setting the
+        `rewear_session` cookie.
+
+        Rate limited per IP address and per email address: 5 failed attempts in 15 minutes.
+        Only client errors (400, 409) count as failed attempts. A malformed body is refused
+        before it is counted.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/OriginHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+            example:
+              email: alex@example.com
+              password: correct-horse-battery
+              name: Alex Rivera
+      responses:
+        '201':
+          description: Account created and signed in.
+          headers:
+            Set-Cookie:
+              $ref: '#/components/headers/SetSessionCookie'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+              example:
+                success: true
+                data:
+                  user:
+                    id: 6650a1b2c3d4e5f6a7b8c9d0
+                    email: alex@example.com
+                    name: Alex Rivera
+                    createdAt: '2026-11-14T09:30:00.000Z'
+        '400':
+          description: >-
+            The body isn't a JSON object with string fields (no `code`), or a field is invalid
+            (`code: VALIDATION_ERROR`, with the first problem's message).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                malformed:
+                  summary: Malformed body
+                  value:
+                    success: false
+                    error: Invalid request payload
+                invalidField:
+                  summary: Invalid field
+                  value:
+                    success: false
+                    error: Password must be at least 8 characters long
+                    code: VALIDATION_ERROR
+        '403':
+          $ref: '#/components/responses/OriginRejected'
+        '409':
+          description: An account with this email already exists.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error: An account with this email already exists
+                code: DUPLICATE_EMAIL
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          description: >-
+            Unexpected failure. If the account was created but its session could not be, the
+            response says so with `code: ACCOUNT_CREATED_SESSION_FAILED` and the user should sign
+            in. If the account was rolled back, `code: REGISTRATION_SESSION_FAILED` means the
+            request can be retried.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                rolledBack:
+                  summary: Account rolled back
+                  value:
+                    success: false
+                    error: Registration failed during session initialization. Please try again.
+                    code: REGISTRATION_SESSION_FAILED
+                unexpected:
+                  summary: Unexpected failure
+                  value:
+                    success: false
+                    error: An unexpected error occurred during registration
+        '503':
+          description: >-
+            The authentication service is unavailable. A session store outage after the account
+            was written also answers 503, with one of the two session `code`s described under 500.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error: Authentication service is temporarily unavailable. Please try again later.
+
+  /api/auth/login:
+    post:
+      tags: [Authentication]
+      operationId: logIn
+      summary: Sign in with email and password
+      description: |
+        Checks the credentials and starts a session by setting the `rewear_session` cookie.
+
+        Rate limited per IP address and per email address: 5 failed attempts in 15 minutes.
+        A successful sign-in resets both counters.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/OriginHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              email: alex@example.com
+              password: correct-horse-battery
+      responses:
+        '200':
+          description: Signed in.
+          headers:
+            Set-Cookie:
+              $ref: '#/components/headers/SetSessionCookie'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+              example:
+                success: true
+                data:
+                  user:
+                    id: 6650a1b2c3d4e5f6a7b8c9d0
+                    email: alex@example.com
+                    name: Alex Rivera
+                    createdAt: '2026-11-14T09:30:00.000Z'
+        '400':
+          description: >-
+            The body isn't a JSON object with string fields (no `code`), or the email or
+            password is missing or malformed (`code: VALIDATION_ERROR`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                malformed:
+                  summary: Malformed body
+                  value:
+                    success: false
+                    error: Invalid request payload
+                invalidField:
+                  summary: Invalid field
+                  value:
+                    success: false
+                    error: Please enter a valid email address
+                    code: VALIDATION_ERROR
+        '401':
+          description: The email or password is wrong. The response never says which.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error: Invalid email or password
+                code: INVALID_CREDENTIALS
+        '403':
+          $ref: '#/components/responses/OriginRejected'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          description: Unexpected failure.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error: An unexpected error occurred during login
+        '503':
+          $ref: '#/components/responses/AuthServiceUnavailable'
+
+  /api/auth/logout:
+    post:
+      tags: [Authentication]
+      operationId: logOut
+      summary: Sign out
+      description: |
+        Revokes the current session, if there is one, and clears the `rewear_session` cookie.
+        Succeeds without a session, so repeating it is safe. This is the only success response
+        with `message` instead of `data`.
+      security:
+        - {}
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/OriginHeader'
+      responses:
+        '200':
+          description: Signed out. The cookie is cleared.
+          headers:
+            Set-Cookie:
+              $ref: '#/components/headers/ClearSessionCookie'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogoutResponse'
+              example:
+                success: true
+                message: Logged out successfully
+        '403':
+          $ref: '#/components/responses/OriginRejected'
+        '500':
+          description: The session could not be revoked. The cookie is not cleared, so retry.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error: Failed to complete logout due to a server error. Please try again.
+        '503':
+          $ref: '#/components/responses/AuthServiceUnavailable'
+
+  /api/auth/session:
+    get:
+      tags: [Authentication]
+      operationId: getSession
+      summary: Get the signed-in user
+      description: Returns the user the `rewear_session` cookie belongs to.
+      responses:
+        '200':
+          description: The signed-in user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+              example:
+                success: true
+                data:
+                  user:
+                    id: 6650a1b2c3d4e5f6a7b8c9d0
+                    email: alex@example.com
+                    name: null
+                    createdAt: '2026-11-14T09:30:00.000Z'
+        '401':
+          description: No session cookie, or the session expired or was revoked.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                noCookie:
+                  summary: No session cookie
+                  value:
+                    success: false
+                    error: 'Unauthorized: no active session'
+                expired:
+                  summary: Expired or invalid session
+                  value:
+                    success: false
+                    error: 'Unauthorized: session expired or invalid'
+        '500':
+          description: Unexpected failure.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error: Internal server error during session validation
+        '503':
+          $ref: '#/components/responses/AuthServiceUnavailable'
+
+  /api/auth/google:
+    get:
+      tags: [Google sign-in]
+      operationId: startGoogleSignIn
+      summary: Start Google sign-in (browser redirect)
+      description: |
+        Opened by the browser from the sign-in page. Redirects to Google's authorization page
+        with PKCE (`S256`), `state`, and `nonce`, and stores them in a short-lived, HttpOnly,
+        sealed transaction cookie (`__Host-rewear_google_tx` in production,
+        `rewear_google_tx` in development). Returns no JSON.
+
+        If Google sign-in isn't configured or Google can't be reached, redirects to
+        `/sign-in?reason=google-unavailable` instead.
+      security: []
+      responses:
+        '303':
+          description: Redirect to Google, or to the sign-in page if Google sign-in is unavailable.
+          headers:
+            Location:
+              description: >-
+                Google's authorization URL, or `/sign-in?reason=google-unavailable`.
+              schema:
+                type: string
+              example: /sign-in?reason=google-unavailable
+            Set-Cookie:
+              description: The transaction cookie, set only when redirecting to Google.
+              schema:
+                type: string
+              example: 'rewear_google_tx=<sealed-transaction>; Path=/; SameSite=Lax; HttpOnly; Max-Age=600; Expires=Sat, 14 Nov 2026 09:40:00 GMT'
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+            Referrer-Policy:
+              $ref: '#/components/headers/NoReferrer'
+
+  /api/auth/google/callback:
+    get:
+      tags: [Google sign-in]
+      operationId: completeGoogleSignIn
+      summary: Complete Google sign-in (browser redirect)
+      description: |
+        Google redirects the browser here. The request is accepted only with the transaction
+        cookie set by `GET /api/auth/google` and a matching `state`, which binds the response to
+        the same browser. The code is exchanged and the ID token verified on the server. The
+        user is identified by Google's `sub` and needs a verified email.
+
+        On success, sets `rewear_session` and redirects to `/home`. Otherwise redirects to
+        `/sign-in?reason=<reason>`. The transaction cookie is always cleared. Returns no JSON.
+
+        A Google account is never linked to an existing account because the emails match:
+        that answers `google-email-in-use`.
+      security: []
+      parameters:
+        - name: code
+          in: query
+          required: false
+          description: Authorization code from Google. Required for a successful sign-in.
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: false
+          description: Must equal the `state` stored in the transaction cookie.
+          schema:
+            type: string
+        - name: error
+          in: query
+          required: false
+          description: Set by Google when authorization failed. `access_denied` means the user cancelled.
+          schema:
+            type: string
+      responses:
+        '303':
+          description: Redirect to `/home` after sign-in, or to the sign-in page with a reason.
+          headers:
+            Location:
+              description: |
+                One of:
+                - `/home`: signed in.
+                - `/sign-in?reason=google-cancelled`: the user cancelled at Google.
+                - `/sign-in?reason=google-email-unverified`: Google hasn't verified the email.
+                - `/sign-in?reason=google-email-in-use`: the email belongs to another account.
+                - `/sign-in?reason=google-unavailable`: not configured, or Google or the database is unavailable.
+                - `/sign-in?reason=google-failed`: a missing or mismatched transaction, or any other failure.
+              schema:
+                type: string
+                enum:
+                  - /home
+                  - /sign-in?reason=google-cancelled
+                  - /sign-in?reason=google-email-unverified
+                  - /sign-in?reason=google-email-in-use
+                  - /sign-in?reason=google-unavailable
+                  - /sign-in?reason=google-failed
+            Set-Cookie:
+              description: >-
+                Always clears the transaction cookie. After a successful sign-in, also sets
+                `rewear_session`.
+              schema:
+                type: string
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+            Referrer-Policy:
+              $ref: '#/components/headers/NoReferrer'
+
+  /api/uploads:
+    post:
+      tags: [Uploads]
+      operationId: uploadClothingImage
+      summary: Upload a clothing photo
+      description: |
+        Stores a photo in the user's own image folder and returns its URL and `publicId`. No
+        wardrobe item exists until `POST /api/wardrobe` is called with that `publicId`.
+
+        The type is checked from the file's bytes, not its name: JPEG, PNG, or WebP, at most
+        4 MB. A photo that is never saved is deleted by the daily cleanup about 24 to 48 hours
+        later. Retrying a failed upload is safe. Each successful upload stores a new photo.
+      parameters:
+        - $ref: '#/components/parameters/OriginHeader'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [image]
+              properties:
+                image:
+                  type: string
+                  contentMediaType: application/octet-stream
+                  description: The photo. JPEG, PNG, or WebP, at most 4 MB (4,194,304 bytes).
+            encoding:
+              image:
+                contentType: image/jpeg, image/png, image/webp
+      responses:
+        '201':
+          description: Photo stored.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success:
+                    const: true
+                  data:
+                    $ref: '#/components/schemas/WardrobeImage'
+              example:
+                success: true
+                data:
+                  url: https://res.cloudinary.com/example-cloud/image/upload/v1731577800/rewear/users/6650a1b2c3d4e5f6a7b8c9d0/k3x9q2.jpg
+                  publicId: rewear/users/6650a1b2c3d4e5f6a7b8c9d0/k3x9q2
+        '400':
+          description: The request has no `image` file, or the file is empty.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error: Choose an image to upload.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/OriginRejected'
+        '413':
+          description: The file is larger than 4 MB.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error: This image is larger than 4 MB. Choose a smaller image.
+        '415':
+          description: The file isn't a JPEG, PNG, or WebP image.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error: This file type isn't supported. Choose a JPEG, PNG, or WebP image.
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '502':
+          description: The image service failed to store the photo. Retrying can succeed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error: Your image didn't upload. Please try again.
+        '503':
+          $ref: '#/components/responses/WardrobeServiceUnavailable'
+
+  /api/wardrobe:
+    get:
+      tags: [Wardrobe]
+      operationId: listWardrobeItems
+      summary: List the user's clothing items
+      description: >-
+        Returns all of the signed-in user's items, newest first. Takes no query parameters:
+        search and filtering happen in the browser.
+      responses:
+        '200':
+          description: The user's items, newest first. Empty when they have none.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success:
+                    const: true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/WardrobeItem'
+              examples:
+                items:
+                  $ref: '#/components/examples/WardrobeItemListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/WardrobeServiceUnavailable'
+    post:
+      tags: [Wardrobe]
+      operationId: createWardrobeItem
+      summary: Save a clothing item
+      description: |
+        Saves an item from a photo uploaded with `POST /api/uploads`. The photo must be in the
+        signed-in user's own image folder. The server looks it up again and stores the URL the
+        image service returns, never one supplied by the client.
+
+        **Retries are safe.** Each photo can belong to only one item. Saving the same
+        `publicId` again returns the existing item with `200` instead of creating a duplicate.
+
+        String fields only. Unknown fields such as an owner are ignored. A field that isn't a
+        string makes the body malformed.
+      parameters:
+        - $ref: '#/components/parameters/OriginHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewWardrobeItemRequest'
+            example:
+              publicId: rewear/users/6650a1b2c3d4e5f6a7b8c9d0/k3x9q2
+              name: Linen shirt
+              category: Top
+              color: White
+              style: Button-down
+              season: Summer
+              formality: Smart casual
+      responses:
+        '201':
+          description: Item created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WardrobeItemResponse'
+              examples:
+                item:
+                  $ref: '#/components/examples/WardrobeItemResponse'
+        '200':
+          description: This photo was already saved; the existing item is returned (a retried save).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WardrobeItemResponse'
+              examples:
+                item:
+                  $ref: '#/components/examples/WardrobeItemResponse'
+        '400':
+          $ref: '#/components/responses/WardrobeBadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/OriginRejected'
+        '404':
+          description: >-
+            The photo doesn't exist, or isn't in the user's own folder. It may have been removed
+            by the cleanup of unsaved uploads. Upload it again.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error: We couldn't find that image. Please upload it again.
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '502':
+          description: The image service couldn't be asked about the photo. Nothing was saved; retry.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error: We couldn't save this item. Try again.
+        '503':
+          $ref: '#/components/responses/WardrobeServiceUnavailable'
+
+  /api/wardrobe/{itemId}:
+    parameters:
+      - $ref: '#/components/parameters/ItemId'
+    get:
+      tags: [Wardrobe]
+      operationId: getWardrobeItem
+      summary: Get one clothing item
+      responses:
+        '200':
+          description: The item.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WardrobeItemResponse'
+              examples:
+                item:
+                  $ref: '#/components/examples/WardrobeItemResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/WardrobeItemNotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/WardrobeServiceUnavailable'
+    patch:
+      tags: [Wardrobe]
+      operationId: updateWardrobeItem
+      summary: Edit a clothing item's details
+      description: |
+        Replaces the item's editable details with the same rules as saving. The photo, owner,
+        and availability can't be changed here, and are ignored if sent. Unknown fields are
+        ignored; a field that isn't a string makes the body malformed. Sending the same
+        details again gives the same result.
+      parameters:
+        - $ref: '#/components/parameters/OriginHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WardrobeItemDetails'
+            example:
+              name: Linen shirt
+              category: Top
+              color: Blue
+              style: Button-down
+              season: Summer
+              formality: Casual
+      responses:
+        '200':
+          description: The updated item.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WardrobeItemResponse'
+              examples:
+                item:
+                  $ref: '#/components/examples/WardrobeItemResponse'
+        '400':
+          $ref: '#/components/responses/WardrobeBadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/OriginRejected'
+        '404':
+          $ref: '#/components/responses/WardrobeItemNotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/WardrobeServiceUnavailable'
+    delete:
+      tags: [Wardrobe]
+      operationId: deleteWardrobeItem
+      summary: Delete a clothing item and its photo
+      description: |
+        Deletes the photo first, then the item. If deleting the photo fails, the item is kept
+        and the request can be retried. If a retry finds the photo already gone, it still
+        finishes. Saved outfits and outfit history keep their references and show the item as
+        removed or missing.
+      parameters:
+        - $ref: '#/components/parameters/OriginHeader'
+      responses:
+        '200':
+          description: Deleted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeletedResponse'
+              example:
+                success: true
+                data:
+                  id: 6650b7e1c3d4e5f6a7b8c9d1
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/OriginRejected'
+        '404':
+          $ref: '#/components/responses/WardrobeItemNotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '502':
+          description: The photo couldn't be deleted. The item is kept; retry.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error: We couldn't delete this item. Try again.
+        '503':
+          $ref: '#/components/responses/WardrobeServiceUnavailable'
+
+  /api/wardrobe/{itemId}/availability:
+    parameters:
+      - $ref: '#/components/parameters/ItemId'
+    patch:
+      tags: [Wardrobe]
+      operationId: setWardrobeItemAvailability
+      summary: Mark an item available or unavailable
+      description: |
+        Unavailable items (for example, in the laundry) are never used in new outfits. The body
+        must be exactly `{ "isAvailable": true }` or `{ "isAvailable": false }`. A string such
+        as `"false"`, or any extra field, is refused rather than coerced or ignored. Repeating
+        the request gives the same result.
+      parameters:
+        - $ref: '#/components/parameters/OriginHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AvailabilityRequest'
+            example:
+              isAvailable: false
+      responses:
+        '200':
+          description: The updated item.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WardrobeItemResponse'
+              examples:
+                item:
+                  $ref: '#/components/examples/WardrobeItemResponse'
+        '400':
+          $ref: '#/components/responses/InvalidPayload'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/OriginRejected'
+        '404':
+          $ref: '#/components/responses/WardrobeItemNotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/WardrobeServiceUnavailable'
+
+  /api/outfits/generate:
+    post:
+      tags: [Outfits]
+      operationId: generateOutfit
+      summary: Generate an outfit for an occasion
+      description: |
+        Builds an outfit from the signed-in user's **available** items only, for the chosen
+        occasion. Nothing is saved. A combination the user rated `negative` for this occasion is
+        offered only after every other valid combination.
+
+        **Alternatives ("Try another").** Send the item IDs of outfits already shown in `shown`.
+        Those combinations are ruled out, and `explanation.alternative` is `true` when `shown`
+        isn't empty.
+
+        **Results.** A successful request always answers `200` with one of three `status` values:
+        - `ok`: an outfit, with the facts it was chosen on (`explanation`) and any rating the
+          user saved for exactly these items and this occasion (`feedback`).
+        - `insufficient`: no outfit can be made (see `reason`).
+        - `no_alternative`: every valid combination is in `shown`.
+
+        The body must contain only `occasion` and, optionally, `shown`.
+      parameters:
+        - $ref: '#/components/parameters/OriginHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateOutfitRequest'
+            examples:
+              first:
+                summary: First outfit
+                value:
+                  occasion: work
+              alternative:
+                summary: Try another
+                value:
+                  occasion: work
+                  shown:
+                    - [6650b7e1c3d4e5f6a7b8c9d1, 6650b7e1c3d4e5f6a7b8c9d2]
+      responses:
+        '200':
+          description: The result, which may be an outfit or an explanation of why there is none.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success:
+                    const: true
+                  data:
+                    $ref: '#/components/schemas/OutfitRecommendation'
+              examples:
+                ok:
+                  summary: An outfit
+                  value:
+                    success: true
+                    data:
+                      status: ok
+                      occasion: work
+                      season: Summer
+                      items:
+                        - role: top
+                          id: 6650b7e1c3d4e5f6a7b8c9d1
+                          name: Linen shirt
+                          image:
+                            url: https://res.cloudinary.com/example-cloud/image/upload/v1731577800/rewear/users/6650a1b2c3d4e5f6a7b8c9d0/k3x9q2.jpg
+                          category: Top
+                          color: White
+                          style: Button-down
+                          season: Summer
+                          formality: Smart casual
+                        - role: bottom
+                          id: 6650b7e1c3d4e5f6a7b8c9d2
+                          name: null
+                          image:
+                            url: https://res.cloudinary.com/example-cloud/image/upload/v1731577900/rewear/users/6650a1b2c3d4e5f6a7b8c9d0/p8w1m4.jpg
+                          category: Bottom
+                          color: Navy
+                          style: Chinos
+                          season: All-season
+                          formality: Smart casual
+                      explanation:
+                        formalities: [Smart casual]
+                        seasons: [Summer, All-season]
+                        palette: neutral
+                        alternative: false
+                      feedback: null
+                insufficient:
+                  summary: Not enough suitable items
+                  value:
+                    success: true
+                    data:
+                      status: insufficient
+                      occasion: formal
+                      reason: no_suitable_items
+                noAlternative:
+                  summary: No other combination
+                  value:
+                    success: true
+                    data:
+                      status: no_alternative
+                      occasion: work
+        '400':
+          description: >-
+            No known `occasion` ("Choose an occasion to continue."), or any other problem with the
+            body, such as an extra field or a malformed `shown` ("Invalid request payload").
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                occasion:
+                  summary: Missing or unknown occasion
+                  value:
+                    success: false
+                    error: Choose an occasion to continue.
+                malformed:
+                  summary: Malformed body
+                  value:
+                    success: false
+                    error: Invalid request payload
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/OriginRejected'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/OutfitServiceUnavailable'
+
+  /api/outfits/saved:
+    get:
+      tags: [Saved outfits]
+      operationId: listSavedOutfits
+      summary: List saved outfits
+      description: >-
+        The user's saved outfits, most recently saved first. An item deleted from the wardrobe
+        since saving appears as `{ "status": "removed", "id": ... }`; nothing is invented for it.
+      responses:
+        '200':
+          description: Saved outfits, most recently saved first. Empty when there are none.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success:
+                    const: true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SavedOutfit'
+              examples:
+                savedOutfits:
+                  $ref: '#/components/examples/SavedOutfitListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/OutfitServiceUnavailable'
+    post:
+      tags: [Saved outfits]
+      operationId: saveOutfit
+      summary: Save an outfit
+      description: |
+        Saves the user's own items as an outfit for an occasion. Every item must still be in the
+        user's wardrobe. Availability isn't checked again.
+
+        **Retries are safe.** The same items (in any order) for the same occasion are one outfit.
+        Saving it again answers `200`, moves it to the top of the list, and adds no duplicate.
+
+        The body must contain exactly `occasion` and `itemIds`.
+      parameters:
+        - $ref: '#/components/parameters/OriginHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveOutfitRequest'
+            example:
+              occasion: work
+              itemIds: [6650b7e1c3d4e5f6a7b8c9d1, 6650b7e1c3d4e5f6a7b8c9d2]
+      responses:
+        '201':
+          description: Saved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedOutfitResponse'
+              examples:
+                savedOutfit:
+                  $ref: '#/components/examples/SavedOutfitResponse'
+        '200':
+          description: This outfit was already stored; it is saved again with a new saved date.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedOutfitResponse'
+              examples:
+                savedOutfit:
+                  $ref: '#/components/examples/SavedOutfitResponse'
+        '400':
+          description: >-
+            The body is malformed ("Invalid request payload"), or an item isn't in the user's
+            wardrobe.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                malformed:
+                  summary: Malformed body
+                  value:
+                    success: false
+                    error: Invalid request payload
+                itemsGone:
+                  summary: Item not in the wardrobe
+                  value:
+                    success: false
+                    error: Some of these items are no longer in your wardrobe. Generate a new outfit.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/OriginRejected'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/OutfitServiceUnavailable'
+
+  /api/outfits/saved/{outfitId}:
+    parameters:
+      - $ref: '#/components/parameters/OutfitId'
+    delete:
+      tags: [Saved outfits]
+      operationId: unsaveOutfit
+      summary: Remove an outfit from the saved list
+      description: >-
+        Takes the outfit off the saved list. The outfit record is kept, so outfit history and
+        feedback can still refer to it. Succeeds again for any outfit the user has, so a
+        retried removal succeeds.
+      parameters:
+        - $ref: '#/components/parameters/OriginHeader'
+      responses:
+        '200':
+          description: Removed from the saved list.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeletedResponse'
+              example:
+                success: true
+                data:
+                  id: 6650c9a4c3d4e5f6a7b8c9e1
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/OriginRejected'
+        '404':
+          description: The user has no outfit with this ID.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error: We couldn't find that saved outfit.
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/OutfitServiceUnavailable'
+
+  /api/outfits/history:
+    get:
+      tags: [Outfit history]
+      operationId: listOutfitHistory
+      summary: List worn outfits
+      description: >-
+        The user's worn outfits, newest worn date first; within a date, the most recently
+        recorded first. Item details are read from the current wardrobe each time. An item
+        deleted since appears as `{ "status": "missing", "id": ... }`, after the items still
+        there.
+      responses:
+        '200':
+          description: The history. `entries` is empty when nothing has been recorded.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success:
+                    const: true
+                  data:
+                    $ref: '#/components/schemas/OutfitHistoryList'
+              examples:
+                history:
+                  $ref: '#/components/examples/OutfitHistoryListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/HistoryServiceUnavailable'
+    post:
+      tags: [Outfit history]
+      operationId: markOutfitWorn
+      summary: Mark an outfit as worn
+      description: |
+        Records the user's own items as worn on `wornOn`, the user's local calendar date. The
+        date must be today's date in some time zone (UTC−12 to UTC+14), so a wear can't be
+        backdated or recorded in advance. The items must make a valid outfit: a top and a
+        bottom, or a dress, with at most one item of each category.
+
+        **Retries are safe.** The same clothes (in any order) on the same date are one wear,
+        whatever the occasion. Recording them again answers `200` with the existing entry,
+        including when two requests arrive at once.
+
+        The body must contain exactly `itemIds`, `occasion`, and `wornOn`.
+      parameters:
+        - $ref: '#/components/parameters/OriginHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MarkWornRequest'
+            example:
+              itemIds: [6650b7e1c3d4e5f6a7b8c9d1, 6650b7e1c3d4e5f6a7b8c9d2]
+              occasion: work
+              wornOn: '2026-11-14'
+      responses:
+        '201':
+          description: Recorded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarkWornResponse'
+              examples:
+                recorded:
+                  $ref: '#/components/examples/MarkWornCreatedResponse'
+        '200':
+          description: These clothes were already recorded on this date; the existing entry is returned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarkWornResponse'
+              examples:
+                alreadyRecorded:
+                  $ref: '#/components/examples/MarkWornExistingResponse'
+        '400':
+          description: >-
+            The body is malformed, `wornOn` isn't today's date anywhere, or the items don't make a
+            valid outfit.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                malformed:
+                  summary: Malformed body
+                  value:
+                    success: false
+                    error: Invalid request payload
+                date:
+                  summary: Not today's date
+                  value:
+                    success: false
+                    error: The worn date must be today's date.
+                combination:
+                  summary: Not a valid outfit
+                  value:
+                    success: false
+                    error: An outfit needs a top and a bottom, or a dress, with at most one item of each category.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/OriginRejected'
+        '404':
+          $ref: '#/components/responses/ItemsNotInWardrobe'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/HistoryServiceUnavailable'
+
+  /api/outfits/feedback:
+    put:
+      tags: [Feedback]
+      operationId: rateOutfit
+      summary: Rate an outfit
+      description: |
+        Saves the user's rating of an outfit: their own items for an occasion. The items must
+        make a valid outfit: a top and a bottom, or a dress, with at most one item of each
+        category. The outfit is stored if it wasn't already.
+
+        **Retries are safe.** Rating the same items (in any order) and occasion again replaces
+        the rating and answers `200`. Clearing is a separate request, so `null` isn't accepted.
+
+        The body must contain exactly `occasion`, `itemIds`, and `rating`.
+
+        **Effect.** The rating is returned in `feedback` whenever the same outfit is generated. A
+        `negative` rating also moves exactly this combination behind every other valid
+        combination for the occasion in `POST /api/outfits/generate`. It is never excluded. A
+        `positive` rating doesn't change which outfit is chosen.
+      parameters:
+        - $ref: '#/components/parameters/OriginHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RateOutfitRequest'
+            example:
+              occasion: work
+              itemIds: [6650b7e1c3d4e5f6a7b8c9d1, 6650b7e1c3d4e5f6a7b8c9d2]
+              rating: positive
+      responses:
+        '200':
+          description: The saved rating and the outfit it belongs to.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success:
+                    const: true
+                  data:
+                    $ref: '#/components/schemas/OutfitFeedback'
+              example:
+                success: true
+                data:
+                  outfitId: 6650c9a4c3d4e5f6a7b8c9e1
+                  rating: positive
+        '400':
+          description: The body is malformed, or the items don't make a valid outfit.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                malformed:
+                  summary: Malformed body
+                  value:
+                    success: false
+                    error: Invalid request payload
+                combination:
+                  summary: Not a valid outfit
+                  value:
+                    success: false
+                    error: An outfit needs a top and a bottom, or a dress, with at most one item of each category.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/OriginRejected'
+        '404':
+          $ref: '#/components/responses/ItemsNotInWardrobe'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/OutfitServiceUnavailable'
+
+  /api/outfits/feedback/{outfitId}:
+    parameters:
+      - $ref: '#/components/parameters/OutfitId'
+    delete:
+      tags: [Feedback]
+      operationId: clearOutfitFeedback
+      summary: Clear an outfit's rating
+      description: >-
+        Removes the rating and keeps the outfit. Succeeds for any outfit the user has, rated or
+        not, so a retried clear succeeds.
+      parameters:
+        - $ref: '#/components/parameters/OriginHeader'
+      responses:
+        '200':
+          description: The rating is cleared.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success:
+                    const: true
+                  data:
+                    type: object
+                    required: [outfitId]
+                    properties:
+                      outfitId:
+                        type: string
+              example:
+                success: true
+                data:
+                  outfitId: 6650c9a4c3d4e5f6a7b8c9e1
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/OriginRejected'
+        '404':
+          description: The user has no outfit with this ID.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error: We couldn't find that outfit.
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/OutfitServiceUnavailable'
+
+  /api/cron/cleanup-uploads:
+    get:
+      tags: [Internal]
+      operationId: cleanUpAbandonedUploads
+      summary: Delete abandoned photo uploads (internal)
+      x-internal: true
+      description: |
+        **Internal.** Called by Vercel Cron once a day at 04:00 UTC (`vercel.json`), not by
+        users or the web application. Requires `Authorization: Bearer <CRON_SECRET>`; a session
+        cookie is not accepted.
+
+        Looks at uploads still marked pending that are more than 24 hours old. Those used by a
+        wardrobe item are confirmed and no longer marked pending. The rest are deleted. Running
+        it again is safe.
+      security:
+        - cronBearer: []
+      responses:
+        '200':
+          description: Cleanup finished.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success:
+                    const: true
+                  data:
+                    $ref: '#/components/schemas/CleanupResult'
+              example:
+                success: true
+                data:
+                  deleted: 2
+                  confirmed: 5
+        '401':
+          description: The bearer secret is missing or wrong, or no secret is configured on the server.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error: Unauthorized
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/WardrobeServiceUnavailable'
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: rewear_session
+      description: |
+        Opaque session token set by `POST /api/auth/register`, `POST /api/auth/login`, or Google
+        sign-in. HttpOnly, `SameSite=Lax`, `Path=/`, `Secure` in production, valid for 7 days.
+        Browsers send it automatically. Other clients must keep it from the sign-in response.
+    cronBearer:
+      type: http
+      scheme: bearer
+      description: >-
+        The server's `CRON_SECRET`, sent by Vercel Cron. Used only by
+        `GET /api/cron/cleanup-uploads`.
+
+  parameters:
+    OriginHeader:
+      name: Origin
+      in: header
+      required: false
+      description: >-
+        The application's origin, for example `http://localhost:3000`. Not mandatory on its own,
+        but every `POST`, `PUT`, `PATCH`, and `DELETE` must send either an `Origin` or, failing
+        that, a `Referer` header from the application's origin. A request with neither, or with
+        one from another origin, is refused with `403` before anything else happens. When
+        `Origin` is present, it is the one checked. Browsers set `Origin` automatically.
+      schema:
+        type: string
+        format: uri
+      example: http://localhost:3000
+    ItemId:
+      name: itemId
+      in: path
+      required: true
+      description: >-
+        A wardrobe item ID (a 24-character hexadecimal MongoDB ObjectId). Any other value, or
+        another user's item, answers 404.
+      schema:
+        type: string
+      example: 6650b7e1c3d4e5f6a7b8c9d1
+    OutfitId:
+      name: outfitId
+      in: path
+      required: true
+      description: >-
+        An outfit ID, as returned in a saved outfit's `id` or a rating's `outfitId` (a
+        24-character hexadecimal MongoDB ObjectId). Any other value, or another user's outfit,
+        answers 404.
+      schema:
+        type: string
+      example: 6650c9a4c3d4e5f6a7b8c9e1
+
+  headers:
+    SetSessionCookie:
+      description: Sets the `rewear_session` cookie. `Secure` is added in production.
+      schema:
+        type: string
+      example: 'rewear_session=<session-token>; Path=/; SameSite=Lax; HttpOnly; Max-Age=604800; Expires=Sat, 21 Nov 2026 09:30:00 GMT'
+    ClearSessionCookie:
+      description: Clears the `rewear_session` cookie.
+      schema:
+        type: string
+      example: 'rewear_session=; Path=/; SameSite=Lax; HttpOnly; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT'
+    RetryAfter:
+      description: Seconds to wait before trying again.
+      schema:
+        type: integer
+        minimum: 1
+      example: 840
+    NoStore:
+      description: The redirect must not be cached.
+      schema:
+        type: string
+        const: no-store
+    NoReferrer:
+      description: Keeps the authorization code out of `Referer` headers.
+      schema:
+        type: string
+        const: no-referrer
+
+  responses:
+    Unauthorized:
+      description: No valid session.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            success: false
+            error: Authentication required
+    OriginRejected:
+      description: >-
+        The `Origin` (or `Referer`) header is missing or doesn't match the application's origin.
+        Checked before anything else.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            success: false
+            error: 'CSRF validation failed: origin mismatch or missing security headers'
+    TooManyRequests:
+      description: >-
+        Too many failed attempts from this IP address or for this email address (5 in
+        15 minutes). The limit is kept in each server instance's memory.
+      headers:
+        Retry-After:
+          $ref: '#/components/headers/RetryAfter'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            ip:
+              summary: Limit for this IP address
+              value:
+                success: false
+                error: Too many requests. Please try again later.
+            account:
+              summary: Limit for this account (sign-in only)
+              value:
+                success: false
+                error: Too many requests for this account. Please try again later.
+    InvalidPayload:
+      description: The body is malformed or has fields that aren't allowed.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            success: false
+            error: Invalid request payload
+    WardrobeBadRequest:
+      description: >-
+        The body isn't a JSON object of string fields ("Invalid request payload"), or a field
+        is invalid. Only the first problem is reported, in this order: `publicId` (save only),
+        `name`, `category`, `color`, `season`, `formality`, `style`.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            malformed:
+              summary: Malformed body
+              value:
+                success: false
+                error: Invalid request payload
+            invalidField:
+              summary: Invalid field
+              value:
+                success: false
+                error: Choose a category.
+    WardrobeItemNotFound:
+      description: The user has no item with this ID.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            success: false
+            error: We couldn't find that clothing item.
+    ItemsNotInWardrobe:
+      description: One or more items aren't in the user's wardrobe (missing, or another user's).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            success: false
+            error: One or more of these items are not in your wardrobe.
+    InternalError:
+      description: Unexpected failure. No details are returned.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            success: false
+            error: Internal server error
+    AuthServiceUnavailable:
+      description: The database or the server configuration is unavailable.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            success: false
+            error: Authentication service is temporarily unavailable. Please try again later.
+    WardrobeServiceUnavailable:
+      description: The database or the server configuration is unavailable.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            success: false
+            error: The wardrobe service is temporarily unavailable. Please try again later.
+    OutfitServiceUnavailable:
+      description: The database or the server configuration is unavailable.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            success: false
+            error: The outfit service is temporarily unavailable. Please try again later.
+    HistoryServiceUnavailable:
+      description: The database or the server configuration is unavailable.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            success: false
+            error: The outfit history service is temporarily unavailable. Please try again later.
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [success, error]
+      properties:
+        success:
+          const: false
+        error:
+          type: string
+          description: A fixed, safe message that can be shown to the user.
+        code:
+          type: string
+          description: >-
+            Machine-readable reason. Sent only by register and sign-in errors, for example
+            `VALIDATION_ERROR`, `DUPLICATE_EMAIL`, `INVALID_CREDENTIALS`.
+
+    RegisterRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          description: >-
+            Must look like an email address (`text@domain.tld`). Trimmed and lowercased before
+            it is stored.
+        password:
+          type: string
+          minLength: 8
+          description: At least 8 characters and not only spaces.
+        name:
+          type: [string, 'null']
+          description: Optional display name, at most 100 characters after trimming.
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+    User:
+      type: object
+      required: [id, email, name, createdAt]
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+        name:
+          type: [string, 'null']
+        createdAt:
+          type: string
+          format: date-time
+    UserResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          const: true
+        data:
+          type: object
+          required: [user]
+          properties:
+            user:
+              $ref: '#/components/schemas/User'
+    LogoutResponse:
+      type: object
+      required: [success, message]
+      properties:
+        success:
+          const: true
+        message:
+          type: string
+
+    Category:
+      type: string
+      enum: [Top, Bottom, Outerwear, Dress, Shoes, Accessory]
+    Color:
+      type: string
+      enum:
+        - Black
+        - White
+        - Grey
+        - Charcoal
+        - Beige
+        - Camel
+        - Brown
+        - Red
+        - Burgundy
+        - Pink
+        - Orange
+        - Yellow
+        - Green
+        - Blue
+        - Navy
+        - Indigo
+        - Purple
+        - Multicolor
+    Season:
+      type: string
+      enum: [Spring, Summer, Autumn, Winter, All-season]
+    Formality:
+      type: string
+      enum: [Casual, Smart casual, Formal]
+    Occasion:
+      type: string
+      enum: [work, dinner, weekend, casual, formal]
+    FeedbackRating:
+      type: string
+      enum: [positive, negative]
+    Palette:
+      type: string
+      description: How the outfit's colors read together, calmest first.
+      enum: [tonal, neutral, one_accent, paired, bold]
+    OutfitRole:
+      type: string
+      enum: [top, bottom, dress, shoes, outerwear, accessory]
+    InsufficientReason:
+      type: string
+      description: |
+        - `no_suitable_items`: none of the user's available items has a formality suitable for the occasion.
+        - `no_complete_outfit`: suitable items exist, but no top and bottom, or dress, can be formed.
+      enum: [no_suitable_items, no_complete_outfit]
+    ItemIdList:
+      type: array
+      description: 1 to 6 distinct wardrobe item IDs, each 1 to 64 characters.
+      minItems: 1
+      maxItems: 6
+      uniqueItems: true
+      items:
+        type: string
+        minLength: 1
+        maxLength: 64
+
+    WardrobeImage:
+      type: object
+      required: [url, publicId]
+      properties:
+        url:
+          type: string
+          format: uri
+          description: The image service's HTTPS URL for the photo.
+        publicId:
+          type: string
+          description: The photo's ID in the image service, under `rewear/users/<userId>/`.
+    WardrobeItemDetails:
+      type: object
+      description: >-
+        An item's editable details. Every property must be a string if present; other
+        properties are ignored. Values are trimmed.
+      required: [category, color, style, season, formality]
+      properties:
+        name:
+          type: string
+          description: Optional name, at most 80 characters after trimming. Blank means none.
+        category:
+          $ref: '#/components/schemas/Category'
+        color:
+          $ref: '#/components/schemas/Color'
+        style:
+          type: string
+          description: Free text such as "Button-down". Required, at most 40 characters after trimming.
+        season:
+          $ref: '#/components/schemas/Season'
+        formality:
+          $ref: '#/components/schemas/Formality'
+    NewWardrobeItemRequest:
+      description: The details plus the `publicId` returned by `POST /api/uploads`.
+      allOf:
+        - $ref: '#/components/schemas/WardrobeItemDetails'
+        - type: object
+          required: [publicId]
+          properties:
+            publicId:
+              type: string
+              description: Must be a photo the signed-in user uploaded.
+    AvailabilityRequest:
+      type: object
+      required: [isAvailable]
+      additionalProperties: false
+      properties:
+        isAvailable:
+          type: boolean
+    WardrobeItem:
+      type: object
+      required:
+        - id
+        - image
+        - category
+        - color
+        - style
+        - season
+        - formality
+        - isAvailable
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+        image:
+          $ref: '#/components/schemas/WardrobeImage'
+        name:
+          type: string
+          description: Present only when the item has a name; left out otherwise.
+        category:
+          $ref: '#/components/schemas/Category'
+        color:
+          $ref: '#/components/schemas/Color'
+        style:
+          type: string
+        season:
+          $ref: '#/components/schemas/Season'
+        formality:
+          $ref: '#/components/schemas/Formality'
+        isAvailable:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    WardrobeItemResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          const: true
+        data:
+          $ref: '#/components/schemas/WardrobeItem'
+    DeletedResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          const: true
+        data:
+          type: object
+          required: [id]
+          properties:
+            id:
+              type: string
+              description: The ID from the request path.
+
+    GenerateOutfitRequest:
+      type: object
+      required: [occasion]
+      additionalProperties: false
+      properties:
+        occasion:
+          $ref: '#/components/schemas/Occasion'
+        shown:
+          type: array
+          description: >-
+            Outfits already shown, as lists of their item IDs, so "Try another" returns a
+            different combination. At most 20 lists. Defaults to none.
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/ItemIdList'
+    OutfitItem:
+      type: object
+      description: A recommended wardrobe item and the part it plays in the outfit.
+      required: [role, id, name, image, category, color, style, season, formality]
+      properties:
+        role:
+          $ref: '#/components/schemas/OutfitRole'
+        id:
+          type: string
+        name:
+          type: [string, 'null']
+          description: Null when the user didn't name the item.
+        image:
+          type: object
+          required: [url]
+          properties:
+            url:
+              type: string
+              format: uri
+        category:
+          $ref: '#/components/schemas/Category'
+        color:
+          $ref: '#/components/schemas/Color'
+        style:
+          type: string
+        season:
+          $ref: '#/components/schemas/Season'
+        formality:
+          $ref: '#/components/schemas/Formality'
+    OutfitExplanation:
+      type: object
+      description: >-
+        The facts the outfit was chosen on, for the "Why these items?" panel. Facts only; the
+        web application writes the sentences.
+      required: [formalities, seasons, palette, alternative]
+      properties:
+        formalities:
+          type: array
+          description: The items' distinct formalities, each suitable for the occasion.
+          items:
+            $ref: '#/components/schemas/Formality'
+        seasons:
+          type: array
+          description: The items' distinct seasons; at most one specific season, plus All-season.
+          items:
+            $ref: '#/components/schemas/Season'
+        palette:
+          $ref: '#/components/schemas/Palette'
+        alternative:
+          type: boolean
+          description: True when the request listed outfits already shown ("Try another").
+    OutfitFeedback:
+      type: object
+      required: [outfitId, rating]
+      properties:
+        outfitId:
+          type: string
+          description: The stored outfit the rating belongs to.
+        rating:
+          $ref: '#/components/schemas/FeedbackRating'
+    OutfitRecommendationOk:
+      type: object
+      required: [status, occasion, season, items, explanation, feedback]
+      properties:
+        status:
+          const: ok
+        occasion:
+          $ref: '#/components/schemas/Occasion'
+        season:
+          $ref: '#/components/schemas/Season'
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/OutfitItem'
+        explanation:
+          $ref: '#/components/schemas/OutfitExplanation'
+        feedback:
+          description: The rating saved for exactly these items and this occasion, or null.
+          oneOf:
+            - $ref: '#/components/schemas/OutfitFeedback'
+            - type: 'null'
+    OutfitRecommendationInsufficient:
+      type: object
+      required: [status, occasion, reason]
+      properties:
+        status:
+          const: insufficient
+        occasion:
+          $ref: '#/components/schemas/Occasion'
+        reason:
+          $ref: '#/components/schemas/InsufficientReason'
+    OutfitRecommendationNoAlternative:
+      type: object
+      description: Every valid combination is among the outfits in `shown`.
+      required: [status, occasion]
+      properties:
+        status:
+          const: no_alternative
+        occasion:
+          $ref: '#/components/schemas/Occasion'
+    OutfitRecommendation:
+      oneOf:
+        - $ref: '#/components/schemas/OutfitRecommendationOk'
+        - $ref: '#/components/schemas/OutfitRecommendationInsufficient'
+        - $ref: '#/components/schemas/OutfitRecommendationNoAlternative'
+      discriminator:
+        propertyName: status
+        mapping:
+          ok: '#/components/schemas/OutfitRecommendationOk'
+          insufficient: '#/components/schemas/OutfitRecommendationInsufficient'
+          no_alternative: '#/components/schemas/OutfitRecommendationNoAlternative'
+
+    SaveOutfitRequest:
+      type: object
+      required: [occasion, itemIds]
+      additionalProperties: false
+      properties:
+        occasion:
+          $ref: '#/components/schemas/Occasion'
+        itemIds:
+          $ref: '#/components/schemas/ItemIdList'
+    SavedOutfitItemPresent:
+      type: object
+      required: [status, id, name, image, category, color, style]
+      properties:
+        status:
+          const: present
+        id:
+          type: string
+        name:
+          type: [string, 'null']
+        image:
+          type: object
+          required: [url]
+          properties:
+            url:
+              type: string
+              format: uri
+        category:
+          $ref: '#/components/schemas/Category'
+        color:
+          $ref: '#/components/schemas/Color'
+        style:
+          type: string
+    SavedOutfitItemRemoved:
+      type: object
+      description: An item deleted from the wardrobe since the outfit was saved.
+      required: [status, id]
+      properties:
+        status:
+          const: removed
+        id:
+          type: string
+    SavedOutfitItem:
+      oneOf:
+        - $ref: '#/components/schemas/SavedOutfitItemPresent'
+        - $ref: '#/components/schemas/SavedOutfitItemRemoved'
+      discriminator:
+        propertyName: status
+        mapping:
+          present: '#/components/schemas/SavedOutfitItemPresent'
+          removed: '#/components/schemas/SavedOutfitItemRemoved'
+    SavedOutfit:
+      type: object
+      required: [id, occasion, savedAt, items]
+      properties:
+        id:
+          type: string
+        occasion:
+          $ref: '#/components/schemas/Occasion'
+        savedAt:
+          type: string
+          format: date-time
+        items:
+          type: array
+          description: In outfit order (top, bottom, dress, outerwear, shoes, accessory), removed items last.
+          items:
+            $ref: '#/components/schemas/SavedOutfitItem'
+    SavedOutfitResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          const: true
+        data:
+          $ref: '#/components/schemas/SavedOutfit'
+
+    MarkWornRequest:
+      type: object
+      required: [itemIds, occasion, wornOn]
+      additionalProperties: false
+      properties:
+        itemIds:
+          type: array
+          description: >-
+            1 to 6 wardrobe item IDs, distinct ignoring letter case. Only letters, digits, `_`, and
+            `-` are allowed.
+          minItems: 1
+          maxItems: 6
+          items:
+            type: string
+            pattern: '^[A-Za-z0-9_-]{1,64}$'
+        occasion:
+          $ref: '#/components/schemas/Occasion'
+        wornOn:
+          type: string
+          format: date
+          description: The user's local date, `YYYY-MM-DD`. Must be today's date in some time zone.
+    WornItemPresent:
+      type: object
+      required: [status, id, name, image, category, color, style, season, formality]
+      properties:
+        status:
+          const: present
+        id:
+          type: string
+        name:
+          type: [string, 'null']
+        image:
+          type: object
+          required: [url]
+          properties:
+            url:
+              type: string
+              format: uri
+        category:
+          $ref: '#/components/schemas/Category'
+        color:
+          $ref: '#/components/schemas/Color'
+        style:
+          type: string
+        season:
+          $ref: '#/components/schemas/Season'
+        formality:
+          $ref: '#/components/schemas/Formality'
+    WornItemMissing:
+      type: object
+      description: An item no longer in the user's wardrobe. Nothing else is known about it.
+      required: [status, id]
+      properties:
+        status:
+          const: missing
+        id:
+          type: string
+    WornItem:
+      oneOf:
+        - $ref: '#/components/schemas/WornItemPresent'
+        - $ref: '#/components/schemas/WornItemMissing'
+      discriminator:
+        propertyName: status
+        mapping:
+          present: '#/components/schemas/WornItemPresent'
+          missing: '#/components/schemas/WornItemMissing'
+    OutfitHistoryEntry:
+      type: object
+      required: [id, wornOn, occasion, recordedAt, items]
+      properties:
+        id:
+          type: string
+        wornOn:
+          type: string
+          format: date
+          description: The user's local date, `YYYY-MM-DD`.
+        occasion:
+          description: Null only if the stored outfit no longer exists.
+          oneOf:
+            - $ref: '#/components/schemas/Occasion'
+            - type: 'null'
+        recordedAt:
+          type: string
+          format: date-time
+        items:
+          type: array
+          description: In outfit order (top, bottom, dress, outerwear, shoes, accessory), missing items last.
+          items:
+            $ref: '#/components/schemas/WornItem'
+    OutfitHistoryList:
+      type: object
+      required: [entries]
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/OutfitHistoryEntry'
+    MarkWornResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          const: true
+        data:
+          type: object
+          required: [created, entry]
+          properties:
+            created:
+              type: boolean
+              description: False when these clothes were already recorded on this date.
+            entry:
+              $ref: '#/components/schemas/OutfitHistoryEntry'
+
+    RateOutfitRequest:
+      type: object
+      required: [occasion, itemIds, rating]
+      additionalProperties: false
+      properties:
+        occasion:
+          $ref: '#/components/schemas/Occasion'
+        itemIds:
+          $ref: '#/components/schemas/ItemIdList'
+        rating:
+          $ref: '#/components/schemas/FeedbackRating'
+
+    CleanupResult:
+      type: object
+      required: [deleted, confirmed]
+      properties:
+        deleted:
+          type: integer
+          minimum: 0
+          description: Abandoned uploads deleted.
+        confirmed:
+          type: integer
+          minimum: 0
+          description: Pending uploads found in use by a wardrobe item and no longer marked pending.
+
+  examples:
+    WardrobeItemResponse:
+      summary: One wardrobe item
+      value:
+        success: true
+        data:
+          id: 6650b7e1c3d4e5f6a7b8c9d1
+          image:
+            url: https://res.cloudinary.com/example-cloud/image/upload/v1731577800/rewear/users/6650a1b2c3d4e5f6a7b8c9d0/k3x9q2.jpg
+            publicId: rewear/users/6650a1b2c3d4e5f6a7b8c9d0/k3x9q2
+          name: Linen shirt
+          category: Top
+          color: White
+          style: Button-down
+          season: Summer
+          formality: Smart casual
+          isAvailable: true
+          createdAt: '2026-11-14T09:35:00.000Z'
+          updatedAt: '2026-11-14T09:35:00.000Z'
+    WardrobeItemListResponse:
+      summary: The wardrobe
+      value:
+        success: true
+        data:
+          - id: 6650b7e1c3d4e5f6a7b8c9d1
+            image:
+              url: https://res.cloudinary.com/example-cloud/image/upload/v1731577800/rewear/users/6650a1b2c3d4e5f6a7b8c9d0/k3x9q2.jpg
+              publicId: rewear/users/6650a1b2c3d4e5f6a7b8c9d0/k3x9q2
+            name: Linen shirt
+            category: Top
+            color: White
+            style: Button-down
+            season: Summer
+            formality: Smart casual
+            isAvailable: true
+            createdAt: '2026-11-14T09:35:00.000Z'
+            updatedAt: '2026-11-14T09:35:00.000Z'
+    SavedOutfitResponse:
+      summary: A saved outfit with one item since deleted
+      value:
+        success: true
+        data:
+          id: 6650c9a4c3d4e5f6a7b8c9e1
+          occasion: work
+          savedAt: '2026-11-14T10:00:00.000Z'
+          items:
+            - status: present
+              id: 6650b7e1c3d4e5f6a7b8c9d1
+              name: Linen shirt
+              image:
+                url: https://res.cloudinary.com/example-cloud/image/upload/v1731577800/rewear/users/6650a1b2c3d4e5f6a7b8c9d0/k3x9q2.jpg
+              category: Top
+              color: White
+              style: Button-down
+            - status: removed
+              id: 6650b7e1c3d4e5f6a7b8c9d2
+    SavedOutfitListResponse:
+      summary: The saved outfits
+      value:
+        success: true
+        data:
+          - id: 6650c9a4c3d4e5f6a7b8c9e1
+            occasion: work
+            savedAt: '2026-11-14T10:00:00.000Z'
+            items:
+              - status: present
+                id: 6650b7e1c3d4e5f6a7b8c9d1
+                name: Linen shirt
+                image:
+                  url: https://res.cloudinary.com/example-cloud/image/upload/v1731577800/rewear/users/6650a1b2c3d4e5f6a7b8c9d0/k3x9q2.jpg
+                category: Top
+                color: White
+                style: Button-down
+              - status: removed
+                id: 6650b7e1c3d4e5f6a7b8c9d2
+    OutfitHistoryListResponse:
+      summary: The outfit history
+      value:
+        success: true
+        data:
+          entries:
+            - id: 6650d2f0c3d4e5f6a7b8c9f1
+              wornOn: '2026-11-14'
+              occasion: work
+              recordedAt: '2026-11-14T17:45:00.000Z'
+              items:
+                - status: present
+                  id: 6650b7e1c3d4e5f6a7b8c9d1
+                  name: Linen shirt
+                  image:
+                    url: https://res.cloudinary.com/example-cloud/image/upload/v1731577800/rewear/users/6650a1b2c3d4e5f6a7b8c9d0/k3x9q2.jpg
+                  category: Top
+                  color: White
+                  style: Button-down
+                  season: Summer
+                  formality: Smart casual
+                - status: missing
+                  id: 6650b7e1c3d4e5f6a7b8c9d2
+    MarkWornCreatedResponse:
+      summary: A new wear
+      value:
+        success: true
+        data:
+          created: true
+          entry:
+            id: 6650d2f0c3d4e5f6a7b8c9f1
+            wornOn: '2026-11-14'
+            occasion: work
+            recordedAt: '2026-11-14T17:45:00.000Z'
+            items:
+              - status: present
+                id: 6650b7e1c3d4e5f6a7b8c9d1
+                name: Linen shirt
+                image:
+                  url: https://res.cloudinary.com/example-cloud/image/upload/v1731577800/rewear/users/6650a1b2c3d4e5f6a7b8c9d0/k3x9q2.jpg
+                category: Top
+                color: White
+                style: Button-down
+                season: Summer
+                formality: Smart casual
+              - status: missing
+                id: 6650b7e1c3d4e5f6a7b8c9d2
+    MarkWornExistingResponse:
+      summary: Already recorded on this date
+      value:
+        success: true
+        data:
+          created: false
+          entry:
+            id: 6650d2f0c3d4e5f6a7b8c9f1
+            wornOn: '2026-11-14'
+            occasion: work
+            recordedAt: '2026-11-14T17:45:00.000Z'
+            items:
+              - status: present
+                id: 6650b7e1c3d4e5f6a7b8c9d1
+                name: Linen shirt
+                image:
+                  url: https://res.cloudinary.com/example-cloud/image/upload/v1731577800/rewear/users/6650a1b2c3d4e5f6a7b8c9d0/k3x9q2.jpg
+                category: Top
+                color: White
+                style: Button-down
+                season: Summer
+                formality: Smart casual
+              - status: missing
+                id: 6650b7e1c3d4e5f6a7b8c9d2
