@@ -1,0 +1,64 @@
+US8 Alternative Outfit Suggestions (#13), Checkpoint 4: final integration and verification
+Branch: feature/13-alternative-outfit-suggestions (merged into feature/14-saved-outfits by #45).
+Work date: 2026-11-11. Nothing ran on Vercel. Nothing was saved.
+
+=== COMMITS ===
+b763748  test: smoke-test alternative outfits on the production build (#13)
+1e0a047, 05fe307, b2d72f8, 913906c  evidence and screenshots
+
+=== ACCEPTANCE CRITERIA -> EVIDENCE ===
+The user can request another recommendation
+  tests: CreateOutfitForm.test.tsx "asks for a different outfit than the one shown, and shows it";
+         outfitRoutes.test.ts
+  browser: screenshots/desktop-1280-try-another.png (Try another next to Save outfit)
+A different combination is generated when enough alternatives exist
+  tests: generateOutfit.test.ts "returns a different combination...", "keeps the season and formality
+         rules for alternatives"; smoke HTTP check for work, weekend and casual
+  browser: desktop-1280-try-another.png; smoke Weekend gave 4 distinct outfits in a row
+The application avoids repeatedly returning the exact same outfit when alternatives exist
+  tests: generateOutfit.test.ts "offers every distinct combination once, then says there is no
+         alternative", "matches shown outfits regardless of item order"; CreateOutfitForm.test.tsx
+         "sends every outfit shown so far..."
+  browser: test account, 3 Work outfits in a row with no item repeated
+If no suitable alternative exists, the application clearly tells the user
+  tests: CreateOutfitForm.test.tsx "says when there is no other combination, keeping the current
+         outfit"; outfitRecommendationService.test.ts
+  browser: screenshots/desktop-1280-no-alternative.png, screenshots/mobile-375-no-alternative.png
+
+=== TEST ACCOUNT RUN (2026-11-11, local dev server, test@example.com, 106 items) ===
+Signed in through the real sign-in form. Work -> Generate Outfit, then Try another twice. Every piece
+changed each time:
+ 1. Camel Shirt Dress, Black Pointed Heels, Brown Suede Jacket, Red Satin Clutch
+ 2. Blush Slip Dress, Red Stiletto Heels, White Linen Blazer, Black Dress Watch  (desktop-1280-try-another.png)
+ 3. Purple Cocktail Dress, Beige Driving Loafers, Black Tuxedo Jacket, Brown Leather Strap Watch
+No alternative: 22 Formal items were temporarily marked unavailable through
+PATCH /api/wardrobe/[itemId]/availability, leaving one All-season Formal outfit (Little Black Dress,
+Black Pointed Heels, Black Tuxedo Jacket, Red Satin Clutch). Formal -> Generate Outfit -> Try another
+showed "There isn't another suitable combination right now." with that outfit kept, at 1280 px and
+375 px. The 22 items were then set back to available (106 items, 0 unavailable).
+At 375 px: one column, no horizontal scroll (scrollWidth <= innerWidth).
+
+=== SMOKE RUN (tests/smoke/outfitGeneration.smoke.ts, Chrome, production build) ===
+22 of 22 pass, 2 of them new for US8.
+ 1. Weekend outfit after Try again: Linen tee + Denim shorts + Loafers.
+ 2. Try another -> Oxford shirt + Chinos + Loafers + Wool coat.
+ 3. Try another -> Linen tee + Chinos + Loafers.
+ 4. Try another -> Oxford shirt + Denim shorts + Loafers.
+ 5. Try another -> "There isn't another suitable combination right now."; outfit 4 stays.
+ 6. One POST /api/outfits/generate per press. The unavailable blazer and User B's items never
+    appeared. No unexpected console errors or failed requests.
+
+=== COMMANDS AND RESULTS (2026-11-11) ===
+npm test               exit 0  1540 passed, 1 skipped (pre-existing), 84 files
+npm run test:db        exit 0  410 passed, 15 files
+npm run test:smoke     exit 0  44 passed, 11 skipped without Chrome; /api/outfits/generate builds as f
+outfitGeneration.smoke.ts with Chrome: 22 passed
+npm run typecheck, npm run lint: exit 0
+
+=== NOTES / RISKS ===
+- Shown outfits live in the page: a refresh or a new Generate Outfit starts over, and the first
+  outfit for an occasion is the same each time (US7).
+- Only the last 20 shown outfits are sent, so in a very large wardrobe an older one can return.
+- The outfit rules are still provisional (DESIGN "Outfit algorithm" open item).
+- No Playwright test (not installed yet). No OpenAPI file yet to document `shown`.
+- Screenshots were converted from JPEG to PNG on 2026-11-13 to match the other issues' evidence.

@@ -28,6 +28,9 @@ export type RepositoryOperation =
   | 'account.create'
   | 'session.create'
   | 'outfit.listAvailableItems'
+  | 'outfit.save'
+  | 'outfit.listSaved'
+  | 'outfit.unsave'
   | 'session.findActive'
   | 'session.revoke'
   | 'wardrobeItem.create'
@@ -38,7 +41,13 @@ export type RepositoryOperation =
   | 'wardrobeItem.findByIdForOwner'
   | 'wardrobeItem.updateForOwner'
   | 'wardrobeItem.setAvailability'
-  | 'wardrobeItem.deleteForOwner';
+  | 'wardrobeItem.deleteForOwner'
+  | 'outfitHistory.findOrCreateOutfit'
+  | 'outfitHistory.recordWorn'
+  | 'outfitHistory.listByOwner'
+  | 'outfitFeedback.setRating'
+  | 'outfitFeedback.clearRating'
+  | 'outfitFeedback.listRatedByOccasion';
 
 export type ErrorCategory =
   | 'connection'

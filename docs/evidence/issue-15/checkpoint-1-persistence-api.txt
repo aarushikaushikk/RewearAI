@@ -1,0 +1,40 @@
+US10 (#15) Outfit History - Checkpoint 1: persistence, authenticated API, tests
+Branch: feature/15-outfit-history (base origin/main 90a9e1c). Date: 2026-11-11.
+No CreateOutfitForm.tsx change; no PR #43 code used; no outfit-generation change.
+
+TDD RED (before implementation)
+  npx vitest run <7 new/changed unit+integration files>
+  6 files failed to load: Cannot find module '@/lib/dates/localDate',
+    '@/services/outfitHistory/outfitCombination', '@/services/outfitHistoryService',
+    '@/lib/outfits/outfitHistoryHandlers'.
+  src/models/OutfitHistory.test.ts: 3 failed, 17 passed
+    (missing combinationKey not rejected; no unique owner+wornOn+combinationKey index;
+     blank combinationKey not rejected).
+
+TDD GREEN
+  Focused (7 files):                     169/169 passed
+  tests/db/mongoOutfitHistoryRepository: 28/28 passed (real temporary MongoDB)
+  Related DB files (mongoIndexes, mongoWardrobeItemRepository,
+    repositoryFailures, mongoAvailableWardrobeItems): 4 files, 100/100 passed
+  Focused regression (dates, outfits, validation, repositories, outfit routes,
+    outfit history routes, models): 24 files, 579/579 passed
+  npx tsc --noEmit: exit 0
+  npx eslint <changed and new files>: exit 0
+  git diff --check: exit 0; all changed and new files CRLF
+
+MUTATION CHECKS (restored afterwards, verified with cmp)
+  M1 combination index made non-unique: 4 DB tests failed, including
+     10 simultaneous requests and the second-outfit race.
+  M2 worn-date window disabled: 11 tests failed.
+
+DUPLICATE PREVENTION
+  OutfitHistory.combinationKey = sorted, lowercased item IDs.
+  Unique index { owner, wornOn, combinationKey } built by ensureRequiredIndexes
+  before any write. recordWorn inserts; a duplicate-key error returns the
+  existing record (created: false, HTTP 200). No Outfit is ever deleted.
+
+NOT RUN (by instruction): full npm test, full test:db, build, smoke, browser.
+
+DISK: 6,455 MB free before DB tests; 5,651 MB after. No mongo-mem-*/mdb-* left.
+  The drop came from Windows Update downloads (SoftwareDistribution\Download
+  441 MB -> 3.6 GB), not from test artifacts.

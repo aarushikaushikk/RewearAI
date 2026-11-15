@@ -37,7 +37,13 @@ const CHINOS = outfitItem({
   image: { url: 'https://res.cloudinary.com/test/image/upload/v1/chinos.jpg' },
 });
 
-const OUTFIT: OutfitRecommendationDto = { status: 'ok', occasion: 'work', season: 'All-season', items: [SHIRT, CHINOS] };
+const OUTFIT: OutfitRecommendationDto = {
+  status: 'ok',
+  occasion: 'work',
+  season: 'All-season',
+  items: [SHIRT, CHINOS],
+  explanation: { formalities: ['Smart casual'], seasons: ['All-season'], palette: 'neutral', alternative: false },
+};
 
 function reply(status: number, body: unknown = {}): Response {
   return { ok: status >= 200 && status < 300, status, json: async () => body } as Response;
@@ -204,6 +210,94 @@ describe('CreateOutfitForm', () => {
     expect(screen.queryByRole('list')).not.toBeInTheDocument();
   });
 
+  describe('why the wardrobe is insufficient (US12)', () => {
+    const NO_SUITABLE = 'None of your available clothing is suitable for this occasion.';
+    const NO_COMPLETE = 'An outfit needs a suitable top and bottom, or a suitable dress.';
+
+    it.each([
+      ['no_suitable_items', NO_SUITABLE, NO_COMPLETE],
+      ['no_complete_outfit', NO_COMPLETE, NO_SUITABLE],
+    ])('explains %s after the general message, keeping the recovery links', async (reason, shown, notShown) => {
+      mockFetch(success({ status: 'insufficient', occasion: 'work', reason }));
+      render(<CreateOutfitForm />);
+
+      await generateFor(user, 'Work');
+
+      const status = await screen.findByRole('status');
+      expect(within(status).getByText("There aren't enough available items for a work outfit yet.")).toBeInTheDocument();
+      expect(within(status).getByText(shown)).toBeInTheDocument();
+      expect(within(status).queryByText(notShown)).not.toBeInTheDocument();
+      expect(within(status).getByRole('link', { name: 'View wardrobe' })).toHaveAttribute('href', '/wardrobe');
+      expect(within(status).getByRole('link', { name: 'Add clothing' })).toHaveAttribute('href', '/wardrobe/new');
+    });
+
+    it.each([
+      ['a missing reason', {}],
+      ['an unknown reason', { reason: 'not_a_reason' }],
+      ['an inherited property name as the reason', { reason: 'toString' }],
+      ['a reason that is not text', { reason: 42 }],
+    ])('shows only the general message for %s', async (_label, extra) => {
+      mockFetch(success({ status: 'insufficient', occasion: 'dinner', ...extra }));
+      render(<CreateOutfitForm />);
+
+      await generateFor(user, 'Dinner');
+
+      const status = await screen.findByRole('status');
+      expect(within(status).getByText("There aren't enough available items for a dinner outfit yet.")).toBeInTheDocument();
+      expect(within(status).queryByText(NO_SUITABLE)).not.toBeInTheDocument();
+      expect(within(status).queryByText(NO_COMPLETE)).not.toBeInTheDocument();
+      expect(within(status).getAllByRole('paragraph')).toHaveLength(1);
+      expect(within(status).getByRole('link', { name: 'View wardrobe' })).toBeInTheDocument();
+      expect(within(status).getByRole('link', { name: 'Add clothing' })).toBeInTheDocument();
+    });
+
+    it('lets the user generate again for the same occasion after updating the wardrobe, replacing the message with the outfit', async () => {
+      const fetchMock = mockFetch(
+        success({ status: 'insufficient', occasion: 'work', reason: 'no_complete_outfit' }),
+        success(OUTFIT),
+      );
+      render(<CreateOutfitForm />);
+
+      await generateFor(user, 'Work');
+      const status = await screen.findByRole('status');
+      expect(within(status).getByRole('link', { name: 'View wardrobe' })).toBeInTheDocument();
+      expect(within(status).getByRole('link', { name: 'Add clothing' })).toBeInTheDocument();
+      expect(occasionSelect()).toHaveValue('Work');
+      expect(generateButton()).toBeEnabled();
+
+      await user.click(generateButton());
+
+      expect(await screen.findByRole('heading', { name: 'Your outfit for Work' })).toBeInTheDocument();
+      expect(sentBody(fetchMock, 1)).toEqual({ occasion: 'work' });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(screen.queryByText(/aren't enough available items/)).not.toBeInTheDocument();
+      expect(screen.queryByText(NO_COMPLETE)).not.toBeInTheDocument();
+      expect(screen.queryByRole('status')).not.toBeInTheDocument();
+      expect(occasionSelect()).toHaveValue('Work');
+    });
+
+    it('hides the previous explanation while generating again, and shows the new reason if still insufficient', async () => {
+      const pending = deferred<Response>();
+      mockFetch(success({ status: 'insufficient', occasion: 'casual', reason: 'no_suitable_items' }), pending.promise);
+      render(<CreateOutfitForm />);
+
+      await generateFor(user, 'Casual');
+      expect(await screen.findByText(NO_SUITABLE)).toBeInTheDocument();
+
+      await user.click(generateButton());
+      // The only status now is the button's "Loading…"; the old explanation is gone.
+      expect(screen.getByRole('status')).toHaveTextContent('Loading…');
+      expect(screen.queryByText(/aren't enough available items/)).not.toBeInTheDocument();
+      expect(screen.queryByText(NO_SUITABLE)).not.toBeInTheDocument();
+
+      await act(async () => pending.resolve(success({ status: 'insufficient', occasion: 'casual', reason: 'no_complete_outfit' })));
+      const status = screen.getByRole('status');
+      expect(within(status).getByText(NO_COMPLETE)).toBeInTheDocument();
+      expect(within(status).queryByText(NO_SUITABLE)).not.toBeInTheDocument();
+      expect(within(status).getByRole('link', { name: 'Add clothing' })).toBeInTheDocument();
+    });
+  });
+
   it.each([
     ['an unavailable service (503)', reply(503), 'Service temporarily unavailable. Please try again later.'],
     ['a server error (500)', reply(500, { success: false, error: 'driver detail' }), "We couldn't generate an outfit. Try again."],
@@ -255,6 +349,186 @@ describe('CreateOutfitForm', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent("We couldn't generate an outfit. Try again.");
     expect(screen.queryByRole('heading', { name: /Your outfit for/ })).not.toBeInTheDocument();
+  });
+
+  it('offers Save outfit for the generated outfit, saving its occasion and items', async () => {
+    const fetchMock = mockFetch(success(OUTFIT), reply(201, { success: true, data: { id: 'outfit_1' } }));
+    render(<CreateOutfitForm />);
+    await generateFor(user, 'Work');
+
+    await user.click(await screen.findByRole('button', { name: 'Save outfit' }));
+
+    expect(fetchMock.mock.calls[1][0]).toBe('/api/outfits/saved');
+    expect(sentBody(fetchMock, 1)).toEqual({ occasion: 'work', itemIds: ['item_shirt', 'item_chinos'] });
+    expect(await screen.findByText('Outfit saved.')).toBeInTheDocument();
+  });
+
+  it('keeps the outfit on screen when saving fails', async () => {
+    mockFetch(success(OUTFIT), reply(500));
+    render(<CreateOutfitForm />);
+    await generateFor(user, 'Work');
+
+    await user.click(await screen.findByRole('button', { name: 'Save outfit' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent("We couldn't save your outfit. Try again.");
+    expect(screen.getByRole('heading', { name: 'Your outfit for Work' })).toBeInTheDocument();
+    expect(screen.getByText('Linen shirt')).toBeInTheDocument();
+  });
+
+  it('offers to save a newly generated outfit afresh', async () => {
+    const other = { ...OUTFIT, occasion: 'casual' as const };
+    mockFetch(success(OUTFIT), reply(201, { success: true, data: { id: 'outfit_1' } }), success(other));
+    render(<CreateOutfitForm />);
+    await generateFor(user, 'Work');
+    await user.click(await screen.findByRole('button', { name: 'Save outfit' }));
+    await screen.findByText('Outfit saved.');
+
+    await generateFor(user, 'Casual');
+
+    expect(await screen.findByRole('button', { name: 'Save outfit' })).toBeEnabled();
+    expect(screen.queryByText('Outfit saved.')).not.toBeInTheDocument();
+  });
+
+  describe('Try another outfit (US8)', () => {
+    const LOAFERS = outfitItem({ id: 'item_loafers', role: 'shoes', category: 'Shoes', name: 'Brown loafers' });
+    const POLO = outfitItem({ id: 'item_polo', name: 'Knit polo' });
+    const SECOND: OutfitRecommendationDto = { ...OUTFIT, items: [POLO, CHINOS, LOAFERS] };
+    const NO_ALTERNATIVE = { status: 'no_alternative', occasion: 'work' };
+    const tryAnother = () => screen.getByRole('button', { name: 'Try another' });
+
+    async function showFirst(...later: (Response | Promise<Response> | Error)[]) {
+      const fetchMock = mockFetch(success(OUTFIT), ...later);
+      render(<CreateOutfitForm />);
+      await generateFor(user, 'Work');
+      await screen.findByText('Linen shirt');
+      return fetchMock;
+    }
+
+    it('asks for a different outfit than the one shown, and shows it', async () => {
+      const fetchMock = await showFirst(success(SECOND));
+
+      await user.click(tryAnother());
+
+      expect(sentBody(fetchMock, 1)).toEqual({ occasion: 'work', shown: [['item_shirt', 'item_chinos']] });
+      expect(await screen.findByText('Knit polo')).toBeInTheDocument();
+      expect(screen.getByText('Brown loafers')).toBeInTheDocument();
+      expect(screen.queryByText('Linen shirt')).not.toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Your outfit for Work' })).toHaveFocus();
+    });
+
+    it('sends every outfit shown so far, so earlier ones are not repeated', async () => {
+      const fetchMock = await showFirst(success(SECOND), success(NO_ALTERNATIVE));
+
+      await user.click(tryAnother());
+      await screen.findByText('Knit polo');
+      await user.click(tryAnother());
+
+      expect(sentBody(fetchMock, 2)).toEqual({
+        occasion: 'work',
+        shown: [
+          ['item_shirt', 'item_chinos'],
+          ['item_polo', 'item_chinos', 'item_loafers'],
+        ],
+      });
+    });
+
+    it('says when there is no other combination, keeping the current outfit', async () => {
+      await showFirst(success(NO_ALTERNATIVE));
+
+      await user.click(tryAnother());
+
+      expect(await screen.findByRole('status')).toHaveTextContent("There isn't another suitable combination right now.");
+      expect(screen.getByText('Linen shirt')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Save outfit' })).toBeEnabled();
+    });
+
+    it('keeps the current outfit on screen while the next one loads, sending one request', async () => {
+      const pending = deferred<Response>();
+      const fetchMock = await showFirst(pending.promise);
+
+      await user.click(tryAnother());
+      fireEvent.click(tryAnother());
+
+      expect(tryAnother()).toBeDisabled();
+      expect(screen.getByText('Linen shirt')).toBeInTheDocument();
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      await act(async () => pending.resolve(success(SECOND)));
+      expect(await screen.findByText('Knit polo')).toBeInTheDocument();
+    });
+
+    it('keeps the outfit and explains a failure, and Try another retries', async () => {
+      const fetchMock = await showFirst(reply(500), success(SECOND));
+
+      await user.click(tryAnother());
+
+      expect(await screen.findByRole('alert')).toHaveTextContent("We couldn't generate an outfit. Try again.");
+      expect(screen.getByText('Linen shirt')).toBeInTheDocument();
+
+      await user.click(tryAnother());
+      expect(await screen.findByText('Knit polo')).toBeInTheDocument();
+      expect(sentBody(fetchMock, 2)).toEqual({ occasion: 'work', shown: [['item_shirt', 'item_chinos']] });
+    });
+
+    it('treats a malformed answer as a failure, keeping the outfit', async () => {
+      await showFirst(success({ status: 'ok', occasion: 'casual', items: [POLO] }));
+
+      await user.click(tryAnother());
+
+      expect(await screen.findByRole('alert')).toHaveTextContent("We couldn't generate an outfit. Try again.");
+      expect(screen.getByText('Linen shirt')).toBeInTheDocument();
+    });
+
+    it('offers Sign in when the session ended while asking for another', async () => {
+      await showFirst(reply(401));
+
+      await user.click(tryAnother());
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('Your session has ended. Sign in again to continue.');
+      expect(screen.getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', SIGN_IN_SESSION_ENDED_PATH);
+    });
+
+    it('shows the wardrobe links when the wardrobe can no longer make any outfit', async () => {
+      await showFirst(success({ status: 'insufficient', occasion: 'work', reason: 'no_complete_outfit' }));
+
+      await user.click(tryAnother());
+
+      expect(await screen.findByText("There aren't enough available items for a work outfit yet.")).toBeInTheDocument();
+      expect(screen.queryByText('Linen shirt')).not.toBeInTheDocument();
+    });
+
+    it('starts a new outfit unsaved', async () => {
+      await showFirst(reply(201, { success: true, data: { id: 'outfit_1' } }), success(SECOND));
+      await user.click(screen.getByRole('button', { name: 'Save outfit' }));
+      await screen.findByText('Outfit saved.');
+
+      await user.click(tryAnother());
+
+      await screen.findByText('Knit polo');
+      expect(screen.getByRole('button', { name: 'Save outfit' })).toBeEnabled();
+      expect(screen.queryByText('Outfit saved.')).not.toBeInTheDocument();
+    });
+
+    it('starts over on Generate Outfit, forgetting the outfits shown before', async () => {
+      const fetchMock = await showFirst(success(SECOND), success(OUTFIT));
+      await user.click(tryAnother());
+      await screen.findByText('Knit polo');
+
+      await user.click(generateButton());
+
+      await screen.findByText('Linen shirt');
+      expect(sentBody(fetchMock, 2)).toEqual({ occasion: 'work' });
+    });
+
+    it('forgets the shown outfits when the occasion changes', async () => {
+      const casual = { ...OUTFIT, occasion: 'casual' as const };
+      const fetchMock = await showFirst(success(casual), success(NO_ALTERNATIVE));
+      await generateFor(user, 'Casual');
+      await screen.findByText('Linen shirt');
+
+      await user.click(tryAnother());
+
+      expect(sentBody(fetchMock, 2)).toEqual({ occasion: 'casual', shown: [['item_shirt', 'item_chinos']] });
+    });
   });
 
   describe('robustness (final review fixes)', () => {

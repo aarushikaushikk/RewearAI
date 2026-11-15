@@ -56,6 +56,10 @@ const B_ITEMS: Seed[] = [
 ];
 const NEVER_SHOWN = ['A Unavailable blazer', 'B Silk gown', 'B Hoodie', 'B Joggers'];
 
+// US12 reason lines on Create Outfit.
+const NO_SUITABLE = 'None of your available clothing is suitable for this occasion.';
+const NO_COMPLETE = 'An outfit needs a suitable top and bottom, or a suitable dress.';
+
 const EXPECTED: Record<Occasion, string[] | 'insufficient'> = {
   work: ['A Oxford shirt', 'A Chinos', 'A Loafers', 'A Wool coat'],
   dinner: ['A Oxford shirt', 'A Chinos', 'A Loafers', 'A Wool coat'],
@@ -98,6 +102,16 @@ async function seed(ownerId: string, items: Seed[]) {
       isAvailable: item.isAvailable ?? true,
     });
   }
+}
+
+/**
+ * Sets a seeded item's availability in the temporary database. US6's API can't be used here:
+ * the wardrobe service needs Cloudinary settings, which this smoke test blanks on purpose, so
+ * it answers 503. US6's API itself is covered by tests/integration/api/insufficientWardrobe.test.ts.
+ */
+async function setSeededAvailability(name: string, isAvailable: boolean) {
+  const result = await database.collection('wardrobeitems').updateOne({ name }, { $set: { isAvailable } });
+  expect(result.matchedCount, name).toBe(1);
 }
 
 function generate(body: unknown, cookie = cookieA, origin = app.origin) {
@@ -147,10 +161,51 @@ describe('US7 outfit generation on the production build (HTTP)', () => {
     } else {
       expect(data.status).toBe('ok');
       expect(data.items.map((i: { name: string }) => i.name)).toEqual(expected);
+      // US13: the explanation restates the chosen pieces' own formality and seasons.
+      const items = data.items as { formality: string; season: string }[];
+      expect(data.explanation).toMatchObject({ alternative: false });
+      expect([...data.explanation.formalities].sort()).toEqual([...new Set(items.map((i) => i.formality))].sort());
+      expect([...data.explanation.seasons].sort()).toEqual([...new Set(items.map((i) => i.season))].sort());
+      expect(['tonal', 'neutral', 'one_accent', 'paired', 'bold']).toContain(data.explanation.palette);
     }
     const json = JSON.stringify(data);
     for (const name of NEVER_SHOWN) expect(json).not.toContain(name);
     expect(json).not.toMatch(/publicId|ownerId|isAvailable/);
+  });
+
+  it.each(['work', 'weekend', 'casual'] as const)(
+    "offers only new combinations of User A's items for %s, then says none are left (US8)",
+    async (occasion) => {
+      const shown: string[][] = [];
+      let data: { status: string; items?: { id: string }[] } | undefined;
+      for (let i = 0; i <= 20; i++) {
+        const res = await generate(shown.length ? { occasion, shown } : { occasion });
+        expect(res.status).toBe(200);
+        data = (await res.json()).data;
+        if (data?.status !== 'ok') break;
+        const json = JSON.stringify(data);
+        for (const name of NEVER_SHOWN) expect(json).not.toContain(name);
+        shown.push(data.items!.map((item) => item.id));
+      }
+
+      expect(data).toEqual({ status: 'no_alternative', occasion });
+      expect(new Set(shown.map((ids) => [...ids].sort().join())).size).toBe(shown.length);
+    },
+  );
+
+  it('US12: reports a casual wardrobe as incomplete while its only casual top is unavailable, then recovers', async () => {
+    try {
+      await setSeededAvailability('A Linen tee', false);
+      const before = (await (await generate({ occasion: 'casual' })).json()).data;
+      expect(before).toEqual({ status: 'insufficient', occasion: 'casual', reason: 'no_complete_outfit' });
+    } finally {
+      // Later checks expect the seeded availability.
+      await setSeededAvailability('A Linen tee', true);
+    }
+    const after = (await (await generate({ occasion: 'casual' })).json()).data;
+    expect(after.status).toBe('ok');
+    expect(after.items.map((i: { name: string }) => i.name)).toEqual(EXPECTED.casual);
+    for (const name of NEVER_SHOWN) expect(JSON.stringify(after)).not.toContain(name);
   });
 });
 
@@ -244,6 +299,16 @@ describe.runIf(CHROME_PATH)('US7 Create Outfit in a real browser', () => {
     page.evaluate<string[]>(
       `[...document.querySelectorAll('ul[aria-label="Items in this outfit"] li p.font-semibold')].map((p) => p.textContent)`,
     );
+  const statusText = () =>
+    page.evaluate<string>(
+      `[...document.querySelectorAll('section[role="status"]')].map((s) => s.innerText).join('\\n')`,
+    );
+  const clickLink = (text: string) =>
+    page.evaluate(`(() => {
+      const link = [...document.querySelectorAll('a')].find((a) => a.textContent.trim() === ${JSON.stringify(text)});
+      if (!link) throw new Error('No link named ' + ${JSON.stringify(text)});
+      link.click();
+    })()`);
   const generateAndWait = async (label: string) => {
     await setOccasion(label);
     await clickButton('Generate Outfit');
@@ -325,6 +390,10 @@ describe.runIf(CHROME_PATH)('US7 Create Outfit in a real browser', () => {
     expect(await outfitNames()).toEqual(EXPECTED.work);
     const text = await bodyText();
     for (const role of ['Top', 'Bottom', 'Shoes', 'Outerwear']) expect(text).toContain(role);
+    // US13: the explanation panel, with the basic note (the photo model is never downloaded here).
+    expect(text).toContain('Why these items?');
+    expect(text).toMatch(/Picked for Work because every piece is [^.]+, /);
+    expect(text).not.toContain('chosen with on-device AI');
     for (const name of NEVER_SHOWN) expect(text).not.toContain(name);
     expect(await page.evaluate('document.activeElement && document.activeElement.id')).toBe('outfit-heading');
 
@@ -369,8 +438,54 @@ describe.runIf(CHROME_PATH)('US7 Create Outfit in a real browser', () => {
       `Object.fromEntries([...document.querySelectorAll('a')].filter((a) => ['View wardrobe', 'Add clothing'].includes(a.textContent)).map((a) => [a.textContent, a.getAttribute('href')]))`,
     );
     expect(links).toEqual({ 'View wardrobe': '/wardrobe', 'Add clothing': '/wardrobe/new' });
+    // US12: User A owns no Formal items, so the reason is that nothing suits the occasion.
+    expect(await statusText()).toContain(NO_SUITABLE);
+    expect(await statusText()).not.toContain(NO_COMPLETE);
     for (const name of NEVER_SHOWN) expect(await bodyText()).not.toContain(name);
     await shot('desktop-1280-insufficient');
+  });
+
+  it('US12: opens View wardrobe and Add clothing, explains a casual gap while the casual top is unavailable, and recovers', async () => {
+    // The links open the real pages. (My Wardrobe's list needs the Cloudinary-backed wardrobe
+    // service, which this smoke test blanks, so only the page itself is checked.)
+    await clickLink('View wardrobe');
+    await page.waitFor(
+      `location.pathname === '/wardrobe' && document.querySelector('h1')?.textContent === 'My Wardrobe'`,
+      'My Wardrobe',
+    );
+    await goto('/outfits/create');
+    await page.waitFor(`document.getElementById('occasion')`, 'the occasion select');
+    await setOccasion('Formal');
+    await clickButton('Generate Outfit');
+    await page.waitFor(`document.body.innerText.includes("There aren't enough available items")`, 'the insufficient message');
+    await clickLink('Add clothing');
+    await page.waitFor(`location.pathname === '/wardrobe/new' && document.querySelector('input#image[type="file"]')`, 'Add Clothing');
+
+    try {
+      await setSeededAvailability('A Linen tee', false);
+      await goto('/outfits/create');
+      await page.waitFor(`document.getElementById('occasion')`, 'the occasion select');
+      await setOccasion('Casual');
+      await clickButton('Generate Outfit');
+      await page.waitFor(
+        `document.body.innerText.includes("There aren't enough available items for a casual outfit yet.")`,
+        'the insufficient message',
+      );
+      expect(await statusText()).toContain(NO_COMPLETE);
+      expect(await statusText()).not.toContain(NO_SUITABLE);
+      const text = await bodyText();
+      for (const name of [...NEVER_SHOWN, 'A Linen tee', 'A Denim shorts']) expect(text).not.toContain(name);
+      await shot('desktop-1280-insufficient-incomplete');
+    } finally {
+      await setSeededAvailability('A Linen tee', true);
+    }
+
+    // The same page generates the outfit once the wardrobe is updated.
+    await clickButton('Generate Outfit');
+    await page.waitFor(`document.getElementById('outfit-heading')`, 'the casual outfit');
+    expect(await outfitNames()).toEqual(EXPECTED.casual);
+    expect(await bodyText()).not.toContain("There aren't enough available items");
+    for (const name of NEVER_SHOWN) expect(await bodyText()).not.toContain(name);
   });
 
   it('shows loading and sends one request for repeated clicks', async () => {
@@ -417,6 +532,41 @@ describe.runIf(CHROME_PATH)('US7 Create Outfit in a real browser', () => {
     expect(await outfitNames()).toEqual(EXPECTED.weekend);
   });
 
+  it('offers new Weekend combinations on Try another, then keeps the last one when none are left (US8)', async () => {
+    const seen = [(await outfitNames()).slice().sort().join()];
+    const before = generateRequests.length;
+
+    for (let i = 0; i < 10; i++) {
+      const current = await outfitNames();
+      await clickButton('Try another');
+      await page.waitFor(
+        `document.body.innerText.includes("There isn't another suitable combination right now.") ||
+          [...document.querySelectorAll('ul[aria-label="Items in this outfit"] li p.font-semibold')].map((p) => p.textContent).join() !== ${JSON.stringify(current.join())}`,
+        'another outfit or the no-alternative message',
+      );
+      if ((await bodyText()).includes("There isn't another suitable combination right now.")) {
+        expect(await outfitNames()).toEqual(current);
+        break;
+      }
+      const names = await outfitNames();
+      for (const name of NEVER_SHOWN) expect(names).not.toContain(name);
+      expect(seen).not.toContain(names.slice().sort().join());
+      seen.push(names.slice().sort().join());
+      if (seen.length === 2) {
+        await page.waitFor(
+          `[...document.querySelectorAll('ul[aria-label="Items in this outfit"] img')].every((img) => img.complete)`,
+          'the alternative photos to settle',
+        );
+        await shot('desktop-1280-try-another');
+      }
+    }
+
+    expect(seen.length).toBeGreaterThan(1);
+    expect(await bodyText()).toContain("There isn't another suitable combination right now.");
+    expect(generateRequests.length - before).toBe(seen.length);
+    await shot('desktop-1280-no-alternative');
+  });
+
   it('lays out the selector, recommendation, and insufficient state on mobile (375 px)', async () => {
     await viewport(375);
     await goto('/outfits/create');
@@ -435,13 +585,48 @@ describe.runIf(CHROME_PATH)('US7 Create Outfit in a real browser', () => {
     );
     expect(rows).toBe(4); // One column.
     expect(await page.evaluate('document.documentElement.scrollWidth <= innerWidth')).toBe(true);
+    // US13: the explanation panel stays inside the 375 px viewport.
+    const panelOutside = await page.evaluate<number>(`(() => {
+      const heading = [...document.querySelectorAll('h3')].find((h) => h.textContent === 'Why these items?');
+      const r = heading.closest('section').getBoundingClientRect();
+      return r.left < 0 || r.right > innerWidth ? 1 : 0;
+    })()`);
+    expect(panelOutside).toBe(0);
     await shot('mobile-375-recommendation');
 
     await setOccasion('Formal');
     await clickButton('Generate Outfit');
     await page.waitFor(`document.body.innerText.includes("There aren't enough available items")`, 'the insufficient message');
+    expect(await statusText()).toContain(NO_SUITABLE);
+    // US12: the reason and both links stay inside the 375 px viewport.
+    const outside = await page.evaluate<string[]>(`(() => {
+      const section = document.querySelector('section[role="status"]');
+      return [...section.querySelectorAll('p, a')].filter((el) => {
+        const r = el.getBoundingClientRect();
+        return r.left < 0 || r.right > innerWidth;
+      }).map((el) => el.textContent);
+    })()`);
+    expect(outside).toEqual([]);
     expect(await page.evaluate('document.documentElement.scrollWidth <= innerWidth')).toBe(true);
     await shot('mobile-375-insufficient');
+  });
+
+  it('lays out Try another and the no-alternative message on mobile (375 px) (US8)', async () => {
+    await generateAndWait('Work');
+    const first = await outfitNames();
+    await clickButton('Try another');
+    await page.waitFor(
+      `document.body.innerText.includes("There isn't another suitable combination right now.")`,
+      'the no-alternative message on mobile',
+    );
+    // User A has one Work combination, so it stays on screen.
+    expect(await outfitNames()).toEqual(first);
+    expect(await page.evaluate('document.documentElement.scrollWidth <= innerWidth')).toBe(true);
+    await page.waitFor(
+      `[...document.querySelectorAll('ul[aria-label="Items in this outfit"] img')].every((img) => img.complete)`,
+      'photos on mobile',
+    );
+    await shot('mobile-375-no-alternative');
   });
 
   it('offers Sign in when the session has ended', async () => {

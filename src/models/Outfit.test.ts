@@ -46,7 +46,7 @@ describe("Outfit model", () => {
     expect(options.ref ?? options.type[0].ref).toBe(ref);
   });
 
-  it.each(["owner", "occasion", "explanation"])(
+  it.each(["owner", "occasion"])(
     "rejects an outfit missing %s",
     async (field) => {
       const error = await validate({ [field]: undefined });
@@ -78,10 +78,35 @@ describe("Outfit model", () => {
     },
   );
 
-  it("rejects a blank explanation", async () => {
-    const error = await validate({ explanation: "   " });
+  // US9 saves outfits before US13 adds explanations, so an outfit may have none yet.
+  it("accepts an outfit without an explanation", async () => {
+    await expect(validate({ explanation: undefined })).resolves.toBeUndefined();
+  });
 
-    expect(error?.errors.explanation?.kind).toBe("required");
+  it("stores a blank explanation as no explanation", async () => {
+    const outfit = new Outfit(validOutfit({ explanation: "   " }));
+
+    await expect(outfit.validate()).resolves.toBeUndefined();
+    expect(outfit.explanation).toBeUndefined();
+  });
+
+  it("has no saved date until it is saved", () => {
+    expect(new Outfit(validOutfit()).savedAt).toBeUndefined();
+  });
+
+  it("records when it was saved", async () => {
+    const savedAt = new Date("2026-11-11T09:30:00.000Z");
+    const outfit = new Outfit(validOutfit({ isSaved: true, savedAt }));
+
+    await expect(outfit.validate()).resolves.toBeUndefined();
+    expect(outfit.savedAt).toEqual(savedAt);
+  });
+
+  it("indexes saved outfits by owner, newest saved first", () => {
+    expect(Outfit.schema.indexes()).toContainEqual([
+      { owner: 1, isSaved: 1, savedAt: -1 },
+      expect.anything(),
+    ]);
   });
 
   it("rejects an explanation longer than 500 characters", async () => {
@@ -93,7 +118,8 @@ describe("Outfit model", () => {
   it("exposes typed documents rather than any", () => {
     const outfit = new Outfit(validOutfit());
 
-    expectTypeOf(outfit.explanation).toEqualTypeOf<string>();
+    expectTypeOf(outfit.explanation).toEqualTypeOf<string | null | undefined>();
+    expectTypeOf(outfit.savedAt).toEqualTypeOf<NativeDate | null | undefined>();
     expectTypeOf(outfit.isSaved).toEqualTypeOf<boolean>();
   });
 });

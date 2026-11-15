@@ -1,0 +1,42 @@
+US13 Recommendation Explanation (#18), Checkpoint 1: color-aware generation (TDD)
+Branch: feature/18-recommendation-explanation (from feature/14-saved-outfits 8cd0b3f). Date: 2026-11-13.
+No dependencies, schemas, auth, Cloudinary settings, or API routes were changed.
+
+=== COMMITS ===
+9122194  test: add failing color-aware generation tests (#18)
+02d76d8  feat: rank outfits by color palette (#18)
+
+=== FILES CHANGED ===
+tests/unit/outfits/colorHarmony.test.ts     new, 15 cases
+tests/unit/outfits/generateOutfit.test.ts   +8 tests (colors (#18)); the item() helper gets a default color
+src/services/outfits/colorHarmony.ts        new: COLOR_FAMILY, paletteOf, paletteScore (provisional tables)
+src/services/outfits/generateOutfit.ts      ranks by palette; first request and Try another share one search
+
+=== BEHAVIOUR ===
+paletteOf sorts an outfit's colors into tonal, neutral, one_accent, paired or bold.
+Neutral: Black, White, Grey, Charcoal, Beige, Camel, Brown, Navy, Indigo. Multicolor is a pattern.
+generateOutfit ranks valid outfits by:
+  1. has shoes when suitable shoes exist   2. fewest pieces already shown (US8)
+  3. calmer palette (new)                  4. input order (newest first)
+Color only ranks. It never makes an outfit impossible, never makes an unavailable, unsuitable, or
+other user's item eligible, and on Try another unseen pieces still come before a calmer palette.
+The result reports its `palette`. The search stays bounded (MAX_CORE_CANDIDATES, MAX_OPTIONS_PER_PIECE).
+
+=== RED (rerun at 9122194) ===
+npx vitest run tests/unit/outfits/colorHarmony.test.ts tests/unit/outfits/generateOutfit.test.ts
+Error: Cannot find module '@/services/outfits/colorHarmony'   (colorHarmony.test.ts)
+   x colors (#18) > prefers a tonal outfit even when bolder pieces are newer
+   x colors (#18) > avoids a bold mix when a calmer combination exists
+   x colors (#18) > considers the colors of optional pieces too
+   x colors (#18) > still makes an outfit from an all-accent wardrobe
+   x colors (#18) > reports the palette of the chosen pieces
+   x colors (#18) > prefers the calmer palette among equally unseen alternatives
+ Test Files  2 failed (2)
+      Tests  6 failed | 119 passed (125)
+"never pulls in an ineligible item for a better palette" and "puts unseen pieces before a calmer
+palette on Try another (US8)" passed at once: they guard behavior that must not change.
+
+=== GREEN (rerun at 02d76d8) ===
+ Test Files  2 passed (2)
+      Tests  143 passed (143)
+All existing US7, US8 and US12 generator tests pass unchanged, including both read-count bounds.

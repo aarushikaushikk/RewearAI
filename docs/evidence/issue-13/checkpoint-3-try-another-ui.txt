@@ -1,0 +1,39 @@
+US8 Alternative Outfit Suggestions (#13), Checkpoint 3: Try another on Create Outfit (TDD)
+Branch: feature/13-alternative-outfit-suggestions. Work date: 2026-11-11.
+RED and GREEN rerun at the commits below on 2026-11-13.
+
+=== COMMITS ===
+c05933a  test: add failing Try another outfit tests (#13)
+391f080  feat: add Try another to Create Outfit (#13)
+
+=== FILES CHANGED ===
+tests/unit/components/outfits/CreateOutfitForm.test.tsx   +11 tests (Try another outfit (US8))
+src/components/outfits/CreateOutfitForm.tsx               Try another button, shown-outfit tracking
+
+=== BEHAVIOUR ===
+ - Try another sends every outfit shown since Generate Outfit, so none repeats.
+ - The current outfit stays on screen while the next one loads; one request per click.
+ - "There isn't another suitable combination right now." keeps the current outfit (DESIGN 5.6).
+ - Failures keep the outfit and explain the error; a 401 offers Sign in.
+ - Generate Outfit or an occasion change starts over. Each new outfit starts unsaved.
+
+=== RED (rerun at c05933a) ===
+npx vitest run tests/unit/components/outfits/CreateOutfitForm.test.tsx
+   x Try another outfit (US8) > asks for a different outfit than the one shown, and shows it
+   x Try another outfit (US8) > sends every outfit shown so far, so earlier ones are not repeated
+   x Try another outfit (US8) > says when there is no other combination, keeping the current outfit
+   x Try another outfit (US8) > keeps the current outfit on screen while the next one loads, sending one request
+   x Try another outfit (US8) > keeps the outfit and explains a failure, and Try another retries
+   x Try another outfit (US8) > treats a malformed answer as a failure, keeping the outfit
+   x Try another outfit (US8) > offers Sign in when the session ended while asking for another
+   x Try another outfit (US8) > shows the wardrobe links when the wardrobe can no longer make any outfit
+   x Try another outfit (US8) > starts a new outfit unsaved
+   x Try another outfit (US8) > starts over on Generate Outfit, forgetting the outfits shown before
+   x Try another outfit (US8) > forgets the shown outfits when the occasion changes
+TestingLibraryElementError: Unable to find an accessible element with the role "button" and name "Try another"
+ Test Files  1 failed (1)
+      Tests  11 failed | 39 passed (50)
+
+=== GREEN (rerun at 391f080) ===
+ Test Files  1 passed (1)
+      Tests  50 passed (50)

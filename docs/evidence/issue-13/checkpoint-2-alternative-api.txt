@@ -1,0 +1,43 @@
+US8 Alternative Outfit Suggestions (#13), Checkpoint 2: shown outfits in the API (TDD)
+Branch: feature/13-alternative-outfit-suggestions. Work date: 2026-11-11.
+RED and GREEN rerun at the commits below on 2026-11-13.
+
+=== COMMITS ===
+017248b  test: add failing tests for requesting an alternative outfit (#13)
+32a646c  feat: accept shown outfits when generating an alternative (#13)
+
+=== FILES CHANGED ===
+tests/unit/validation/outfitValidation.test.ts           payload tests for `shown`
+tests/unit/outfits/outfitRecommendationService.test.ts   +2 tests
+tests/integration/api/outfitRoutes.test.ts               +3 tests
+src/lib/validation/outfitValidation.ts                   accepts { occasion, shown? }
+src/services/outfitRecommendationService.ts              passes `shown` to generateOutfit
+src/lib/outfits/outfitHandlers.ts, src/types/outfit.ts   `no_alternative` result
+
+=== BEHAVIOUR ===
+POST /api/outfits/generate accepts { occasion, shown? }:
+ - `shown` is up to MAX_SHOWN_OUTFITS (20) outfits of 1 to 6 distinct item IDs. Anything else is a 400.
+ - The owner always comes from the session; a user ID in the body is still rejected.
+ - "No alternative" is a normal 200 result, distinct from an insufficient wardrobe.
+ - No schema change: shown outfits live in the page, not the database.
+
+=== RED (rerun at 017248b) ===
+npx vitest run tests/unit/validation/outfitValidation.test.ts \
+  tests/unit/outfits/outfitRecommendationService.test.ts tests/integration/api/outfitRoutes.test.ts
+   x parseGenerateOutfitPayload > accepts { occasion: "work" }        (and dinner, weekend, casual, formal)
+   x parseGenerateOutfitPayload > accepts the item IDs of outfits already shown (US8)
+   x parseGenerateOutfitPayload > accepts up to undefined shown outfits
+   x OutfitRecommendationService > returns an alternative to the outfits already shown (US8)
+   x OutfitRecommendationService > says so when no alternative to the shown outfits exists
+   x POST /api/outfits/generate > returns a different outfit when given the outfits already shown (US8)
+   x POST /api/outfits/generate > answers 200 with an explicit no-alternative result once every combination was shown
+   x POST /api/outfits/generate > never adds another user's items named in the shown outfits
+AssertionError: expected 400 to be 200
+AssertionError: expected undefined to deeply equal { status: 'no_alternative', ... }
+ Test Files  3 failed (3)
+      Tests  12 failed | 82 passed (94)
+("up to undefined" is the test name printed before MAX_SHOWN_OUTFITS existed.)
+
+=== GREEN (rerun at 32a646c) ===
+ Test Files  3 passed (3)
+      Tests  94 passed (94)

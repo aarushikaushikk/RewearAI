@@ -36,12 +36,24 @@ const outfitSchema = new Schema(
       ],
     },
     occasion: { type: String, required: true, enum: OCCASIONS },
-    explanation: { type: String, required: true, trim: true, maxlength: 500 },
+    // Optional until US13 adds explanations; a blank one is stored as none.
+    explanation: {
+      type: String,
+      trim: true,
+      maxlength: 500,
+      set: (value: unknown) =>
+        typeof value === "string" && value.trim() === "" ? undefined : value,
+    },
     isSaved: { type: Boolean, required: true, default: false },
+    // When the user last saved it (US9); sorts the Saved Outfits page.
+    savedAt: { type: Date },
     feedback: { type: Schema.Types.ObjectId, ref: "Feedback" },
   },
   { timestamps: true },
 );
+
+// The Saved Outfits page: one owner's saved outfits, newest saved first.
+outfitSchema.index({ owner: 1, isSaved: 1, savedAt: -1 });
 
 export type OutfitRecord = InferSchemaType<typeof outfitSchema>;
 

@@ -88,6 +88,22 @@ describe('POST /api/outfits/generate', () => {
     });
   });
 
+  it('includes the explanation facts, and still no private item fields (US13)', async () => {
+    const top = wardrobeRecord(alex.id, 'Top', { formality: 'Smart casual', color: 'White' });
+    const bottom = wardrobeRecord(alex.id, 'Bottom', { formality: 'Formal', color: 'Navy', season: 'Winter' });
+    source.items.push(top, bottom);
+
+    const json = await (await generateAs(alex, { occasion: 'work' })).json();
+
+    expect(json.data.explanation).toEqual({
+      formalities: ['Smart casual', 'Formal'],
+      seasons: ['Winter', 'All-season'],
+      palette: 'neutral',
+      alternative: false,
+    });
+    expect(JSON.stringify(json.data)).not.toMatch(/publicId|ownerId|isAvailable/);
+  });
+
   it('answers 200 with an explicit insufficient result when no outfit can be made', async () => {
     source.items.push(wardrobeRecord(alex.id, 'Top'));
 
@@ -98,6 +114,38 @@ describe('POST /api/outfits/generate', () => {
       success: true,
       data: { status: 'insufficient', occasion: 'casual', reason: 'no_complete_outfit' },
     });
+  });
+
+  it('returns a different outfit when given the outfits already shown (US8)', async () => {
+    const [firstTop, secondTop] = [wardrobeRecord(alex.id, 'Top'), wardrobeRecord(alex.id, 'Top')];
+    const bottom = wardrobeRecord(alex.id, 'Bottom');
+    source.items.push(firstTop, secondTop, bottom);
+
+    const json = await (await generateAs(alex, { occasion: 'casual', shown: [[firstTop.id, bottom.id]] })).json();
+
+    expect(json.data.items.map((i: { id: string }) => i.id)).toEqual([secondTop.id, bottom.id]);
+  });
+
+  it('answers 200 with an explicit no-alternative result once every combination was shown', async () => {
+    const [top, bottom] = [wardrobeRecord(alex.id, 'Top'), wardrobeRecord(alex.id, 'Bottom')];
+    source.items.push(top, bottom);
+
+    const res = await generateAs(alex, { occasion: 'casual', shown: [[top.id, bottom.id]] });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ success: true, data: { status: 'no_alternative', occasion: 'casual' } });
+  });
+
+  it("never adds another user's items named in the shown outfits", async () => {
+    const [top, bottom] = [wardrobeRecord(alex.id, 'Top'), wardrobeRecord(alex.id, 'Bottom')];
+    const samsBottom = wardrobeRecord(sam.id, 'Bottom');
+    source.items.push(top, bottom, samsBottom);
+
+    const res = await generateAs(alex, { occasion: 'casual', shown: [[top.id, bottom.id], [samsBottom.id]] });
+
+    const json = await res.json();
+    expect(json.data).toEqual({ status: 'no_alternative', occasion: 'casual' });
+    expect(JSON.stringify(json)).not.toContain(samsBottom.id);
   });
 
   it("never exposes or uses another user's wardrobe", async () => {
@@ -154,6 +202,7 @@ describe('POST /api/outfits/generate', () => {
     ['[]'],
     [JSON.stringify({ occasion: 'work', itemIds: ['item_1'] })],
     [JSON.stringify({ occasion: 'work', ownerId: 'someone' })],
+    [JSON.stringify({ occasion: 'work', shown: ['item_1'] })],
   ])('returns 400 for the invalid payload %s', async (body) => {
     const res = await generateAs(alex, body);
 

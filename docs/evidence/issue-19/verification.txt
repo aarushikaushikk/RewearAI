@@ -1,0 +1,62 @@
+US14 Recommendation Feedback (#19): verification
+Branch: feature/19-recommendation-feedback (from feature/18-recommendation-explanation). Date: 2026-11-12.
+Nothing ran on Vercel. Browser runs used the evidence account (test@example.com, 129 items) on the
+local dev server (next dev, MongoDB Atlas and Cloudinary from .env.local). Every rating made during
+the run was cleared afterwards; the unsaved Outfit records the ratings created remain, as Save and
+Mark as worn leave them.
+
+=== DECISION ===
+Negative feedback changes future recommendations: a combination marked Not helpful for an occasion
+ranks below every other valid one, so it's returned only when nothing else is left. Positive
+feedback doesn't change ranking. The UI says only that ("Outfits you mark Not helpful are skipped
+for this occasion when another combination is available."), never that the app "learns".
+
+=== ACCEPTANCE CRITERIA -> EVIDENCE ===
+The user can give positive or negative feedback on a recommendation
+  tests: FeedbackControl.test.tsx "saves Helpful by occasion and item IDs..."; CreateOutfitFormFeedback.test.tsx
+         "rates the generated items for the chosen occasion"; outfitFeedbackRoutes.test.ts PUT cases
+  browser: screenshots/desktop-1280-not-helpful-saved.jpg
+Feedback is saved with the recommendation
+  tests: outfitFeedbackRepositoryContract (memory + MongoDB); mongoOutfitFeedbackRepository.test.ts
+         "stores one Feedback document and links it from the outfit" (Outfit.feedback);
+         outfitFeedbackService.test.ts "rates the same outfit that Mark as worn (US10) recorded";
+         outfitRecommendationFeedback.test.ts "returns the saved ... rating"
+  browser: screenshots/desktop-1280-helpful-persisted.jpg (after a full page reload)
+The user can change or remove feedback
+  tests: contract "changes the rating in place"; "removes the rating"; FeedbackControl.test.tsx "changes
+         the rating", "clears the saved rating by its outfit ID"; smoke "rates, changes and clears feedback
+         on one stored record"
+  browser: screenshots/desktop-1280-feedback-cleared.jpg
+Saved feedback may be used to improve future recommendation logic
+  tests: generateOutfitFeedback.test.ts (8 cases: avoided when an alternative exists, any order, beats
+         shoes and palette, kept when it's the only outfit, Try another); outfitFeedbackRoutes.test.ts
+         "shows the saved rating on the outfit, then avoids it once marked Not helpful"; smoke
+  browser: step 2 below
+
+=== BROWSER VERIFICATION (test account) ===
+1. Casual -> Generate Outfit: Olive Cat Graphic Tee, Black Piped Sweatpants, Black and Neon High-Tops,
+   Olive Lightweight Bomber, White Cotton Cap. Helpful / Not helpful shown, neither pressed.
+   Not helpful -> "Feedback saved.", Not helpful pressed, Clear feedback shown (desktop-1280-not-helpful-saved.jpg).
+2. Generate Outfit again: the disliked combination was skipped. Same pieces with Brown Leather Sandals
+   in place of the high-tops. Feedback none.
+3. Helpful on that outfit, reload the page, Casual -> Generate Outfit: the same outfit, Helpful pressed
+   (desktop-1280-helpful-persisted.jpg).
+4. Clear feedback -> "Feedback cleared.", neither pressed, Clear feedback hidden (desktop-1280-feedback-cleared.jpg).
+5. 375 px: buttons side by side, explainer wraps, scrollWidth 375 = innerWidth 375 (mobile-375-feedback.jpg).
+6. No console errors.
+Cleanup: the step 1 rating was cleared through the API; generation then returned the step 1 outfit
+with feedback null.
+
+=== AUTOMATED CHECKS ===
+npm test           112 files passed, 2 skipped; 2166 tests passed, 2 skipped
+npm run test:db    17 files, 465 tests passed (incl. mongoOutfitFeedbackRepository.test.ts)
+npm run test:smoke 5 files, 53 passed, 25 skipped (browser checks need SMOKE_CHROME_PATH);
+                   outfitFeedback.smoke.ts 3/3. Build output: ƒ /api/outfits/feedback,
+                   ƒ /api/outfits/feedback/[outfitId]
+npm run typecheck  clean
+eslint             clean on every changed file
+
+=== KNOWN LIMITS ===
+- Avoidance is per exact combination. On a large wardrobe the next outfit can differ by one piece
+  (step 2 swapped only the shoes).
+- No OpenAPI document exists in the repository yet, so the two endpoints aren't documented there.

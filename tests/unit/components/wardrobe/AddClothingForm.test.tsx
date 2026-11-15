@@ -680,4 +680,182 @@ describe('AddClothingForm', () => {
       });
     });
   });
+
+  describe('failure recovery (US15)', () => {
+    const UPLOAD_FAILED = "Your image didn't upload. Please try again.";
+    const IMAGE_GONE = "We couldn't find that image. Please upload it again.";
+    const NEW_IMAGE = {
+      url: 'https://res.cloudinary.com/test/image/upload/v2/rewear/users/u1/def.jpg',
+      publicId: 'rewear/users/u1/def',
+    };
+    const uploadBody = (fetchMock: ReturnType<typeof mockRoutes>, call: number) =>
+      (fetchMock.mock.calls[call] as unknown as [string, RequestInit])[1].body as FormData;
+    const saveBody = (fetchMock: ReturnType<typeof mockRoutes>, call: number) =>
+      JSON.parse((fetchMock.mock.calls[call] as unknown as [string, RequestInit])[1].body as string);
+
+    it('reports an upload failure on the upload step, never as an analysis failure', async () => {
+      const user = userEvent.setup();
+      classify.mockResolvedValue({ status: 'failed', reason: 'unavailable' });
+      mockRoutes({
+        '/api/uploads': [{ status: 502 }, { status: 201, body: { success: true, data: IMAGE } }],
+      });
+      render(<AddClothingForm />);
+
+      await user.upload(screen.getByLabelText(/clothing image/i), jpeg());
+
+      expect(await screen.findByText(UPLOAD_FAILED)).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Upload a clothing photo' })).toBeInTheDocument();
+      expect(screen.queryByText(ANALYSIS_FAILED)).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Retry analysis' })).not.toBeInTheDocument();
+
+      // Once the photo is stored, the earlier analysis failure appears as its own message.
+      await user.click(screen.getByRole('button', { name: 'Retry upload' }));
+      await screen.findByRole('heading', { name: 'Describe this item' });
+      expect(screen.getByText(ANALYSIS_FAILED)).toBeInTheDocument();
+      expect(screen.queryByText(UPLOAD_FAILED)).not.toBeInTheDocument();
+    });
+
+    it('never lets a failed analysis block the upload or the save', async () => {
+      const user = userEvent.setup();
+      classify.mockRejectedValue(new Error('model crashed'));
+      mockRoutes({
+        '/api/uploads': [{ status: 201, body: { success: true, data: IMAGE } }],
+        '/api/wardrobe': [{ status: 201, body: { success: true, data: SAVED_ITEM } }],
+      });
+      render(<AddClothingForm />);
+
+      await uploadAndContinue(user);
+      expect(await screen.findByText(ANALYSIS_FAILED)).toBeInTheDocument();
+
+      await fillDetails(user);
+      await user.click(screen.getByRole('button', { name: 'Confirm and save' }));
+      expect(await screen.findByText('Saved to your wardrobe.')).toBeInTheDocument();
+    });
+
+    it('offers to upload the photo again when the save cannot find it, keeping every detail', async () => {
+      const user = userEvent.setup();
+      const fetchMock = mockRoutes({
+        '/api/uploads': [
+          { status: 201, body: { success: true, data: IMAGE } },
+          { status: 201, body: { success: true, data: NEW_IMAGE } },
+        ],
+        '/api/wardrobe': [
+          { status: 404, body: { success: false, error: 'gone' } },
+          { status: 201, body: { success: true, data: SAVED_ITEM } },
+        ],
+      });
+      render(<AddClothingForm />);
+      await uploadAndContinue(user);
+      await fillDetails(user);
+
+      await user.click(screen.getByRole('button', { name: 'Confirm and save' }));
+      expect(await screen.findByText(IMAGE_GONE)).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'Upload photo again' }));
+
+      await waitFor(() => expect(screen.queryByText(IMAGE_GONE)).not.toBeInTheDocument());
+      expect(screen.getByRole('heading', { name: 'Describe this item' })).toBeInTheDocument();
+      expect(screen.getByLabelText(/^category/i)).toHaveValue('Top');
+      expect(screen.getByLabelText(/^style/i)).toHaveValue('Button-down');
+      // The kept photo is sent again, so nothing has to be chosen twice.
+      expect(uploadBody(fetchMock, 2).get('image')).toEqual(uploadBody(fetchMock, 0).get('image'));
+      expect(classify).toHaveBeenCalledTimes(1);
+
+      await user.click(screen.getByRole('button', { name: 'Confirm and save' }));
+      expect(await screen.findByText('Saved to your wardrobe.')).toBeInTheDocument();
+      expect(saveBody(fetchMock, 3)).toMatchObject({ publicId: NEW_IMAGE.publicId, category: 'Top' });
+    });
+
+    it('reports a failed re-upload as an upload failure and lets the user try again', async () => {
+      const user = userEvent.setup();
+      mockRoutes({
+        '/api/uploads': [
+          { status: 201, body: { success: true, data: IMAGE } },
+          'network-error',
+          { status: 502 },
+          { status: 201, body: { success: true, data: NEW_IMAGE } },
+        ],
+        '/api/wardrobe': [{ status: 404 }],
+      });
+      render(<AddClothingForm />);
+      await uploadAndContinue(user);
+      await fillDetails(user);
+      await user.click(screen.getByRole('button', { name: 'Confirm and save' }));
+      await user.click(await screen.findByRole('button', { name: 'Upload photo again' }));
+
+      expect(
+        await screen.findByText("We couldn't reach the server. Check your connection and try again."),
+      ).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'Upload photo again' }));
+      expect(await screen.findByText(UPLOAD_FAILED)).toBeInTheDocument();
+      expect(screen.getByLabelText(/^style/i)).toHaveValue('Button-down');
+
+      await user.click(screen.getByRole('button', { name: 'Upload photo again' }));
+      await waitFor(() => expect(screen.queryByText(UPLOAD_FAILED)).not.toBeInTheDocument());
+      expect(screen.queryByRole('button', { name: 'Upload photo again' })).not.toBeInTheDocument();
+      expect(screen.getByLabelText(/^category/i)).toHaveValue('Top');
+    });
+
+    it('disables saving while the photo is uploaded again', async () => {
+      const user = userEvent.setup();
+      const pending = deferred<Response>();
+      const fetchMock = mockRoutes({
+        '/api/uploads': [{ status: 201, body: { success: true, data: IMAGE } }],
+        '/api/wardrobe': [{ status: 404 }],
+      });
+      render(<AddClothingForm />);
+      await uploadAndContinue(user);
+      await fillDetails(user);
+      await user.click(screen.getByRole('button', { name: 'Confirm and save' }));
+      await screen.findByText(IMAGE_GONE);
+
+      fetchMock.mockImplementationOnce(() => pending.promise);
+      await user.click(screen.getByRole('button', { name: 'Upload photo again' }));
+
+      expect(screen.getByRole('button', { name: 'Confirm and save' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Upload photo again' })).toBeDisabled();
+      expect(screen.getByText('Uploading your photo again.')).toHaveAttribute('role', 'status');
+
+      await act(async () => {
+        pending.resolve(await respond({ status: 201, body: { success: true, data: NEW_IMAGE } }));
+      });
+      expect(screen.getByRole('button', { name: 'Confirm and save' })).toBeEnabled();
+      expect(screen.getByText('Your photo was uploaded again. You can save now.')).toHaveAttribute('role', 'status');
+    });
+
+    it('offers no re-upload for other save failures', async () => {
+      const user = userEvent.setup();
+      mockRoutes({
+        '/api/uploads': [{ status: 201, body: { success: true, data: IMAGE } }],
+        '/api/wardrobe': [{ status: 503 }],
+      });
+      render(<AddClothingForm />);
+      await uploadAndContinue(user);
+      await fillDetails(user);
+      await user.click(screen.getByRole('button', { name: 'Confirm and save' }));
+
+      expect(await screen.findByText('Service temporarily unavailable. Please try again later.')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Upload photo again' })).not.toBeInTheDocument();
+    });
+
+    it('shows the saved item once when a save is retried after a network failure', async () => {
+      const user = userEvent.setup();
+      const fetchMock = mockRoutes({
+        '/api/uploads': [{ status: 201, body: { success: true, data: IMAGE } }],
+        // The first save reached the server; the retry gets back the item it already created.
+        '/api/wardrobe': ['network-error', { status: 200, body: { success: true, data: SAVED_ITEM } }],
+      });
+      render(<AddClothingForm />);
+      await uploadAndContinue(user);
+      await fillDetails(user);
+
+      await user.click(screen.getByRole('button', { name: 'Confirm and save' }));
+      await screen.findByText("We couldn't reach the server. Check your connection and try again.");
+      await user.click(screen.getByRole('button', { name: 'Confirm and save' }));
+
+      expect(await screen.findByText('Saved to your wardrobe.')).toBeInTheDocument();
+      expect(screen.getAllByRole('heading', { name: 'Linen shirt' })).toHaveLength(1);
+      expect(saveBody(fetchMock, 2)).toEqual(saveBody(fetchMock, 1));
+    });
+  });
 });

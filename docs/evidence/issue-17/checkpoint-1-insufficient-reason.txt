@@ -1,0 +1,62 @@
+US12 Insufficient Wardrobe Items (#17), Checkpoint 1: reason-specific explanation (TDD)
+Branch: feature/17-insufficient-wardrobe-items (from origin/main 90a9e1c). Date: 2026-11-11.
+No Git operations that change the repository were run. No dependencies, schemas, auth, Cloudinary,
+API routes, generation rules (generateOutfit.ts / OCCASION_FORMALITIES), or the temporary
+MongoAvailableWardrobeItems source were changed.
+
+=== FILES CHANGED ===
+src/components/outfits/CreateOutfitForm.tsx              keeps a known `reason`; shows its line
+tests/unit/components/outfits/CreateOutfitForm.test.tsx  +6 tests (new US12 describe block)
+
+=== BEHAVIOUR ===
+The existing DESIGN.md 5.6 sentence and both recovery links are unchanged:
+  "There aren't enough available items for a [occasion] outfit yet."  [View wardrobe] [Add clothing]
+A second line now explains the reason the API already returns (approved decisions 1-4):
+  no_suitable_items  -> "None of your available clothing is suitable for this occasion."
+  no_complete_outfit -> "An outfit needs a suitable top and bottom, or a suitable dress."
+A missing, unknown, non-string, or inherited ("toString") reason shows the general sentence only.
+The text is fixed in the client; server text is never displayed (as with the existing messages).
+Both lines are inside the existing role="status" section.
+
+=== RED ===
+npx vitest run tests/unit/components/outfits/CreateOutfitForm.test.tsx
+   x why the wardrobe is insufficient (US12) > explains no_suitable_items after the general message, keeping the recovery links
+   x why the wardrobe is insufficient (US12) > explains no_complete_outfit after the general message, keeping the recovery links
+TestingLibraryElementError: Unable to find an element with the text: None of your available clothing is suitable for this occasion.
+TestingLibraryElementError: Unable to find an element with the text: An outfit needs a suitable top and bottom, or a suitable dress.
+ Test Files  1 failed (1)
+      Tests  2 failed | 40 passed (42)
+The 4 fallback tests (missing / unknown / "toString" / non-string reason) passed at once: before
+the change no reason line is ever shown. They are guards against a careless implementation; the
+mutation checks below show they catch one.
+
+=== GREEN ===
+npx vitest run tests/unit/components/outfits tests/unit/outfits tests/integration/api/outfitRoutes.test.ts
+ Test Files  4 passed (4)
+      Tests  117 passed (117)
+(CreateOutfitForm component tests, generateOutfit and OutfitRecommendationService unit tests, and
+the POST /api/outfits/generate route tests, including US6 "leaves out unavailable clothing".)
+npx tsc --noEmit: exit 0
+npx eslint (both changed files): exit 0
+git diff --check: exit 0
+CRLF line endings kept on both changed files.
+
+=== MUTATION CHECKS (each restored and verified with cmp) ===
+M1 `Object.hasOwn` replaced by `in` (inherited keys accepted):    caught, 1 test failed ("toString")
+M2 missing/unknown reason defaults to no_complete_outfit:         caught, 4 tests failed (fallbacks)
+
+=== NOT RUN (by instruction, disk space) ===
+npm test, npm run test:db, npm run build, npm run test:smoke.
+
+=== NOTES / RISKS ===
+- Prettier: the project has no Prettier dependency or config; `npx prettier --check` fetched
+  prettier@3.10.0 into the npx cache (not the project). Both files already fail that check at
+  HEAD, so no reformatting was done (AGENTS.md: don't reformat unrelated code).
+- tests/smoke/outfitGeneration.smoke.ts checks the insufficient state; it may need the reason line
+  added when Checkpoint 3 runs it.
+- The explanations follow the provisional generation rules (DESIGN.md open item). If the rules
+  change, these sentences must be checked again.
+- "no_suitable_items" also covers an empty wardrobe and one where every item is unavailable; the
+  source only returns available items, so these cases can't be told apart without new queries.
+
+Free space on C: after this checkpoint: 3.4 GB.

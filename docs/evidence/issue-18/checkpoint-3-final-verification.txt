@@ -1,0 +1,70 @@
+US13 Recommendation Explanation (#18), Checkpoint 3: final integration and verification
+Branch: feature/18-recommendation-explanation. Date: 2026-11-13. Nothing ran on Vercel.
+Nothing was saved. Browser runs used the evidence account (test@example.com, 129 items) on the
+local dev server (next dev, MongoDB Atlas and Cloudinary from .env.local) in headless Chrome.
+
+=== COMMITS ===
+36e2b7a  fix: lead the reason line with the occasion (#18)
+         ("every piece is Casual for Casual" read badly; the line now starts "Picked for Casual because")
+
+=== ACCEPTANCE CRITERIA -> EVIDENCE ===
+A recommendation includes a short explanation
+  tests: outfitRecommendationService.test.ts "explains the chosen pieces..."; outfitRoutes.test.ts
+         "includes the explanation facts..."; CreateOutfitFormExplanation.test.tsx "explains the outfit
+         below its items"; smoke HTTP check for every occasion
+  browser: screenshots/desktop-1280-explanation.png, screenshots/mobile-375-explanation.png
+The explanation may reference occasion, color, style, season, or formality
+  tests: explanationText.test.ts (occasion, formality, season, palette from the actual colors);
+         composeStylistNote.test.ts (palette, mood from saved styles, the featured piece's style)
+  browser: the reason line names Work, Smart casual or Formal, Summer and Blue; the note names the
+         Royal Blue Blazer's Statement style ("a bold focal point")
+The explanation uses only information available from the user's wardrobe and selected occasion
+  tests: explainOutfit.test.ts (facts only; throws on anything the generator can't produce);
+         stylistLibrary.test.ts (only the item-name slot carries user data);
+         composeStylistNote.test.ts "never shows a vibe outside the saved style, even when it scores highest"
+The application does not present subjective styling judgments as certain facts
+  tests: stylistLibrary.test.ts checks every possible sentence (hedge required, banned certainty words,
+         no claim to learn)
+  browser: screenshots/desktop-1280-ai-assisted.png shows the AI disclosure
+
+=== BROWSER VERIFICATION (test account, 2026-11-13) ===
+1. Work -> Generate Outfit (desktop-1280-explanation.png): White Spread-Collar Shirt, Cream Wide-Leg
+   Trousers, Brown Cap-Toe Oxfords, Royal Blue Blazer, Black Dress Watch.
+   "Picked for Work because every piece is Smart casual or Formal, they all suit Summer, and Blue is the
+   only accent color." / "Letting the blue stand out against neutrals can give the outfit a polished,
+   pulled-together feel. The Royal Blue Blazer can act as a bold focal point."
+2. Try another (desktop-1280-try-another-explanation.png): Camel Shirt Dress, Brown Lace-up Boots, Brown
+   Suede Jacket, Brown Leather Strap Watch. The featured piece changed and the line adds "It's a
+   different combination from the ones you've already seen."
+3. 375 px, Casual (mobile-375-explanation.png): Olive Cat Graphic Tee, Black Piped Sweatpants, Black and
+   Neon High-Tops, Olive Lightweight Bomber, White Cotton Cap. One column; scrollWidth <= innerWidth.
+4. AI-assisted (desktop-1280-ai-assisted.png): the six FashionSigLIP files were first added to the
+   browser's transformers-cache, as US3 does the first time it classifies a photo. For two Work outfits
+   the photo scores agreed with the basic note (no disclosure). On the third (Red Open-Collar Polo, Black
+   Tailored Trousers, Red Stiletto Heels, Navy Mandarin-Collar Jacket, Red Satin Clutch) the photos moved
+   the featured piece from the jacket to the polo and chose its second Classic wording: "The Red
+   Open-Collar Polo tends to keep things classic and familiar." with the disclosure line.
+5. No page errors. Before this run, 52 of the account's 106 photos had been deleted from Cloudinary by
+   the production cleanup cron (fixed separately in #50/#51); the account was re-seeded first.
+
+=== COMMANDS AND RESULTS ===
+npm test               exit 0  Test Files 104 passed | 2 skipped (106); Tests 2064 passed | 2 skipped
+                               Skipped: the opt-in live model checks (RUN_LIVE_MODEL; by design)
+npm run test:db        exit 0  Test Files 16 passed (16); Tests 447 passed (447)
+npm run typecheck      exit 0
+npx eslint src tests   exit 0  (plain `npm run lint` from this checkout also scans .claude/worktrees/,
+                               another session's checkout, not this branch)
+npm run test:smoke     with SMOKE_CHROME_PATH set: Test Files 4 passed (4); Tests 75 passed (75);
+                       every /api route builds as f
+Live model check       RUN_LIVE_MODEL=1 LIVE_IMAGE_DIR=<23 labeled photos> npx vitest run scoreOutfitPhotos.live
+                       top-3 agreement 16/23 (70%) >= 65%; ~150 ms per photo. Photos not committed.
+
+=== NOTES / RISKS ===
+- The color tables and the style-to-vibe table are provisional and need partner review.
+- Explanations aren't saved with outfits. Outfit.explanation already holds US10's "Worn for..." text;
+  a follow-up should decide what that field means.
+- SigLIP was exercised in headless Chrome with the cache pre-filled, not on a phone; its speed there
+  is unmeasured. The live check's labels are judgment calls, so it measures agreement, not accuracy.
+- The screenshots show product photos the user added to the test account for this issue.
+- No Playwright test (not installed yet). No OpenAPI file yet to document `explanation`.
+- Feedback belongs to #19.

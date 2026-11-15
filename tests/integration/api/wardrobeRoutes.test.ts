@@ -343,6 +343,76 @@ describe('Wardrobe API routes', () => {
     });
   });
 
+  describe('failure recovery (US15)', () => {
+    it('leaves no wardrobe item behind when the upload fails, and a retry then succeeds', async () => {
+      imageStore.failing = true;
+      const failed = await handleUploadImage(uploadRequest({ cookie: alex.cookie }), deps);
+      expect(failed.status).toBe(502);
+      expect(await itemRepo.listByOwner(alex.id)).toEqual([]);
+
+      imageStore.failing = false;
+      const retried = await handleUploadImage(uploadRequest({ cookie: alex.cookie }), deps);
+
+      expect(retried.status).toBe(201);
+      expect(await itemRepo.listByOwner(alex.id)).toEqual([]);
+    });
+
+    it('keeps exactly one item when a failed save is retried', async () => {
+      const image = await uploadAs(alex);
+      const body = { ...DETAILS, publicId: image.publicId };
+      vi.spyOn(itemRepo, 'create').mockRejectedValueOnce(new RepositoryUnavailableError());
+
+      const failed = await handleCreateItem(createRequest(body, { cookie: alex.cookie }), deps);
+      expect(failed.status).toBe(503);
+      expect(await itemRepo.listByOwner(alex.id)).toEqual([]);
+
+      const retried = await handleCreateItem(createRequest(body, { cookie: alex.cookie }), deps);
+      const again = await handleCreateItem(createRequest(body, { cookie: alex.cookie }), deps);
+
+      expect(retried.status).toBe(201);
+      expect(again.status).toBe(200);
+      expect(await itemRepo.listByOwner(alex.id)).toHaveLength(1);
+    });
+
+    it('returns 502 and saves nothing when the image cannot be checked', async () => {
+      const image = await uploadAs(alex);
+      imageStore.failing = true;
+
+      const res = await handleCreateItem(
+        createRequest({ ...DETAILS, publicId: image.publicId }, { cookie: alex.cookie }),
+        deps,
+      );
+
+      expect(res.status).toBe(502);
+      expect((await res.json()).error).toBe("We couldn't save this item. Try again.");
+      expect(await itemRepo.listByOwner(alex.id)).toEqual([]);
+    });
+
+    it('refuses a save whose image is gone, then saves once after the photo is uploaded again', async () => {
+      const lost = await uploadAs(alex);
+      await imageStore.delete([lost.publicId]);
+
+      const refused = await handleCreateItem(
+        createRequest({ ...DETAILS, publicId: lost.publicId }, { cookie: alex.cookie }),
+        deps,
+      );
+      expect(refused.status).toBe(404);
+      expect((await refused.json()).error).toBe("We couldn't find that image. Please upload it again.");
+      expect(await itemRepo.listByOwner(alex.id)).toEqual([]);
+
+      const replacement = await uploadAs(alex);
+      const saved = await handleCreateItem(
+        createRequest({ ...DETAILS, publicId: replacement.publicId }, { cookie: alex.cookie }),
+        deps,
+      );
+
+      expect(saved.status).toBe(201);
+      const items = await itemRepo.listByOwner(alex.id);
+      expect(items).toHaveLength(1);
+      expect(items[0].image.publicId).toBe(replacement.publicId);
+    });
+  });
+
   // US4 (#9): view, edit and delete saved items.
   describe('GET /api/wardrobe', () => {
     it("lists only the signed-in user's items, newest first", async () => {

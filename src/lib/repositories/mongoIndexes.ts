@@ -1,6 +1,9 @@
 import 'server-only';
 import type { Connection } from 'mongoose';
 import { Account } from '@/models/Account';
+import { Feedback } from '@/models/Feedback';
+import { Outfit } from '@/models/Outfit';
+import { OutfitHistory } from '@/models/OutfitHistory';
 import { Session } from '@/models/Session';
 import { User } from '@/models/User';
 import { WardrobeItem } from '@/models/WardrobeItem';
@@ -20,7 +23,7 @@ const initialization = (globalForIndexes.requiredIndexInitialization ??= new Map
  * Mongoose's own index build on connect can't be relied on: it runs in the background,
  * so writes can overtake it, and it isn't retried after it fails. Without the unique
  * indexes, concurrent requests store duplicate emails, token hashes, account links, and
- * wardrobe items for one image.
+ * wardrobe items for one image, and two ratings for one outfit.
  */
 export function ensureRequiredIndexes(connection: Connection): Promise<void> {
   const database = `${connection.host}:${connection.port}/${connection.name}`;
@@ -35,6 +38,9 @@ export function ensureRequiredIndexes(connection: Connection): Promise<void> {
     Session.createIndexes(),
     Account.createIndexes(),
     WardrobeItem.createIndexes(),
+    Outfit.createIndexes(),
+    OutfitHistory.createIndexes(),
+    Feedback.createIndexes(),
   ]).then(() => undefined);
   initialization.set(database, attempt);
   attempt.catch(() => {

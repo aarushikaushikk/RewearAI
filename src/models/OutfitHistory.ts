@@ -6,23 +6,7 @@ import {
   models,
   Schema,
 } from "mongoose";
-
-const LOCAL_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
-
-/** True for a real calendar date written as YYYY-MM-DD (rejects 2026-02-30). */
-function isLocalDate(value: string) {
-  const match = LOCAL_DATE_PATTERN.exec(value);
-  if (!match) {
-    return false;
-  }
-  const [year, month, day] = match.slice(1).map(Number);
-  const date = new Date(Date.UTC(year, month - 1, day));
-  return (
-    date.getUTCFullYear() === year &&
-    date.getUTCMonth() === month - 1 &&
-    date.getUTCDate() === day
-  );
-}
+import { isLocalDate } from "@/lib/dates/localDate";
 
 const outfitHistorySchema = new Schema(
   {
@@ -36,12 +20,20 @@ const outfitHistorySchema = new Schema(
         message: "Worn date must be a calendar date in YYYY-MM-DD format.",
       },
     },
+    // The outfit's sorted, lowercased item IDs (US10), so the same clothes match in any order.
+    combinationKey: { type: String, required: true, trim: true },
   },
   { timestamps: true },
 );
 
 // One record per outfit per day, so a retried "mark as worn" cannot duplicate it.
 outfitHistorySchema.index({ outfit: 1, wornOn: 1 }, { unique: true });
+// The same clothes on the same day are one wear, even when concurrent requests use
+// different outfit records for them.
+outfitHistorySchema.index(
+  { owner: 1, wornOn: 1, combinationKey: 1 },
+  { unique: true },
+);
 // Chronological history view, most recent first.
 outfitHistorySchema.index({ owner: 1, wornOn: -1 });
 

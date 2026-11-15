@@ -1,0 +1,95 @@
+US12 Insufficient Wardrobe Items (#17), Checkpoint 3: final integration and verification
+Branch: feature/17-insufficient-wardrobe-items (from origin/main 90a9e1c: US6, US7, US11 merged).
+Date: 2026-11-11. No Git operations that change the repository were run. No dependencies were
+installed. No production code changed in this checkpoint. Auth, schemas, Cloudinary settings,
+.env.local, generation rules, and the temporary MongoAvailableWardrobeItems source are unchanged.
+No MongoDB Atlas or Cloudinary account was used. (The browser smoke test loads Cloudinary's
+public demo image res.cloudinary.com/demo/.../sample.jpg through Next.js, as the existing US7
+smoke test already did; no credentials, nothing uploaded.)
+
+=== SCOPE REVIEW (full US12 diff) ===
+Production: src/components/outfits/CreateOutfitForm.tsx only (+19/-2, Checkpoint 1): the view
+keeps a known `reason` and shows its line. The DESIGN.md 5.6 sentence and the View wardrobe / Add
+clothing links are unchanged. No other production file differs from origin/main.
+Tests: CreateOutfitForm.test.tsx (+88), generateOutfit.test.ts (+35),
+insufficientWardrobe.test.ts (new), outfitGeneration.smoke.ts (+95, this checkpoint).
+CRLF line endings on every changed file (0 bare LF); no trailing whitespace; git diff --check exit 0.
+
+=== FILES CHANGED IN CHECKPOINT 3 ===
+tests/smoke/outfitGeneration.smoke.ts                  +1 HTTP test, +1 browser test, reason checks
+                                                       on the existing desktop and mobile insufficient checks
+docs/evidence/issue-17/screenshots/ (7 PNG, ~1.1 MB)   written by the smoke test
+docs/evidence/issue-17/checkpoint-3-final-verification.txt   this file
+
+=== COMMANDS AND RESULTS (run one after another; C: free space before -> after) ===
+npm test               exit 0  Test Files 79 passed | 1 skipped (80)
+                               Tests 1482 passed | 1 skipped (1483)          5.2 GB -> 5.2 GB
+                               Skipped: fashionSigLipModel.live.test.ts (needs RUN_LIVE_MODEL; by design)
+npm run test:db        exit 0  Test Files 14 passed (14); Tests 396 passed (396)   5.2 GB -> 5.2 GB
+npm run typecheck      exit 0
+npm run lint           exit 0
+npm run build          exit 0  every /api route shows as ƒ, including /api/outfits/generate and
+                               /api/wardrobe/[itemId]/availability                 5.2 GB -> 5.2 GB
+npm run test:smoke     with SMOKE_CHROME_PATH="C:/Program Files/Google/Chrome/Application/chrome.exe"
+                       and SMOKE_SCREENSHOT_DIR=docs/evidence/issue-17/screenshots
+  Run 1: exit 1  Test Files 1 failed | 2 passed (3); Tests 5 failed | 49 passed (54)
+  Run 2: exit 0  Test Files 3 passed (3); Tests 54 passed (54)                     5.2 GB -> 5.2 GB
+         outfitGeneration 19 (was 17), productionAuth 20, googleAuth 15
+Final free space on C:: 5.2 GB.
+
+=== SMOKE RUN 1 FAILURE AND RESOLUTION ===
+The first US12 smoke version changed availability through US6's real API and UI:
+  x HTTP  US12 ... -> AssertionError: expected 503 to be 200 (PATCH /api/wardrobe/[id]/availability)
+  x Browser US12 ... -> Timed out waiting for: My Wardrobe ("We couldn't load your wardrobe")
+  x Browser: offers Try again ...; mobile layout ...; offers Sign in ... -> knock-on failures: the
+    US12 browser test stopped on the wardrobe page, so the next tests ran on the wrong page.
+Cause: an environment limitation of the smoke setup, not a US12 or US6 defect.
+getProductionWardrobeItemService() needs Cloudinary settings and fails closed without them; the
+smoke test blanks CLOUDINARY_* on purpose (BLANK_SECRETS), so every wardrobe API answers 503 there.
+The 503 rejected the change, so no data was altered.
+Resolution: no fake Cloudinary settings were added (instruction: don't change Cloudinary
+configuration). The two US12 smoke tests change the seeded item's availability directly in the
+temporary MongoDB (and restore it in `finally`). US6's real availability API together with
+generation is verified by tests/integration/api/insufficientWardrobe.test.ts (Checkpoint 2).
+
+=== BROWSER VERIFICATION (real Chrome, production build, temporary MongoDB, run 2) ===
+Verified:
+ - Generic message: "There aren't enough available items for a formal outfit yet." (desktop 1280)
+   and "... for a casual outfit yet." (desktop), and for formal on mobile 375.
+ - Reason lines: formal (User A has no Formal items) -> "None of your available clothing is
+   suitable for this occasion." only; casual with the Linen tee unavailable -> "An outfit needs a
+   suitable top and bottom, or a suitable dress." only. Both inside the role="status" section.
+ - Links: hrefs /wardrobe and /wardrobe/new. Clicking View wardrobe opens /wardrobe with the
+   "My Wardrobe" heading; clicking Add clothing opens /wardrobe/new with its photo input.
+ - Recovery: after the tee is available again, clicking Generate Outfit on the same page (Casual
+   still selected) shows the casual outfit [A Linen tee, A Denim shorts]; the insufficient message
+   is gone.
+ - Never shown in any insufficient or recovered state: User A's unavailable blazer, User B's three
+   items; in the casual gap, neither the unavailable tee nor the lone shorts appear.
+   HTTP check: the same casual gap returns exactly
+   { status: 'insufficient', occasion: 'casual', reason: 'no_complete_outfit' }, then EXPECTED.casual.
+ - Mobile 375 px: the reason line and both links lie inside the viewport; no horizontal scroll.
+   Existing desktop/mobile layout checks for the selector and recommendation still pass.
+ - Errors: the existing "no unexpected console errors or failed application requests" test passed.
+   Its report lists only expected entries (missing demo photo 404, injected 500, ended-session 401),
+   prefetch 404s for unbuilt /outfits/saved and /outfits/history, Chrome-cancelled prefetches, and
+   "503 /api/wardrobe" (the My Wardrobe list, blank Cloudinary settings; see above).
+Screenshots checked by eye: desktop-1280-insufficient.png, desktop-1280-insufficient-incomplete.png,
+mobile-375-insufficient.png (plus the four existing US7 views, regenerated).
+
+Not verified in the browser (limitations of the smoke setup):
+ - Clicking US6's Mark unavailable / Mark available button, and the My Wardrobe item list, because
+   the wardrobe service is unavailable without Cloudinary settings. Covered instead by US6's own
+   tests and by insufficientWardrobe.test.ts (real handler, in-memory store).
+ - Adding a real item through Add Clothing (needs Cloudinary upload and, optionally, the model).
+
+=== REMAINING RISKS ===
+- The smoke test's `otherStories` filter still describes /wardrobe as an unmerged story (US4) and
+  sets aside /wardrobe errors, including this run's 503. That filter predates US12 and was left
+  as is; it could hide a real wardrobe-page error in future smoke runs.
+- Production uses the temporary MongoAvailableWardrobeItems (same query as US6's repository;
+  covered by test:db). Replacing it is separate work, as decided.
+- Explanations follow the provisional generation rules (DESIGN.md open item).
+- "no_suitable_items" also covers an empty wardrobe and an all-unavailable wardrobe.
+- Build output lists /wardrobe/[itemId] as a partial prerender (◐); not changed by US12, and it
+  is not an /api route.
