@@ -694,9 +694,9 @@ Work is tracked on GitHub using Scrum:
 | Sprint | Due | Scope |
 |--------|-----|-------|
 | Sprint 1 | Fri Oct 30 | HW-3 tasks (#1–#5) |
-| Sprint 2 | Wed Nov 4 | User Stories 1–5 (#6–#10), test and deploy (#23) |
-| Sprint 3 | Sat Nov 7 | User Stories 6–9 (#11–#14), test and deploy (#24) |
-| Sprint 4 | Wed Nov 11 | User Stories 10–15 (#15–#20), test and deploy (#25) |
+| Sprint 2 | Mon Nov 9 | User Stories 1–5 (#6–#10), test and deploy (#23) |
+| Sprint 3 | Wed Nov 11 | User Stories 6–9 (#11–#14), test and deploy (#24) |
+| Sprint 4 | Sun Nov 15 | User Stories 10–15 (#15–#20), test and deploy (#25) |
 
 Each sprint folder in [docs/sprints/](docs/sprints) holds its `planning.md` (goal, committed issues, estimates, PO/SM), `standups.md`, and `retro.md`.
 
