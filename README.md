@@ -76,6 +76,8 @@ Full requirements, the 15 user stories, and acceptance criteria are in [docs/PRD
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System architecture diagram and how the parts fit together |
 | [docs/API.md](docs/API.md) | Guide to the HTTP API: authentication, conventions, errors, and curl examples |
 | [docs/openapi.yaml](docs/openapi.yaml) | OpenAPI 3.1 specification of all 22 API operations. Open it in [Swagger Editor](https://editor.swagger.io) |
+| [docs/SETUP_AND_DEPLOYMENT.md](docs/SETUP_AND_DEPLOYMENT.md) | Local setup, environment variables, tests, CI/CD, Vercel deployment, and troubleshooting |
+| [docs/DATABASE_SCHEMA.md](docs/DATABASE_SCHEMA.md) | Database schema diagram, collections, enum values, and indexes |
 | [docs/PRD.md](docs/PRD.md) | Product requirements and the 15 user stories |
 | [docs/DESIGN.md](docs/DESIGN.md) | UI design, screen states, and wireframe references |
 | [AGENTS.md](AGENTS.md) | Rules for the AI coding tools we used |
@@ -213,6 +215,8 @@ npm run typecheck
 ## Database
 
 The app stores its data in MongoDB Atlas through Mongoose, in seven collections: User, Session, Account, WardrobeItem, Outfit, OutfitHistory, and Feedback. Every record belongs to one user, and every query is scoped to the signed-in user.
+
+For a standalone diagram with every field, enum value, and index, see [docs/DATABASE_SCHEMA.md](docs/DATABASE_SCHEMA.md).
 
 The connection helper is [src/lib/db.ts](src/lib/db.ts) (server-only). Route Handlers call `connectToDatabase()`, which reuses one cached connection and builds the required indexes on first connect. If the URI is missing or the connection fails, the helper logs only the error type on the server and throws a `DatabaseConnectionError` with a safe, generic message.
 
