@@ -1,12 +1,12 @@
 # Sprint 2 Planning
 
-**Dates:** Sat Oct 31 – Wed Nov 4, 2026 (due Wednesday end of day)
+**Dates:** Sat Oct 31 – Mon Nov 9, 2026 (due Monday end of day)
 **Milestone:** [Sprint 2](https://github.com/aarushikaushikk/RewearAI/milestone/2)
 **Board:** [Sprint 2 view](https://github.com/users/aarushikaushikk/projects/4/views/3)
 
 ## Roles
 
-- **Product Owner (PO):** aarushikaushikk
+- **Product Owner (PO):** Aarushi and Pranav
 - **Scrum Master (SM):** aarushikaushikk
 
 ## Sprint Goal

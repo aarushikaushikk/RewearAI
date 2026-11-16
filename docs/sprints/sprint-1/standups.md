@@ -65,7 +65,7 @@
 - **Conflict resolution:** Talk it through and negotiate openly.
 - **GitHub:** Repository created on Aarushi's account and shared. Pranav accepted the invite after a login fix.
 - **Project tracking:** Project board to be set up on the same repo, mirroring the AI Coding class setup.
-- **Scoping approach:** Use Claude or ChatGPT to generate a full task list and proposal from the scope discussion, review it together, then divide tasks.
+- **Scoping approach:** Use an AI assistant to generate a full task list and proposal from the scope discussion, review it together, then divide tasks.
 - **Dependencies:** The board should make blockers visible so no one is waiting unknowingly.
 
 ### Blockers / Concerns
@@ -94,9 +94,9 @@
 
 ### Done Since Last Meeting
 
-- **Pranav:** Completed the before/after rules comparison using **User Story 5 (Search and Filter)** in VS Code with Claude Code, on a 12-item dummy dataset.
+- **Pranav:** Completed the before/after rules comparison using **User Story 5 (Search and Filter)** in VS Code with an AI coding agent, on a 12-item dummy dataset.
   - Run A: baseline, without the PRD and `AGENTS.md`.
-  - Run B: with the PRD and `AGENTS.md`, same Claude prompt.
+  - Run B: with the PRD and `AGENTS.md`, same prompt.
 
 
 ### Decisions
@@ -140,7 +140,7 @@
 
 ### Blockers / Concerns
 
-- AI harness: no strict tool requirement confirmed. Pranav uses VS Code with Claude (personal and college accounts), switching when tokens run out. It's unclear whether a Gemini account is required; classmates are using Cursor and other tools.
+- AI harness: no strict tool requirement confirmed. Pranav uses an AI coding assistant in VS Code (personal and college accounts), switching when tokens run out. It's unclear whether a Gemini account is required; classmates are using Cursor and other tools.
 - Sprint call evidence isn't explicitly required in the HW-3 rubric, but the professor mentions it often.
 
 ### Decisions

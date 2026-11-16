@@ -1,12 +1,12 @@
 # Sprint 4 Planning
 
-**Dates:** Sun Nov 8 – Wed Nov 11, 2026 (due Wednesday end of day)
+**Dates:** Wed Nov 11 – Sun Nov 15, 2026 (due Sunday end of day)
 **Milestone:** [Sprint 4](https://github.com/aarushikaushikk/RewearAI/milestone/4)
 **Board:** [Sprint 4 view](https://github.com/users/aarushikaushikk/projects/4/views/5)
 
 ## Roles
 
-- **Product Owner (PO):** aarushikaushikk
+- **Product Owner (PO):** Aarushi and Pranav
 - **Scrum Master (SM):** aarushikaushikk
 
 ## Sprint Goal
